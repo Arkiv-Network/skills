@@ -1,0 +1,224 @@
+# Arkiv SDK Reference
+
+## TypeScript SDK (v0.6.0)
+
+### Installation
+
+```bash
+# npm
+npm install @arkiv-network/sdk
+
+# Bun
+bun add @arkiv-network/sdk
+```
+
+### Imports
+
+```typescript
+// Core client factories
+import { createWalletClient, createPublicClient, http, custom } from "@arkiv-network/sdk"
+
+// Account management
+import { privateKeyToAccount } from "@arkiv-network/sdk/accounts"
+
+// Chain configuration
+import { kaolin } from "@arkiv-network/sdk/chains"
+
+// Utilities
+import { ExpirationTime, jsonToPayload, stringToPayload, payloadToString } from "@arkiv-network/sdk/utils"
+
+// Query operators
+import { eq, gt, lt, gte, lte, and } from "@arkiv-network/sdk/query"
+```
+
+### WalletClient Methods (Write Operations)
+
+#### createEntity
+
+```typescript
+const { entityKey, txHash } = await walletClient.createEntity({
+  payload: jsonToPayload({ message: 'Hello' }),
+  contentType: 'application/json',
+  attributes: [
+    { key: 'type', value: 'greeting' },
+    { key: 'priority', value: 5 }
+  ],
+  expiresIn: ExpirationTime.fromHours(12),
+})
+```
+
+#### updateEntity
+
+```typescript
+const { txHash } = await walletClient.updateEntity({
+  entityKey: entityKey,
+  payload: jsonToPayload({ message: 'Updated' }),
+  contentType: 'application/json',
+  attributes: [
+    { key: 'type', value: 'greeting' },
+    { key: 'updated', value: Date.now() }
+  ],
+  expiresIn: ExpirationTime.fromHours(24),
+})
+```
+
+#### deleteEntity
+
+```typescript
+const { txHash } = await walletClient.deleteEntity({
+  entityKey: entityKey
+})
+```
+
+#### extendEntity
+
+```typescript
+const { txHash } = await walletClient.extendEntity({
+  entityKey: entityKey,
+  expiresIn: ExpirationTime.fromHours(1), // always use the helper, never hardcode block counts
+})
+```
+
+#### mutateEntities (Batch Operations)
+
+```typescript
+await walletClient.mutateEntities({
+  creates: [
+    {
+      payload: stringToPayload('item 1'),
+      contentType: 'text/plain',
+      attributes: [{ key: 'type', value: 'item' }],
+      expiresIn: ExpirationTime.fromMinutes(30),
+    },
+    {
+      payload: stringToPayload('item 2'),
+      contentType: 'text/plain',
+      attributes: [{ key: 'type', value: 'item' }],
+      expiresIn: ExpirationTime.fromMinutes(30),
+    }
+  ]
+})
+```
+
+### PublicClient Methods (Read Operations)
+
+#### buildQuery + fetch
+
+```typescript
+const query = publicClient.buildQuery()
+const results = await query
+  .where(eq('type', 'note'))
+  .where(gt('created', 1672531200))
+  .withPayload(true)
+  .withAttributes(true)
+  .fetch()
+```
+
+Query builder methods:
+
+- `.where(condition)` — Add a filter condition (can chain multiple)
+- `.withPayload(true)` — Include entity payload in results
+- `.withAttributes(true)` — Include attributes in results
+- `.withMetadata(true)` — Include metadata like ownership and TTL in the results
+- `.ownedBy(address)` — Filter by current owner address (can change over time)
+- `.createdBy(address)` — Filter by original creator address (immutable)
+- `.fetch()` — Execute the query
+
+#### getEntity
+
+```typescript
+const entity = await publicClient.getEntity(entityKey)
+const data = entity.toJson()   // Parse JSON payload
+const text = entity.toText()   // Get text payload
+```
+
+### ExpirationTime Helpers
+
+Expiration is expressed in **blocks**, not seconds. Always use these helpers to convert human-readable durations to the correct block count:
+
+```typescript
+ExpirationTime.fromMinutes(30)  // ~30 minutes worth of blocks
+ExpirationTime.fromHours(1)     // ~1 hour worth of blocks
+ExpirationTime.fromHours(12)    // ~12 hours worth of blocks
+ExpirationTime.fromHours(24)    // ~24 hours worth of blocks
+ExpirationTime.fromDays(7)      // ~7 days worth of blocks
+```
+
+**Never hardcode raw numbers for `expiresIn`** — it's much easier for the developer to understand the intent and it abstracts away the underlying block time.
+
+### Payload Helpers
+
+```typescript
+import { jsonToPayload, stringToPayload, payloadToString } from "@arkiv-network/sdk/utils"
+
+// JSON data
+const jsonPayload = jsonToPayload({ key: "value" })
+
+// Plain text
+const textPayload = stringToPayload("Hello Arkiv!")
+
+// Reading back
+const text = payloadToString(entity.payload)
+const data = JSON.parse(payloadToString(entity.payload))
+// or use entity helper
+const data = entity.toJson()
+```
+
+### Query Operators
+
+```typescript
+import { eq, gt, lt, gte, lte } from "@arkiv-network/sdk/query"
+
+eq('type', 'note')        // type = "note"
+gt('priority', 3)          // priority > 3
+lt('price', 1000)          // price < 1000
+gte('created', timestamp)  // created >= timestamp
+lte('expiration', limit)   // expiration <= limit
+```
+
+### Browser Usage with MetaMask
+
+```typescript
+import { createWalletClient, createPublicClient, custom, http } from "@arkiv-network/sdk"
+import { kaolin } from "@arkiv-network/sdk/chains"
+
+// Request wallet connection
+await window.ethereum.request({ method: 'eth_requestAccounts' })
+
+// Use MetaMask as transport (no private key needed)
+const walletClient = createWalletClient({
+  chain: kaolin,
+  transport: custom(window.ethereum),
+})
+
+// Public client for queries
+const publicClient = createPublicClient({
+  chain: kaolin,
+  transport: http(),
+})
+```
+
+**Adding Arkiv Network to MetaMask:**
+
+```typescript
+await window.ethereum.request({
+  method: 'wallet_addEthereumChain',
+  params: [{
+    chainId: '0xe0087f821',
+    chainName: 'Arkiv Kaolin Testnet',
+    nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://kaolin.hoodi.arkiv.network/rpc'],
+    blockExplorerUrls: ['https://explorer.kaolin.hoodi.arkiv.network']
+  }]
+})
+```
+
+### Browser CDN Imports
+
+For static HTML/JS pages without a bundler:
+
+```javascript
+import { createPublicClient, http } from 'https://esm.sh/@arkiv-network/sdk@0.6.0?target=es2022&bundle-deps'
+import { eq } from 'https://esm.sh/@arkiv-network/sdk@0.6.0/query?target=es2022&bundle-deps'
+import { kaolin } from 'https://esm.sh/@arkiv-network/sdk@0.6.0/chains?target=es2022&bundle-deps'
+```
