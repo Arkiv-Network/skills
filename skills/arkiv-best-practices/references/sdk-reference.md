@@ -75,7 +75,7 @@ const { txHash } = await walletClient.deleteEntity({
 ```typescript
 const { txHash } = await walletClient.extendEntity({
   entityKey: entityKey,
-  expiresIn: ExpirationTime.fromHours(1), // always use the helper, never hardcode block counts
+  expiresIn: ExpirationTime.fromHours(1), // always use the helper for readability
 })
 ```
 
@@ -134,17 +134,17 @@ const text = entity.toText()   // Get text payload
 
 ### ExpirationTime Helpers
 
-Expiration is expressed in **blocks**, not seconds. Always use these helpers to convert human-readable durations to the correct block count:
+Expiration is expressed in **seconds**. Always use these helpers to convert human-readable durations:
 
 ```typescript
-ExpirationTime.fromMinutes(30)  // ~30 minutes worth of blocks
-ExpirationTime.fromHours(1)     // ~1 hour worth of blocks
-ExpirationTime.fromHours(12)    // ~12 hours worth of blocks
-ExpirationTime.fromHours(24)    // ~24 hours worth of blocks
-ExpirationTime.fromDays(7)      // ~7 days worth of blocks
+ExpirationTime.fromMinutes(30)  // 1800 seconds
+ExpirationTime.fromHours(1)     // 3600 seconds
+ExpirationTime.fromHours(12)    // 43200 seconds
+ExpirationTime.fromHours(24)    // 86400 seconds
+ExpirationTime.fromDays(7)      // 604800 seconds
 ```
 
-**Never hardcode raw numbers for `expiresIn`** — it's much easier for the developer to understand the intent and it abstracts away the underlying block time.
+**Always prefer the helpers over raw numbers for `expiresIn`** — they're more readable and less error-prone. If a raw number is passed, it is treated as seconds (e.g., `expiresIn: 3600` means 1 hour).
 
 ### Payload Helpers
 

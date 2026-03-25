@@ -34,7 +34,7 @@ An entity is a data record containing:
 
 - **Payload** — The actual data (JSON, text, binary)
 - **Attributes** — Key-value pairs for querying (string or numeric)
-- **ExpiresIn** — Automatic expiration measured in blocks (use `ExpirationTime` helpers)
+- **ExpiresIn** — Automatic expiration measured in seconds (use `ExpirationTime` helpers)
 - **Content Type** — MIME type of the payload
 
 ### Attributes
@@ -55,19 +55,19 @@ Attributes are the backbone of querying. Use the right type for each attribute b
 
 ### ExpiresIn
 
-Every entity has a lifespan expressed in **blocks** (not seconds). Always use the `ExpirationTime` helper to convert human-readable durations to block counts — never hardcode raw numbers:
+Every entity has a lifespan expressed in **seconds**. Always use the `ExpirationTime` helper to convert human-readable durations — never hardcode raw numbers:
 
 ```typescript
 import { ExpirationTime } from "@arkiv-network/sdk/utils";
 
-ExpirationTime.fromMinutes(30); // ~30 minutes worth of blocks
-ExpirationTime.fromHours(1); // ~1 hour worth of blocks
-ExpirationTime.fromHours(12); // ~12 hours worth of blocks
-ExpirationTime.fromHours(24); // ~24 hours worth of blocks
-ExpirationTime.fromDays(7); // ~7 days worth of blocks
+ExpirationTime.fromMinutes(30); // 1800 seconds
+ExpirationTime.fromHours(1); // 3600 seconds
+ExpirationTime.fromHours(12); // 43200 seconds
+ExpirationTime.fromHours(24); // 86400 seconds
+ExpirationTime.fromDays(7); // 604800 seconds
 ```
 
-**Important:** The `expiresIn` field takes a block count, not seconds. Raw numbers like `expiresIn: 3600` do NOT mean 3600 seconds — they mean 3600 blocks. Always use `ExpirationTime.fromMinutes()`, `ExpirationTime.fromHours()`, or `ExpirationTime.fromDays()` to avoid mistakes.
+**Important:** The `expiresIn` field takes a value in **seconds**. A raw number like `expiresIn: 3600` means 3600 seconds (1 hour). Always prefer `ExpirationTime.fromMinutes()`, `ExpirationTime.fromHours()`, or `ExpirationTime.fromDays()` for readability and to avoid mistakes.
 
 Entities can be extended before they expire using `extendEntity()`. Over-allocating expiration wastes storage fees — start short and extend if needed.
 
