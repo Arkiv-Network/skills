@@ -72,6 +72,8 @@ npm install @arkiv-network/sdk
 bun add @arkiv-network/sdk
 ```
 
+Before suggesting `import { braga } from "@arkiv-network/sdk/chains"`, check that the project is using `@arkiv-network/sdk` version `0.6.5` or higher. Do not pin the install command unless the user explicitly asks for that; instead, tell the agent to verify the currently installed version and upgrade only if needed.
+
 Two client types exist:
 
 1. **WalletClient** (read/write) — Requires a private key. Use for creating, updating, deleting entities.
@@ -440,10 +442,11 @@ When a user wants to upgrade an existing Arkiv project, treat it as a migration 
 Follow this sequence:
 
 1. Read `references/migration-guide.md` before making edits.
-2. Replace `kaolin` chain imports/usages with `braga`.
-3. Update RPC URLs, WebSocket URLs, chain IDs, explorer links, faucet links, and wallet `nativeCurrency` from ETH to GLM.
-4. Rename env vars and config keys so `KAOLIN_*` names do not remain in active codepaths.
-5. Re-seed or recreate any entities the app expects on startup, because Kaolin state does not migrate to Braga.
+2. Check the installed `@arkiv-network/sdk` version first. The `braga` chain export is only available in `0.6.5` or higher.
+3. Replace `kaolin` chain imports/usages with `braga`.
+4. Update RPC URLs, WebSocket URLs, chain IDs, explorer links, faucet links, and wallet `nativeCurrency` from ETH to GLM.
+5. Rename env vars and config keys so `KAOLIN_*` names do not remain in active codepaths.
+6. Re-seed or recreate any entities the app expects on startup, because Kaolin state does not migrate to Braga.
 
 Keep Kaolin only as legacy context during migration work. For new code, examples, and setup instructions, default to Braga.
 

@@ -1,6 +1,6 @@
 # Arkiv SDK Reference
 
-## TypeScript SDK (v0.6.0)
+## TypeScript SDK
 
 ### Installation
 
@@ -11,6 +11,8 @@ npm install @arkiv-network/sdk
 # Bun
 bun add @arkiv-network/sdk
 ```
+
+The `braga` chain export is available in `@arkiv-network/sdk` version `0.6.5` or higher. Before suggesting `import { braga } from "@arkiv-network/sdk/chains"`, verify the user's installed SDK version meets that minimum. Do not pin install commands unless the user explicitly asks for a specific version.
 
 ### Imports
 
@@ -218,7 +220,9 @@ await window.ethereum.request({
 For static HTML/JS pages without a bundler:
 
 ```javascript
-import { createPublicClient, http } from 'https://esm.sh/@arkiv-network/sdk@0.6.0?target=es2022&bundle-deps'
-import { eq } from 'https://esm.sh/@arkiv-network/sdk@0.6.0/query?target=es2022&bundle-deps'
-import { braga } from 'https://esm.sh/@arkiv-network/sdk@0.6.0/chains?target=es2022&bundle-deps'
+import { createPublicClient, http } from 'https://esm.sh/@arkiv-network/sdk?target=es2022&bundle-deps'
+import { eq } from 'https://esm.sh/@arkiv-network/sdk/query?target=es2022&bundle-deps'
+import { braga } from 'https://esm.sh/@arkiv-network/sdk/chains?target=es2022&bundle-deps'
 ```
+
+If the user is working with a versioned CDN URL instead of the unpinned form above, make sure the selected SDK version is `0.6.5` or newer before using the `braga` import.

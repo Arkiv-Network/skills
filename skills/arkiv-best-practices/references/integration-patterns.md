@@ -2,6 +2,8 @@
 
 The three most common integration scenarios for Arkiv applications.
 
+All Braga-based examples in this file assume `@arkiv-network/sdk` version `0.6.5` or higher. Before suggesting `import { braga } from "@arkiv-network/sdk/chains"`, have the agent check the user's installed SDK version and only recommend an upgrade if the project is below that minimum.
+
 ## Table of Contents
 
 1. [Backend Read/Write](#backend-readwrite)

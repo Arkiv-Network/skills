@@ -5,6 +5,7 @@ Use this guide when the user already has an Arkiv project that targets Kaolin an
 ## What Changes
 
 - The SDK API stays the same.
+- The `braga` chain export requires `@arkiv-network/sdk` version `0.6.5` or higher.
 - The chain target changes from `kaolin` to `braga`.
 - The active RPC, WebSocket, faucet, explorer, and chain ID all change.
 - Braga uses `GLM` as the native gas token instead of test ETH.
@@ -18,6 +19,8 @@ Use this guide when the user already has an Arkiv project that targets Kaolin an
 ## Migration Checklist
 
 ### 1. Update SDK chain imports
+
+Before changing imports, verify that the project is already on `@arkiv-network/sdk` `0.6.5` or newer. Do not pin a replacement install command by default; tell the user to check the current SDK version and upgrade only if the project is below the minimum needed for `braga`.
 
 ```diff
 - import { kaolin } from "@arkiv-network/sdk/chains";
