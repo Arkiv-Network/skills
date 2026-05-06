@@ -1,22 +1,11 @@
 ---
 name: arkiv-best-practices
-description: Best practices, patterns, and practical examples for building applications with Arkiv — a decentralized Ethereum database with queryable, time-scoped storage. Use this skill whenever the user is working with Arkiv SDK, the @arkiv-network/sdk package, Arkiv entities, Arkiv queries, Arkiv attributes, ExpiresIn/expiration, the Kaolin testnet, or building any application that stores, queries, or manages data on the Arkiv network. Also use when the user mentions decentralized data storage on Ethereum, blockchain database, Web3 data storage, on-chain data, entity CRUD operations with expiration, or arkiv_query.
+description: Best practices, patterns, and practical examples for building applications with Arkiv — a decentralized Ethereum database with queryable, time-scoped storage. Use this skill whenever the user is working with Arkiv SDK, the @arkiv-network/sdk package, Arkiv entities, Arkiv queries, Arkiv attributes, ExpiresIn/expiration, the Braga testnet, or building any application that stores, queries, or manages data on the Arkiv network. Also use when the user mentions decentralized data storage on Ethereum, blockchain database, Web3 data storage, on-chain data, entity CRUD operations with expiration, arkiv_query, or migrating an Arkiv project from Kaolin to Braga.
 ---
 
 # Arkiv Best Practices & Practical Examples
 
 Arkiv is a decentralized data layer that brings queryable, time-scoped storage to Ethereum. It lets developers store, query, and manage data with built-in expiration and attribute systems. Think of it as an Ethereum-native database where every record (called an **entity**) has a payload, typed attributes for querying, and a programmable lifespan.
-
-## Contents
-
-- [Architecture Overview](#architecture-overview)
-- [Core Concepts](#core-concepts) — Entities, Attributes, ExpiresIn
-- [SDK Setup](#sdk-setup) — Client types, installation
-- [CRUD Operations](#crud-operations) — Create, Read/Query, Pagination, Update, Delete
-- [Best Practices](#best-practices) — 14 practices covering project attributes, querying, security, error handling, and data modeling
-- [Reference Files](#reference-files) — SDK reference, integration patterns, API reference, advanced patterns
-- [Testnet Resources](#testnet-resources) — Chain ID, RPC, faucet, explorer
-- [Troubleshooting](#troubleshooting)
 
 ## Architecture Overview
 
@@ -95,21 +84,23 @@ import {
   http,
 } from "@arkiv-network/sdk";
 import { privateKeyToAccount } from "@arkiv-network/sdk/accounts";
-import { kaolin } from "@arkiv-network/sdk/chains";
+import { braga } from "@arkiv-network/sdk/chains";
 
 // Write operations — keep private key in env vars, never hardcode
 const walletClient = createWalletClient({
-  chain: kaolin,
+  chain: braga,
   transport: http(),
   account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
 });
 
 // Read operations — safe for frontend/public use
 const publicClient = createPublicClient({
-  chain: kaolin,
+  chain: braga,
   transport: http(),
 });
 ```
+
+Braga is the current Arkiv testnet. If you are upgrading an existing Kaolin project, read `references/migration-guide.md` before editing code so you update chain imports, RPC URLs, wallet config, and seed data together.
 
 ## CRUD Operations
 
@@ -442,6 +433,20 @@ Two important advanced patterns for production Arkiv apps:
 
 For full examples and code for both patterns, read `references/advanced-patterns.md`.
 
+## Migration from Kaolin to Braga
+
+When a user wants to upgrade an existing Arkiv project, treat it as a migration instead of a generic refactor. The SDK API is unchanged; the main work is swapping the target chain, updating wallet/network config, renaming Kaolin-specific env vars, and recreating testnet data that lived on Kaolin.
+
+Follow this sequence:
+
+1. Read `references/migration-guide.md` before making edits.
+2. Replace `kaolin` chain imports/usages with `braga`.
+3. Update RPC URLs, WebSocket URLs, chain IDs, explorer links, faucet links, and wallet `nativeCurrency` from ETH to GLM.
+4. Rename env vars and config keys so `KAOLIN_*` names do not remain in active codepaths.
+5. Re-seed or recreate any entities the app expects on startup, because Kaolin state does not migrate to Braga.
+
+Keep Kaolin only as legacy context during migration work. For new code, examples, and setup instructions, default to Braga.
+
 ## Reference Files
 
 The `references/` directory contains detailed documentation for specific topics. Read these when you need deeper information:
@@ -450,18 +455,19 @@ The `references/` directory contains detailed documentation for specific topics.
 - **`references/integration-patterns.md`** — Three integration scenarios: backend read/write (Next.js/Express), client-side reading (TanStack Query hooks), and client-side writing (MetaMask and wagmi/RainbowKit).
 - **`references/api-reference.md`** — Raw JSON-RPC 2.0 API: `arkiv_query` syntax, query operators, synthetic attributes (`$owner`, `$creator`, `$key`), pagination with cursors, and utility methods.
 - **`references/advanced-patterns.md`** — Advanced data modeling: schema validation with zod/valibot, and modeling lists with relationship entities.
+- **`references/migration-guide.md`** — Step-by-step Kaolin to Braga migration checklist: chain swaps, env/config updates, wallet settings, faucet, bridge changes, and reseeding testnet data.
 
 ## Testnet Resources
 
 | Resource | URL                                            |
 | -------- | ---------------------------------------------- |
-| Chain ID | `60138453025`                                  |
-| HTTP RPC | `https://kaolin.hoodi.arkiv.network/rpc`       |
-| Faucet   | `https://kaolin.hoodi.arkiv.network/faucet/`   |
-| Explorer | `https://explorer.kaolin.hoodi.arkiv.network/` |
+| Chain ID | `60138453102`                                  |
+| HTTP RPC | `https://braga.hoodi.arkiv.network/rpc`        |
+| Faucet   | `https://braga.hoodi.arkiv.network/faucet/`    |
+| Explorer | `https://explorer.braga.hoodi.arkiv.network/`  |
 
 ## Troubleshooting
 
-- **"Invalid sender"** — Your RPC URL may point to the wrong network. Verify it matches Kaolin.
-- **"Insufficient funds"** — Get test ETH from the faucet. Writes require gas.
+- **"Invalid sender"** — Your RPC URL may point to the wrong network. Verify it matches Braga.
+- **"Insufficient funds"** — Get test GLM from the Braga faucet. Writes require gas.
 - **Queries return empty** — Check that attributes match exactly (case-sensitive). Verify entities haven't expired.

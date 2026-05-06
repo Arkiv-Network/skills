@@ -22,7 +22,7 @@ import { createWalletClient, createPublicClient, http, custom } from "@arkiv-net
 import { privateKeyToAccount } from "@arkiv-network/sdk/accounts"
 
 // Chain configuration
-import { kaolin } from "@arkiv-network/sdk/chains"
+import { braga } from "@arkiv-network/sdk/chains"
 
 // Utilities
 import { ExpirationTime, jsonToPayload, stringToPayload, payloadToString } from "@arkiv-network/sdk/utils"
@@ -180,20 +180,20 @@ lte('expiration', limit)   // expiration <= limit
 
 ```typescript
 import { createWalletClient, createPublicClient, custom, http } from "@arkiv-network/sdk"
-import { kaolin } from "@arkiv-network/sdk/chains"
+import { braga } from "@arkiv-network/sdk/chains"
 
 // Request wallet connection
 await window.ethereum.request({ method: 'eth_requestAccounts' })
 
 // Use MetaMask as transport (no private key needed)
 const walletClient = createWalletClient({
-  chain: kaolin,
+  chain: braga,
   transport: custom(window.ethereum),
 })
 
 // Public client for queries
 const publicClient = createPublicClient({
-  chain: kaolin,
+  chain: braga,
   transport: http(),
 })
 ```
@@ -204,11 +204,11 @@ const publicClient = createPublicClient({
 await window.ethereum.request({
   method: 'wallet_addEthereumChain',
   params: [{
-    chainId: '0xe0087f821',
-    chainName: 'Arkiv Kaolin Testnet',
-    nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-    rpcUrls: ['https://kaolin.hoodi.arkiv.network/rpc'],
-    blockExplorerUrls: ['https://explorer.kaolin.hoodi.arkiv.network']
+    chainId: '0xe0087f86e',
+    chainName: 'Arkiv Braga Testnet',
+    nativeCurrency: { name: 'GLM', symbol: 'GLM', decimals: 18 },
+    rpcUrls: ['https://braga.hoodi.arkiv.network/rpc'],
+    blockExplorerUrls: ['https://explorer.braga.hoodi.arkiv.network']
   }]
 })
 ```
@@ -220,5 +220,5 @@ For static HTML/JS pages without a bundler:
 ```javascript
 import { createPublicClient, http } from 'https://esm.sh/@arkiv-network/sdk@0.6.0?target=es2022&bundle-deps'
 import { eq } from 'https://esm.sh/@arkiv-network/sdk@0.6.0/query?target=es2022&bundle-deps'
-import { kaolin } from 'https://esm.sh/@arkiv-network/sdk@0.6.0/chains?target=es2022&bundle-deps'
+import { braga } from 'https://esm.sh/@arkiv-network/sdk@0.6.0/chains?target=es2022&bundle-deps'
 ```

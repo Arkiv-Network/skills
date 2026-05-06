@@ -18,20 +18,20 @@ For server-side applications (Next.js API routes, Express, any Node.js backend).
 // lib/arkiv-server.ts
 import { createWalletClient, createPublicClient, http } from "@arkiv-network/sdk"
 import { privateKeyToAccount } from "@arkiv-network/sdk/accounts"
-import { kaolin } from "@arkiv-network/sdk/chains"
+import { braga } from "@arkiv-network/sdk/chains"
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk/utils"
 import { eq } from "@arkiv-network/sdk/query"
 import { PROJECT_ATTRIBUTE } from "./arkiv" // your project attribute
 
 // Initialize clients ONCE at module level
 const walletClient = createWalletClient({
-  chain: kaolin,
+  chain: braga,
   transport: http(),
   account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
 })
 
 const publicClient = createPublicClient({
-  chain: kaolin,
+  chain: braga,
   transport: http(),
 })
 
@@ -118,13 +118,13 @@ First, define the fetcher functions separately from hooks — these are reusable
 ```typescript
 // lib/arkiv-queries.ts
 import { createPublicClient, http } from "@arkiv-network/sdk"
-import { kaolin } from "@arkiv-network/sdk/chains"
+import { braga } from "@arkiv-network/sdk/chains"
 import { eq } from "@arkiv-network/sdk/query"
 import { PROJECT_ATTRIBUTE } from "@/lib/arkiv"
 
 // Single public client instance — reuse across all queries
 export const publicClient = createPublicClient({
-  chain: kaolin,
+  chain: braga,
   transport: http(),
 })
 
@@ -240,11 +240,11 @@ async function addArkivNetwork() {
   await window.ethereum.request({
     method: "wallet_addEthereumChain",
     params: [{
-      chainId: "0xe0087f821",
-      chainName: "Arkiv Kaolin Testnet",
-      nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
-      rpcUrls: ["https://kaolin.hoodi.arkiv.network/rpc"],
-      blockExplorerUrls: ["https://explorer.kaolin.hoodi.arkiv.network"],
+      chainId: "0xe0087f86e",
+      chainName: "Arkiv Braga Testnet",
+      nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
+      rpcUrls: ["https://braga.hoodi.arkiv.network/rpc"],
+      blockExplorerUrls: ["https://explorer.braga.hoodi.arkiv.network"],
     }],
   })
 }
@@ -254,13 +254,13 @@ async function addArkivNetwork() {
 
 ```typescript
 import { createWalletClient, custom } from "@arkiv-network/sdk"
-import { kaolin } from "@arkiv-network/sdk/chains"
+import { braga } from "@arkiv-network/sdk/chains"
 
 await addArkivNetwork()
 const [address] = await window.ethereum.request({ method: "eth_requestAccounts" })
 
 const walletClient = createWalletClient({
-  chain: kaolin,
+  chain: braga,
   transport: custom(window.ethereum),
 })
 ```
@@ -275,7 +275,7 @@ import {
   createWalletClient as createArkivWalletClient,
   custom,
 } from "@arkiv-network/sdk";
-import { kaolin } from "@arkiv-network/sdk/chains";
+import { braga } from "@arkiv-network/sdk/chains";
 
 // Inside your component:
 const { address } = useAccount();
@@ -286,7 +286,7 @@ if (!wagmiWalletClient) {
 }
 
 const arkivWalletClient = createArkivWalletClient({
-  chain: kaolin,
+  chain: braga,
   transport: custom(wagmiWalletClient.transport),
   account: address,
 });

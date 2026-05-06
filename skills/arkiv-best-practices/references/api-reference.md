@@ -6,18 +6,18 @@ Arkiv exposes a JSON-RPC 2.0 API over HTTP. Use this when you need raw HTTP acce
 
 | Property  | Value                                         |
 | --------- | --------------------------------------------- |
-| Chain ID  | `60138453025`                                 |
-| HTTP RPC  | `https://kaolin.hoodi.arkiv.network/rpc`      |
-| WebSocket | `wss://kaolin.hoodi.arkiv.network/rpc/ws`     |
-| Explorer  | `https://explorer.kaolin.hoodi.arkiv.network` |
-| Faucet    | `https://kaolin.hoodi.arkiv.network/faucet`   |
+| Chain ID  | `60138453102`                                 |
+| HTTP RPC  | `https://braga.hoodi.arkiv.network/rpc`       |
+| WebSocket | `wss://braga.hoodi.arkiv.network/rpc/ws`      |
+| Explorer  | `https://explorer.braga.hoodi.arkiv.network`  |
+| Faucet    | `https://braga.hoodi.arkiv.network/faucet`    |
 
 ## Request Format
 
 All methods use standard JSON-RPC 2.0.
 
 ```bash
-curl https://kaolin.hoodi.arkiv.network/rpc \
+curl https://braga.hoodi.arkiv.network/rpc \
   -H "content-type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"METHOD_NAME","params":[]}'
 ```
@@ -68,7 +68,7 @@ Query entities from the bitmap-backed SQLite store.
 **Example — query active NFTs:**
 
 ```bash
-curl https://kaolin.hoodi.arkiv.network/rpc \
+curl https://braga.hoodi.arkiv.network/rpc \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":1,
@@ -83,7 +83,7 @@ curl https://kaolin.hoodi.arkiv.network/rpc \
 **Example — query by owner:**
 
 ```bash
-curl https://kaolin.hoodi.arkiv.network/rpc \
+curl https://braga.hoodi.arkiv.network/rpc \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":10,
@@ -98,7 +98,7 @@ curl https://kaolin.hoodi.arkiv.network/rpc \
 **Example — numeric range:**
 
 ```bash
-curl https://kaolin.hoodi.arkiv.network/rpc \
+curl https://braga.hoodi.arkiv.network/rpc \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":12,
@@ -110,7 +110,7 @@ curl https://kaolin.hoodi.arkiv.network/rpc \
 **Example — glob match with negation:**
 
 ```bash
-curl https://kaolin.hoodi.arkiv.network/rpc \
+curl https://braga.hoodi.arkiv.network/rpc \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":13,
@@ -122,7 +122,7 @@ curl https://kaolin.hoodi.arkiv.network/rpc \
 **Example — metadata only (omit payload):**
 
 ```bash
-curl https://kaolin.hoodi.arkiv.network/rpc \
+curl https://braga.hoodi.arkiv.network/rpc \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":14,
@@ -186,7 +186,7 @@ Use the returned `cursor` in the next request:
 Returns total number of entities currently stored. No parameters.
 
 ```bash
-curl https://kaolin.hoodi.arkiv.network/rpc \
+curl https://braga.hoodi.arkiv.network/rpc \
   -H "content-type: application/json" \
   -d '{"jsonrpc":"2.0","id":3,"method":"arkiv_getEntityCount","params":[]}'
 ```
