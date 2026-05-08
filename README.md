@@ -25,7 +25,3 @@ npx skills add https://github.com/Arkiv-Network/skills --all
 ```
 
 Pass `-g` / `--global` to install at the user level instead of the current project. See `npx skills --help` for the full set of flags.
-
-## Contributing
-
-Each skill lives at `skills/<skill-name>/SKILL.md`, with optional `references/` for deeper docs the skill loads on demand. Keep skills agent-agnostic — no runtime-specific tool primitives — so they work everywhere the spec is supported.
