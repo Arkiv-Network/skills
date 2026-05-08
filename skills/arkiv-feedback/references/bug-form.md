@@ -6,7 +6,7 @@ Mirrors `Arkiv-Network/reported-issues/.github/ISSUE_TEMPLATE/1-bug.yml`. If tha
 
 - **Title prefix:** `[Bug]: `
 - **Labels (auto-applied on submit):** `bug`, `triage`, `reported-issue`
-- **Issue type:** `bug` (try first; fall back to no type if the org doesn't have it configured)
+- **Issue type:** not set via `gh` (the CLI version most users have doesn't support `--type`). The `bug` label is the canonical signal for triage.
 
 ## Fields, in order
 

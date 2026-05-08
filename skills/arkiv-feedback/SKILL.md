@@ -1,6 +1,6 @@
 ---
 name: arkiv-feedback
-description: Submit a bug report or feature request to Arkiv-Network/reported-issues via an interactive walkthrough that mirrors the official GitHub issue forms. Use when the user wants to report an Arkiv bug, network issue, or product idea — keywords: report bug, file issue, Arkiv issue, network down, broken, not working, feature request, idea for Arkiv, suggest a change.
+description: Submit a bug report or feature request to Arkiv-Network/reported-issues via an interactive walkthrough that mirrors the official GitHub issue forms. Use when the user wants to report an Arkiv bug, a network issue, or a product idea. Keywords — report bug, file issue, Arkiv issue, network down, broken, not working, feature request, idea for Arkiv, suggest a change.
 ---
 
 # Arkiv Feedback
@@ -104,8 +104,7 @@ gh issue create \
   --repo Arkiv-Network/reported-issues \
   --title "[Bug]: <summary>" \
   --body-file <draft-path> \
-  --label "bug,triage,reported-issue" \
-  --type bug
+  --label "bug,triage,reported-issue"
 
 # Feature
 gh issue create \
@@ -117,7 +116,7 @@ gh issue create \
 
 Notes:
 
-- `--type bug` only works if the Arkiv-Network org has a `bug` issue type configured. If the call fails with an "issue type not found" error, retry the same command without `--type bug` — the `bug` label still applies.
+- Do not pass `--type bug` (or any `--type` flag). The widely-installed versions of `gh` (≤ 2.86.0) do not support it and the call fails with a usage error. The `bug` label is the source of truth for triage; org-level issue types, if used, can be assigned by maintainers after creation.
 - The project-side workflow on [`Arkiv-Network/projects/4`](https://github.com/orgs/Arkiv-Network/projects/4/views/1) auto-adds every new issue from this repo. Do **not** call `gh project item-add` — it is unnecessary and creates duplicate items.
 
 On success, print the issue URL plus a one-line summary of what was filed.
