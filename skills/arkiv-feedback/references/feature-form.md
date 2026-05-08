@@ -20,23 +20,23 @@ Mirrors `Arkiv-Network/reported-issues/.github/ISSUE_TEMPLATE/2-feature-request.
 
 ## Body template
 
-Render the body exactly like this. Keep section headings verbatim. Use `—` for skipped optional fields.
+Render the body exactly like this. Keep section headings verbatim. For **skipped optional fields**, write `_No response_` on its own line — this matches what the GitHub form itself renders, so a skill-submitted issue is structurally indistinguishable from a form-submitted one.
 
 ```markdown
 ### Contact
-{{contact-or-em-dash}}
+{{contact or "_No response_"}}
 
 ### What problem are you trying to solve?
 {{problem}}
 
 ### What do you have in mind?
-{{proposal-or-em-dash}}
+{{proposal or "_No response_"}}
 
 ### What workarounds or alternatives have you considered?
-{{alternatives-or-em-dash}}
+{{alternatives or "_No response_"}}
 
 ### Anything else
-{{extra-or-em-dash}}
+{{extra or "_No response_"}}
 ```
 
 ## Triage hint for the agent

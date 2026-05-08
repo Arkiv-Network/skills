@@ -20,7 +20,7 @@ Ask each in this sequence. `R` = required, `O` = optional.
 | 4 | SDK / tool version             | Text      | O   | E.g. `@arkiv-network/sdk@0.6.5`.                                       |
 | 5 | What happened?                 | Multiline | R   | What they did, expected, and actually saw.                            |
 | 6 | Steps to reproduce             | Multiline | R   | Minimal repro a teammate could follow.                                |
-| 7 | Logs                           | Multiline | O   | Render inside a ` ```shell ... ``` ` block.                            |
+| 7 | Logs                           | Multiline | O   | Render inside a ` ```shell ... ``` ` block when provided.              |
 | 8 | Transaction / entity ID        | Text      | O   | If a specific tx hash or entity ID is involved.                       |
 | 9 | Anything else                  | Multiline | O   | Screenshots (link), recordings, links, extra context.                 |
 
@@ -42,11 +42,13 @@ Ask each in this sequence. `R` = required, `O` = optional.
 
 ## Body template
 
-Render the body exactly like this. Keep section headings verbatim. Use `—` for skipped optional fields.
+Render the body exactly like this. Keep section headings verbatim. For **skipped optional fields**, write `_No response_` on its own line — this matches what the GitHub form itself renders, so a skill-submitted issue is structurally indistinguishable from a form-submitted one.
+
+**Logs are special:** if the user provided logs, wrap them in a shell code fence. If they skipped, write `_No response_` on a single line and **omit the code fence entirely** — a placeholder inside a fence reads as code, which is wrong.
 
 ```markdown
 ### Contact
-{{contact-or-em-dash}}
+{{contact or "_No response_"}}
 
 ### DB-chain
 {{db-chain}}
@@ -55,7 +57,7 @@ Render the body exactly like this. Keep section headings verbatim. Use `—` for
 {{surface}}
 
 ### SDK / tool version
-{{version-or-em-dash}}
+{{version or "_No response_"}}
 
 ### What happened?
 {{what-happened}}
@@ -64,15 +66,20 @@ Render the body exactly like this. Keep section headings verbatim. Use `—` for
 {{repro}}
 
 ### Logs
-```shell
-{{logs-or-em-dash}}
-```
+{{
+  if logs provided:
+    ```shell
+    {{logs}}
+    ```
+  else:
+    _No response_
+}}
 
 ### Transaction / entity ID
-{{tx-or-em-dash}}
+{{tx or "_No response_"}}
 
 ### Anything else
-{{extra-or-em-dash}}
+{{extra or "_No response_"}}
 ```
 
 If the user pastes a stack trace or log output that contains a wallet private key, mnemonic, or any string that looks like a secret, **redact it** in the rendered body (replace with `[redacted]`) and warn the user before showing them the preview.
