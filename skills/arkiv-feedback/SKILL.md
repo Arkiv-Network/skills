@@ -123,14 +123,57 @@ On success, print the issue URL plus a one-line summary of what was filed.
 
 ### Step 8 — Fallback (no `gh`)
 
-If `gh` is missing or not authenticated, do not try to install or authenticate it for the user. Instead:
+The probe in Step 6 fails in one of two ways: `gh` is **missing entirely**, or `gh` is **installed but unauthenticated**. Offer to fix whichever one applies — with explicit consent — and only fall through to save-and-paste if the user declines or the platform isn't covered.
+
+**Never run a package install, `sudo`, or `gh auth login` without asking first in the same turn.** No silent escalation.
+
+#### 8a — `gh` is missing
+
+Detect what install path is realistic on this machine, then offer the most direct one:
+
+| Platform | Probe | Offer |
+|----------|-------|-------|
+| macOS    | `command -v brew` | `brew install gh` |
+| Linux + apt | `command -v apt` | Point at <https://github.com/cli/cli/blob/trunk/docs/install_linux.md> — don't auto-run, the apt setup adds a GPG key and a repo and is too much for an inline offer |
+| Linux + dnf/pacman | `command -v dnf` / `command -v pacman` | Same — point at the install docs, don't auto-run |
+| Windows  | n/a | Print `winget install --id GitHub.cli` as text, don't auto-run |
+| macOS without `brew` | — | Print release-tarball link (<https://github.com/cli/cli/releases>) |
+
+When an auto-run is on the table (macOS + `brew`), ask once:
+
+> `gh` isn't installed. Run `brew install gh` now? (y/N)
+
+Default is **no** — an accidental Enter should not trigger a package install. If they say yes, run `brew install gh`, then continue into 8c. If they say no (or the platform doesn't qualify for auto-run), fall through to 8d.
+
+#### 8b — `gh` is installed but unauthed
+
+Skip the install step. Offer:
+
+> `gh` is installed but not logged in. Run `gh auth login` now? It opens a browser. (y/N)
+
+If yes, continue into 8c. If no, fall through to 8d.
+
+#### 8c — Authenticate, then loop back
+
+Run `gh auth login` interactively. Surface that it opens a browser so the user isn't surprised. When it returns successfully, **loop back to Step 6** — re-probe and continue into Step 7 with the draft we already collected. Don't make the user re-run the whole skill or re-answer the form questions.
+
+If `gh auth login` fails or the user cancels, fall through to 8d.
+
+#### 8d — Save-and-paste fallback (declined or unsupported)
 
 1. Save the rendered draft to `./arkiv-feedback-<timestamp>.md` (in the user's current working directory). Use the same section structure as the body — one heading per field — so the user can paste section by section.
 2. Print this hand-off, substituting the actual reason and path:
 
    > Couldn't submit via `gh` (`<reason>`). Your draft is saved at `<path>`. Open <https://github.com/Arkiv-Network/reported-issues/issues/new/choose>, pick the matching form (bug or feature request), and paste each section into the corresponding field. The form will apply the right labels and routing on submit.
 
-3. Exit. Do not poll or watch for completion — the user finishes in the browser.
+3. If `gh` is missing, append a tail line: "If you'd rather try `gh` later, install it via <https://github.com/cli/cli#installation> and re-run this skill."
+4. Exit. Do not poll or watch for completion — the user finishes in the browser.
+
+#### Hard rules for this step
+
+- No `curl | sh`, no tarball-and-move-to-`/usr/local/bin`, no source builds. Package manager or release link — nothing in between.
+- Don't `brew install gh` if `brew` itself isn't on PATH. One `command -v brew` check is enough.
+- Never escalate to `sudo` without prior consent in the same turn — and the offers above don't need it for the supported paths.
 
 ## Hard rules
 
