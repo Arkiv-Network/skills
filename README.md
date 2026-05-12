@@ -14,14 +14,23 @@ Agent skills for working with [Arkiv](https://arkiv.network) — the Web3 databa
 Install a single skill:
 
 ```bash
+# npm
 npx skills add https://github.com/Arkiv-Network/skills --skill arkiv-best-practices
 npx skills add https://github.com/Arkiv-Network/skills --skill arkiv-feedback
+
+# pnpm
+pnpm dlx skills add https://github.com/Arkiv-Network/skills --skill arkiv-best-practices
+pnpm dlx skills add https://github.com/Arkiv-Network/skills --skill arkiv-feedback
 ```
 
 Install everything in this repo at once:
 
 ```bash
+# npm
 npx skills add https://github.com/Arkiv-Network/skills --all
+
+# pnpm
+pnpm dlx skills add https://github.com/Arkiv-Network/skills --all
 ```
 
-Pass `-g` / `--global` to install at the user level instead of the current project. See `npx skills --help` for the full set of flags.
+Pass `-g` / `--global` to install at the user level instead of the current project. See `npx skills --help` (or `pnpm dlx skills --help`) for the full set of flags.
