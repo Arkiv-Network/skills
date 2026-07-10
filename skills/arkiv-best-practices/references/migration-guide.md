@@ -26,14 +26,17 @@ Before changing imports, verify that the project is already on `@arkiv-network/s
 - import { kaolin } from "@arkiv-network/sdk/chains";
 + import { braga } from "@arkiv-network/sdk/chains";
 
-  const client = createClient({
+  const client = createWalletClient({
 -   chain: kaolin,
 +   chain: braga,
+    transport: http(),
     account,
   });
 ```
 
 Apply the same swap for `createWalletClient`, `createPublicClient`, wagmi-derived Arkiv clients, and any custom chain constants that still point to Kaolin.
+
+If the SDK upgrade lands on `0.7.0` or newer, additional breaking changes apply beyond the chain swap: viem becomes a peer dependency (`npm install @arkiv-network/sdk viem`), `http`/`custom`/`privateKeyToAccount` move to `viem` / `viem/accounts`, queries migrate from `buildQuery()` to `select()`, and `orderBy`/`asc`/`desc` become deprecated no-ops. Follow the "Upgrading to SDK 0.7.0" checklist in SKILL.md alongside this guide.
 
 ### 2. Replace network constants and wallet settings
 

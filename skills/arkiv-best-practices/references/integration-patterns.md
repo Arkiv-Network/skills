@@ -2,7 +2,7 @@
 
 The three most common integration scenarios for Arkiv applications.
 
-All Braga-based examples in this file assume `@arkiv-network/sdk` version `0.6.5` or higher. Before suggesting `import { braga } from "@arkiv-network/sdk/chains"`, have the agent check the user's installed SDK version and only recommend an upgrade if the project is below that minimum.
+All examples in this file assume `@arkiv-network/sdk` version `0.7.0` or higher, where viem is a peer dependency (`npm install @arkiv-network/sdk viem`) and `http`/`custom`/`privateKeyToAccount` import from `viem` / `viem/accounts`. Check the user's installed SDK version first: on `0.6.x` those helpers import from the SDK itself and queries use `buildQuery()` instead of `select()`; below `0.6.5` the `braga` chain export does not exist. Only recommend an upgrade if the project is below the minimum it actually needs.
 
 ## Table of Contents
 
@@ -18,11 +18,12 @@ For server-side applications (Next.js API routes, Express, any Node.js backend).
 
 ```typescript
 // lib/arkiv-server.ts
-import { createWalletClient, createPublicClient, http } from "@arkiv-network/sdk"
-import { privateKeyToAccount } from "@arkiv-network/sdk/accounts"
+import { createWalletClient, createPublicClient } from "@arkiv-network/sdk"
 import { braga } from "@arkiv-network/sdk/chains"
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk/utils"
 import { eq } from "@arkiv-network/sdk/query"
+import { http } from "viem"
+import { privateKeyToAccount } from "viem/accounts"
 import { PROJECT_ATTRIBUTE } from "./arkiv" // your project attribute
 
 // Initialize clients ONCE at module level
@@ -54,14 +55,12 @@ export async function createPost(title: string, content: string) {
 
 // Read example
 export async function getPosts() {
-  const query = publicClient.buildQuery()
-  const result = await query
-    .where([
+  const result = await publicClient
+    .select({ key: true, payload: true })
+    .where(
       eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
       eq("entityType", "post"),
-    ])
-    .withPayload(true)
-    .withMetadata(true)
+    )
     .limit(50)
     .fetch()
   return result
@@ -119,9 +118,10 @@ First, define the fetcher functions separately from hooks — these are reusable
 
 ```typescript
 // lib/arkiv-queries.ts
-import { createPublicClient, http } from "@arkiv-network/sdk"
+import { createPublicClient } from "@arkiv-network/sdk"
 import { braga } from "@arkiv-network/sdk/chains"
 import { eq } from "@arkiv-network/sdk/query"
+import { http } from "viem"
 import { PROJECT_ATTRIBUTE } from "@/lib/arkiv"
 
 // Single public client instance — reuse across all queries
@@ -131,20 +131,18 @@ export const publicClient = createPublicClient({
 })
 
 export async function fetchEntitiesByType<T>(entityType: string): Promise<(T & { arkivEntityKey: string })[]> {
-  const query = publicClient.buildQuery()
-  const result = await query
-    .where([
+  const result = await publicClient
+    .select({ key: true, payload: true })
+    .where(
       eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
       eq("entityType", entityType),
-    ])
-    .withPayload(true)
-    .withMetadata(true)
+    )
     .limit(50)
     .fetch()
 
   // Combine entity key with payload — gives each item a stable unique identifier
   return result.entities
-    .map((entity: any) => {
+    .map((entity) => {
       try {
         return { arkivEntityKey: entity.key, ...entity.toJson() }
       } catch {
@@ -255,8 +253,9 @@ async function addArkivNetwork() {
 **Creating a wallet client from MetaMask:**
 
 ```typescript
-import { createWalletClient, custom } from "@arkiv-network/sdk"
+import { createWalletClient } from "@arkiv-network/sdk"
 import { braga } from "@arkiv-network/sdk/chains"
+import { custom } from "viem"
 
 await addArkivNetwork()
 const [address] = await window.ethereum.request({ method: "eth_requestAccounts" })
@@ -273,11 +272,9 @@ If your project already uses wagmi (or a wagmi-powered framework like RainbowKit
 
 ```tsx
 import { useAccount, useWalletClient } from "wagmi";
-import {
-  createWalletClient as createArkivWalletClient,
-  custom,
-} from "@arkiv-network/sdk";
+import { createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk";
 import { braga } from "@arkiv-network/sdk/chains";
+import { custom } from "viem";
 
 // Inside your component:
 const { address } = useAccount();
