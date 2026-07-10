@@ -11,7 +11,7 @@ Patterns for handling type safety and complex relationships in Arkiv.
 
 ## Validate Entity Data with a Schema Library
 
-`entity.toJson()` returns `any` in TypeScript — no type safety. Always validate the shape of data you read from Arkiv using a schema validation library (e.g., `zod`, `valibot`, `yup`). Before adding a new library, check if the project already uses one.
+`entity.toJson()` (available when the query selects `payload`) returns `any` in TypeScript — the SDK types which *fields* were selected, but not the payload's shape. Always validate the shape of data you read from Arkiv using a schema validation library (e.g., `zod`, `valibot`, `yup`). Before adding a new library, check if the project already uses one.
 
 ```typescript
 import { z } from "zod"; // or use whatever validation library the project already has
@@ -37,12 +37,11 @@ function parsePost(entity: any): Post {
 
 // Usage in queries
 const result = await publicClient
-  .buildQuery()
-  .where([
+  .select({ key: true, payload: true })
+  .where(
     eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
     eq("entityType", "post"),
-  ])
-  .withPayload(true)
+  )
   .fetch();
 
 const posts: Post[] = result.entities
@@ -116,23 +115,23 @@ await walletClient.mutateEntities({
 });
 
 // 3. Query all profiles with "frontend" skill — fast and indexed
-const frontendDevs = await publicClient.buildQuery()
-  .where([
+const frontendDevs = await publicClient
+  .select({ key: true, payload: true })
+  .where(
     eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
     eq("entityType", "profileSkill"),
     eq("skill", "frontend"),
-  ])
-  .withPayload(true)
+  )
   .fetch();
 
 // 4. Query all skills for a specific profile
-const aliceSkills = await publicClient.buildQuery()
-  .where([
+const aliceSkills = await publicClient
+  .select({ key: true, payload: true })
+  .where(
     eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
     eq("entityType", "profileSkill"),
     eq("profileId", "alice-123"),
-  ])
-  .withPayload(true)
+  )
   .fetch();
 ```
 
