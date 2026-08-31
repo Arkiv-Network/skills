@@ -1,140 +1,224 @@
 # Arkiv SDK Reference
 
+All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Cheesecake devnet.
+
 ## TypeScript SDK
 
 ### Installation
 
 ```bash
-# npm
-npm install @arkiv-network/sdk viem
+# npm — install the dev release; npm "latest" is still 0.7.0
+npm install @arkiv-network/sdk@dev viem
 
 # Bun
-bun add @arkiv-network/sdk viem
+bun add @arkiv-network/sdk@dev viem
 ```
 
-Since `0.7.0`, [viem](https://viem.sh) is a **peer dependency** — install it alongside the SDK. The SDK no longer re-exports viem's internals (`http`, `custom`, `privateKeyToAccount`, `Hex`, etc.); import them from `viem` / `viem/accounts` directly.
+[viem](https://viem.sh) is a **peer dependency** — install it alongside the SDK. The SDK no longer re-exports viem's internals (`http`, `custom`, `privateKeyToAccount`, `Hex`, etc.); import them from `viem` / `viem/accounts` directly.
 
-Version minimums to keep in mind before suggesting code:
+### Package exports
 
-- `select()`, viem-style imports, client-side validation, typed errors — SDK `0.7.0+`
-- `braga` chain export — SDK `0.6.5+`
-- On `0.6.x`, `http`/`custom` import from `@arkiv-network/sdk` and `privateKeyToAccount` from `@arkiv-network/sdk/accounts`, and queries use `buildQuery()` with `.withPayload()`/`.withAttributes()`/`.withMetadata()`
+| Subpath | Contents |
+| ------- | -------- |
+| `@arkiv-network/sdk` | Client factories, errors, `ExpirationTime`, payload helpers, re-exports from `/attr`, `/entity` |
+| `@arkiv-network/sdk/chains` | `cheesecake`, `localhost` |
+| `@arkiv-network/sdk/query` | Query operators, `SelectQueryBuilder`, `QueryResult` |
+| `@arkiv-network/sdk/attr` | Typed value helpers: `i32`, `u64`, `u256`, `dec`, `str`, `addr`, `key`, `bytes32`, `bool` |
+| `@arkiv-network/sdk/entity` | `Expiry`, `Lifetime` types |
+| `@arkiv-network/sdk/utils` | `ExpirationTime`, `jsonToPayload`, `stringToPayload` (also available from root) |
+| `@arkiv-network/sdk/types` | Shared type definitions |
 
-Verify the user's installed SDK version. Do not pin install commands unless the user explicitly asks for a specific version.
+There is no `@arkiv-network/sdk/accounts` export.
 
-### Imports (SDK 0.7.0+)
+### Imports
 
 ```typescript
-// Core client factories and typed errors
 import {
   createWalletClient,
   createPublicClient,
-  InvalidAttributeError,
-  InvalidExpirationError,
+  ExpirationTime,
+  jsonToPayload,
+  stringToPayload,
+  InvalidValueError,
+  InvalidExpiryError,
+  EmptyPatchError,
+  ConflictingMutationError,
+  NoEntityFoundError,
 } from "@arkiv-network/sdk"
 
-// Transports and account management come from viem
+import { i32, u64, dec, str, addr } from "@arkiv-network/sdk/attr"
+import { cheesecake } from "@arkiv-network/sdk/chains"
+import { eq, gt, lt, gte, lte, and, or, not, startsWith } from "@arkiv-network/sdk/query"
 import { http, custom } from "viem"
 import { privateKeyToAccount, nonceManager } from "viem/accounts"
-
-// Chain configuration
-import { braga } from "@arkiv-network/sdk/chains"
-
-// Utilities
-import { ExpirationTime, jsonToPayload, stringToPayload, payloadToString } from "@arkiv-network/sdk/utils"
-
-// Query operators and predicates
-import { eq, gt, lt, gte, lte, and, or } from "@arkiv-network/sdk/query"
 ```
 
 ### WalletClient Methods (Write Operations)
 
+All methods accept an optional second argument `txParams?: TxParams` for gas/nonce overrides.
+
 #### createEntity
 
 ```typescript
-const { entityKey, txHash } = await walletClient.createEntity({
-  payload: jsonToPayload({ message: 'Hello' }),
-  contentType: 'application/json',
-  attributes: [
-    { key: 'type', value: 'greeting' },
-    { key: 'priority', value: 5 }
-  ],
-  expiresIn: ExpirationTime.fromHours(12),
+const { entityKey, txHash, expiresAt } = await walletClient.createEntity({
+  payload: jsonToPayload({ message: "Hello" }),
+  contentType: "application/json",
+  attributes: {
+    type: "greeting",
+    priority: i32(5),
+    score: dec("4.5"),
+  },
+  expires: ExpirationTime.fromHours(12),
 })
 ```
 
-#### updateEntity
+Returns: `{ entityKey: Hex, txHash: Hash, expiresAt: bigint }`
 
-**Full replace, not a patch.** The attribute set becomes exactly the provided list; payload, content type, and expiration are overwritten. Omitted attributes are silently removed. To change only some fields, read the entity first (`getEntity`) and re-send the complete state.
+#### patchEntity
+
+**Partial update** — only fields named in `set`/`unset`/`payload`/`contentType` are touched. Entity key, owner, creation flags, and expiry never change via patch (use `extendEntity` / `changeOwnership` for those).
 
 ```typescript
-const { txHash } = await walletClient.updateEntity({
-  entityKey: entityKey,
-  payload: jsonToPayload({ message: 'Updated' }),
-  contentType: 'application/json',
-  attributes: [
-    { key: 'type', value: 'greeting' },
-    { key: 'updated', value: Date.now() }
-  ],
-  expiresIn: ExpirationTime.fromHours(24),
+const { txHash } = await walletClient.patchEntity({
+  entityKey,
+  set: { status: "published", revision: i32(2) },
+  unset: ["draft"],
+  payload: jsonToPayload({ title: "Hello" }),
 })
 ```
+
+Throws `EmptyPatchError` if nothing is passed. Throws `ConflictingMutationError` if a name appears in both `set` and `unset`.
+
+Returns: `{ entityKey: Hex, txHash: Hash }`
 
 #### deleteEntity
 
 ```typescript
-const { txHash } = await walletClient.deleteEntity({
-  entityKey: entityKey
-})
+const { txHash } = await walletClient.deleteEntity({ entityKey })
 ```
+
+Returns: `{ entityKey: Hex, txHash: Hash }`
 
 #### extendEntity
 
 ```typescript
-const { txHash } = await walletClient.extendEntity({
-  entityKey: entityKey,
-  expiresIn: ExpirationTime.fromHours(1), // always use the helper for readability
+const { txHash, expiresAt } = await walletClient.extendEntity({
+  entityKey,
+  expires: ExpirationTime.fromHours(1),
 })
 ```
 
-#### mutateEntities (Batch Operations)
+Returns: `{ entityKey: Hex, txHash: Hash, expiresAt: bigint }`
 
-Performs any number of operations in a **single transaction**. Accepts `creates`, `updates`, `deletes`, `extensions`, and `ownershipChanges` — they can be mixed in one call:
+#### changeOwnership
 
 ```typescript
-await walletClient.mutateEntities({
-  creates: [
-    {
-      payload: stringToPayload('item 1'),
-      contentType: 'text/plain',
-      attributes: [{ key: 'type', value: 'item' }],
-      expiresIn: ExpirationTime.fromMinutes(30),
-    },
-  ],
-  extensions: [
-    { entityKey: '0x456...', expiresIn: ExpirationTime.fromHours(1) },
-  ],
-  deletes: [{ entityKey: '0x321...' }],
+const { txHash } = await walletClient.changeOwnership({
+  entityKey,
+  newOwner: "0xNewOwnerAddress",
 })
 ```
 
-### Validation Rules (SDK 0.7.0+)
+Returns: `{ entityKey: Hex, txHash: Hash }`
 
-The SDK validates mutations client-side and throws a descriptive typed error before anything hits the network:
+#### executeBatch
 
-- **Numeric attribute values must be integers.** A non-integer number throws `InvalidAttributeError`. To store a non-integer, scale it to a fixed precision (`1.5` → `1500`, dividing on read) to keep range queries working — or store it as a string, which only supports equality.
-- **`expiresIn` must be a positive integer and a multiple of 2 seconds.** Arkiv measures expiration in whole blocks (1 block = 2 seconds); invalid values throw `InvalidExpirationError`. The `ExpirationTime` helpers always produce valid values.
+Applies any combination of creates, patches, deletes, extensions, and ownership changes **atomically in one transaction**:
 
 ```typescript
-import { InvalidAttributeError, InvalidExpirationError } from "@arkiv-network/sdk"
+const result = await walletClient.executeBatch({
+  creates: [{
+    payload: stringToPayload("item 1"),
+    contentType: "text/plain",
+    attributes: { type: "item" },
+    expires: ExpirationTime.fromMinutes(30),
+  }],
+  patches: [{ entityKey, set: { status: "done" } }],
+  extensions: [{ entityKey: "0x456...", expires: ExpirationTime.fromHours(1) }],
+  deletes: [{ entityKey: "0x321..." }],
+  ownershipChanges: [{ entityKey: "0x789...", newOwner: "0xNew..." }],
+})
+```
+
+Returns: `{ txHash, createdEntities, patchedEntities, deletedEntities, extendedEntities, ownershipChanges }`
+
+### Typed Attributes
+
+Attributes are passed as an **object keyed by name**:
+
+```typescript
+attributes: {
+  category: "docs",           // bare string → str
+  level: i32(10),             // explicit i32
+  balance: u256(1_000_000n),  // explicit u256
+  price: dec("19.99"),        // genuine decimal
+  owner: addr("0xAbC..."),    // checksummed address
+  flagged: true,              // bare boolean → bool
+}
+```
+
+Bare-form defaults: `boolean` → `bool`, `number` → `i32`, `bigint` → `u256`, `string` → `str`.
+
+**Validation rules:**
+
+- Attribute names: 1–32 bytes, start with a letter, chars `[A-Za-z0-9._-]`, no `$` prefix, no `--`, not a reserved word
+- Max 32 attributes per operation
+- Max payload 128 KiB
+- `str` max 128 UTF-8 bytes
+- A bare float like `19.99` throws `InvalidValueError` — use `dec("19.99")`
+
+Reading attributes: `entity.attributes` is an object keyed by name, each value is `{ type, value }`:
+
+```typescript
+entity.attributes.priority?.value  // the raw value
+entity.attributes.priority?.type   // "i32"
+```
+
+### ExpirationTime Helpers
+
+Expiration uses the `expires: Expiry` parameter (not `expiresIn`):
+
+```typescript
+// Relative lifetimes
+ExpirationTime.fromSeconds(30)
+ExpirationTime.fromMinutes(30)
+ExpirationTime.fromHours(1)
+ExpirationTime.fromHours(12)
+ExpirationTime.fromHours(24)
+ExpirationTime.fromDays(7)
+ExpirationTime.fromWeeks(2)
+ExpirationTime.fromMonths(3)
+ExpirationTime.fromYears(1)
+ExpirationTime.fromBlocks(100)
+
+// Absolute deadlines
+ExpirationTime.atBlock(1_200_000n)
+ExpirationTime.atDate(new Date("2027-01-01"))
+ExpirationTime.permanent()
+```
+
+### Validation Rules
+
+The SDK validates mutations client-side and throws typed errors before anything hits the network:
+
+```typescript
+import {
+  InvalidValueError,
+  InvalidExpiryError,
+  InvalidAttributeNameError,
+  EmptyPatchError,
+  ConflictingMutationError,
+} from "@arkiv-network/sdk"
 
 try {
   await walletClient.createEntity({ /* ... */ })
 } catch (error) {
-  if (error instanceof InvalidAttributeError) {
-    // a numeric attribute value was not an integer
-  } else if (error instanceof InvalidExpirationError) {
-    // expiresIn was not a positive multiple of the 2s block time
+  if (error instanceof InvalidValueError) {
+    // a value did not match its declared type
+  } else if (error instanceof InvalidExpiryError) {
+    // invalid expiry configuration
+  } else if (error instanceof InvalidAttributeNameError) {
+    // attribute name violates grammar rules
   } else {
     throw error
   }
@@ -146,7 +230,7 @@ try {
 All transactions from one wallet must use strictly sequential nonces, and the SDK does not manage nonces — each write fetches the next nonce from the network at send time. Two writes in flight simultaneously fetch the **same** nonce and collide.
 
 ```typescript
-// ❌ Both writes fetch the same nonce — one fails or gets replaced
+// Both writes fetch the same nonce — one fails or gets replaced
 await Promise.all([
   walletClient.createEntity({ /* ... */ }),
   walletClient.createEntity({ /* ... */ }),
@@ -155,25 +239,17 @@ await Promise.all([
 
 Two safe options:
 
-1. **Batch into a single transaction (preferred):** `mutateEntities()` — one transaction, one nonce.
+1. **Batch into a single transaction (preferred):** `executeBatch()` — one transaction, one nonce.
 2. **viem's nonce manager** when separate transactions are unavoidable:
 
 ```typescript
-import { privateKeyToAccount, nonceManager } from "viem/accounts"
-
 const walletClient = createWalletClient({
-  chain: braga,
-  transport: http(),
+  chain: cheesecake,
+  transport: http(process.env.CHEESECAKE_RPC_URL),
   account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`, {
     nonceManager,
   }),
 })
-
-// ✅ Safe — nonces are allocated locally and sequentially
-await Promise.all([
-  walletClient.createEntity({ /* ... */ }),
-  walletClient.createEntity({ /* ... */ }),
-])
 ```
 
 A nonce manager only coordinates writes **within a single process**. Multiple processes writing with the same private key still collide — give each writer its own wallet, or route all writes through one process.
@@ -187,21 +263,16 @@ A nonce manager only coordinates writes **within a single process**. Multiple pr
 ```typescript
 const result = await publicClient
   .select({ key: true, payload: true, attributes: true })
-  .where(eq('type', 'note'), gt('created', 1672531200))
+  .where(eq("type", "note"), gt("created", i32(Date.now() - 86400000)))
   .limit(10)
   .fetch()
 ```
 
-Available fields: `key`, `owner`, `creator`, `contentType`, `payload`, `attributes`, `expiresAtBlock`, `createdAtBlock`, `lastModifiedAtBlock`, `transactionIndexInBlock`, `operationIndexInTransaction`.
+Available fields: `key`, `owner`, `creator`, `createdAt`, `updatedAt`, `expiresAt`, `creationFlags`, `contentType`, `payload`, `attributeSchema`, `attributes`.
 
 - `select()` with no argument (or `"*"`) fetches every field — fine for prototyping, wasteful in production.
 - The result type is inferred from the selection: `entity.toJson()` / `entity.toText()` exist only when `payload` is selected; accessing an unselected field is a compile error.
-- Pass the selection **inline**. A selection stored in a variable widens `true` to `boolean` and the result type can't be narrowed. To reuse one, annotate it `as const`:
-
-```typescript
-const fields = { owner: true, payload: true } as const
-await publicClient.select(fields).where(eq('type', 'note')).fetch()
-```
+- Pass the selection **inline**. A selection stored in a variable widens `true` to `boolean` and the result type can't be narrowed. To reuse one, annotate it `as const`.
 
 Query builder methods:
 
@@ -209,13 +280,22 @@ Query builder methods:
 - `.ownedBy(address)` — Filter by current owner address (can change over time)
 - `.createdBy(address)` — Filter by original creator address (immutable)
 - `.limit(n)` — Limit number of results (max 200 per page)
+- `.cursor(cursor)` — Resume from a previous page's cursor
+- `.atBlock(block)` — Query at a specific block
 - `.fetch()` — Execute the query
+- `[Symbol.asyncIterator]` — Async generator over all pages
 
-On SDK `0.6.x`, use `buildQuery()` with `.withPayload(true)` / `.withAttributes(true)` / `.withMetadata(true)` instead of `select()`.
+Pagination:
+
+```typescript
+if (result.hasNextPage()) {
+  const nextPage = await result.next()
+}
+```
 
 #### Ordering
 
-Results always come back **newest first**; server-side ordering is not supported. `orderBy()` and the `asc()` / `desc()` helpers are deprecated no-ops since 0.7.0 — sort the fetched entities in JavaScript instead. Note that `.limit(n)` caps results *before* a client-side sort (it returns the n newest matches, not the top n by your attribute).
+Results always come back **newest first**; server-side ordering is not supported. `orderBy()`, `asc()`, and `desc()` were removed in 0.8 — sort the fetched entities in JavaScript instead. Note that `.limit(n)` caps results *before* a client-side sort (it returns the n newest matches, not the top n by your attribute).
 
 #### getEntity
 
@@ -225,86 +305,106 @@ const data = entity.toJson()   // Parse JSON payload
 const text = entity.toText()   // Get text payload
 ```
 
-### ExpirationTime Helpers
-
-Expiration is expressed in **seconds**. Always use these helpers to convert human-readable durations:
-
-```typescript
-ExpirationTime.fromMinutes(30)  // 1800 seconds
-ExpirationTime.fromHours(1)     // 3600 seconds
-ExpirationTime.fromHours(12)    // 43200 seconds
-ExpirationTime.fromHours(24)    // 86400 seconds
-ExpirationTime.fromDays(7)      // 604800 seconds
-```
-
-**Always prefer the helpers over raw numbers for `expiresIn`** — they're more readable, less error-prone, and guaranteed to satisfy the positive-multiple-of-2 validation rule. If a raw number is passed, it is treated as seconds (e.g., `expiresIn: 3600` means 1 hour) and must be a positive multiple of 2.
+Throws `NoEntityFoundError` if the entity does not exist or has expired.
 
 ### Payload Helpers
 
 ```typescript
-import { jsonToPayload, stringToPayload, payloadToString } from "@arkiv-network/sdk/utils"
+import { jsonToPayload, stringToPayload } from "@arkiv-network/sdk"
 
-// JSON data
 const jsonPayload = jsonToPayload({ key: "value" })
-
-// Plain text
 const textPayload = stringToPayload("Hello Arkiv!")
 
-// Reading back
-const text = payloadToString(entity.payload)
-const data = JSON.parse(payloadToString(entity.payload))
-// or use entity helper (requires payload to be selected)
+// Reading back (requires payload to be selected in the query)
+const text = entity.toText()
 const data = entity.toJson()
 ```
+
+`payloadToString` was removed in 0.8 — use `entity.toText()` / `entity.toJson()` instead.
 
 ### Query Operators
 
 ```typescript
-import { eq, gt, lt, gte, lte, and, or } from "@arkiv-network/sdk/query"
+import { eq, gt, lt, gte, lte, and, or, not, startsWith } from "@arkiv-network/sdk/query"
 
-eq('type', 'note')        // type = "note"
-gt('priority', 3)          // priority > 3
-lt('price', 1000)          // price < 1000
-gte('created', timestamp)  // created >= timestamp
-lte('expiration', limit)   // expiration <= limit
+eq("type", "note")              // type = str('note')
+gt("priority", i32(3))          // priority > i32(3)
+lt("price", i32(1000))          // price < i32(1000)
+gte("created", i32(timestamp))  // created >= i32(timestamp)
+lte("expiresAt", u64(limit))    // expiresAt <= u64(limit)
+startsWith("name", "test")      // name STARTSWITH str('test')
+not(eq("status", "deleted"))    // NOT status = str('deleted')
 ```
 
-String attributes only support `eq()`. Numeric attributes support all comparison operators (and values must be integers).
+String attributes only support `eq()` and `startsWith()`. Numeric attributes support all comparison operators.
 
-Nest conditions with `and()` / `or()` — both accept predicates as varargs or a single array:
+**Caution:** `ne()`, `exists()`, and `hasType()` are exported by the SDK but **not implemented on the node** — queries using them fail to parse. Use `not(eq(...))` as the not-equal workaround. It matches the full complement, including entities that never set the attribute.
+
+Nest conditions with `and()` / `or()`:
 
 ```typescript
-// type = "note" AND (priority > 3 OR pinned = "true")
 await publicClient
   .select({ key: true, payload: true })
-  .where(eq('type', 'note'), or(gt('priority', 3), eq('pinned', 'true')))
+  .where(eq("type", "note"), or(gt("priority", i32(3)), eq("pinned", "true")))
   .fetch()
-
-// Array form works too: or([gt('priority', 3), eq('pinned', 'true')])
 ```
 
-Glob matching on string attributes (`~`) exists at the protocol level but is not yet exposed in the TypeScript SDK — use the JSON-RPC API directly if you need it (see `api-reference.md`).
+For prefix matching on string attributes, use `startsWith()` or the raw JSON-RPC API (see `api-reference.md`).
+
+### watchEntityEvents
+
+Live event subscription. Returns an unwatch function directly — **do not await it**:
+
+```typescript
+const unwatch = publicClient.watchEntityEvents({
+  onEntityCreated: (event) => {
+    // { type: "EntityCreated", entityKey, owner, expiresAt, creationFlags, blockNumber, transactionHash, logIndex }
+  },
+  onEntityPatched: (event) => {
+    // { type: "EntityPatched", entityKey, owner, blockNumber, transactionHash, logIndex }
+  },
+  onExpiryExtended: (event) => {
+    // { type: "ExpiryExtended", entityKey, owner, expiresAt, blockNumber, transactionHash, logIndex }
+  },
+  onOwnershipTransferred: (event) => {
+    // { type: "OwnershipTransferred", entityKey, previousOwner, newOwner, blockNumber, transactionHash, logIndex }
+  },
+  onEntityDeleted: (event) => {
+    // { type: "EntityDeleted", entityKey, owner, blockNumber, transactionHash, logIndex }
+  },
+  onEvent: (event) => {
+    // Catch-all — runs before per-type handlers
+  },
+  onError: (error) => console.error(error),
+  fromBlock: 1_000_000n,
+  pollingInterval: 1000,
+})
+
+// Later: stop watching
+unwatch()
+```
+
+**Important:** `onEntityExpired` no longer exists — expiration fires no event. Poll with `getEntity()` and handle `NoEntityFoundError`, or query for entities approaching expiry via `$expiresAt`.
+
+Every event carries `{ blockNumber, transactionHash, logIndex }`. The old `cost`/`oldExpirationBlock`/`newExpirationBlock` fields are gone.
 
 ### Browser Usage with MetaMask
 
 ```typescript
 import { createWalletClient, createPublicClient } from "@arkiv-network/sdk"
-import { braga } from "@arkiv-network/sdk/chains"
+import { cheesecake } from "@arkiv-network/sdk/chains"
 import { custom, http } from "viem"
 
-// Request wallet connection
-await window.ethereum.request({ method: 'eth_requestAccounts' })
+await window.ethereum.request({ method: "eth_requestAccounts" })
 
-// Use MetaMask as transport (no private key needed)
 const walletClient = createWalletClient({
-  chain: braga,
+  chain: cheesecake,
   transport: custom(window.ethereum),
 })
 
-// Public client for queries
 const publicClient = createPublicClient({
-  chain: braga,
-  transport: http(),
+  chain: cheesecake,
+  transport: http(process.env.CHEESECAKE_RPC_URL),
 })
 ```
 
@@ -312,26 +412,26 @@ const publicClient = createPublicClient({
 
 ```typescript
 await window.ethereum.request({
-  method: 'wallet_addEthereumChain',
+  method: "wallet_addEthereumChain",
   params: [{
-    chainId: '0xe0087f86e',
-    chainName: 'Arkiv Braga Testnet',
-    nativeCurrency: { name: 'GLM', symbol: 'GLM', decimals: 18 },
-    rpcUrls: ['https://braga.hoodi.arkiv.network/rpc'],
-    blockExplorerUrls: ['https://explorer.braga.hoodi.arkiv.network']
-  }]
+    chainId: "0x75ff6e",
+    chainName: "Arkiv Cheesecake Testnet",
+    nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
+    rpcUrls: ["https://rpc.cheesecake.db-chain.devnet.gobas.me"],
+    blockExplorerUrls: ["https://indexer.cheesecake.db-chain.devnet.gobas.me"],
+  }],
 })
 ```
 
 ### Browser CDN Imports
 
-For static HTML/JS pages without a bundler (note that `http` comes from viem's CDN build):
+For static HTML/JS pages without a bundler:
 
 ```javascript
-import { createPublicClient } from 'https://esm.sh/@arkiv-network/sdk?target=es2022&bundle-deps'
-import { eq } from 'https://esm.sh/@arkiv-network/sdk/query?target=es2022&bundle-deps'
-import { braga } from 'https://esm.sh/@arkiv-network/sdk/chains?target=es2022&bundle-deps'
+import { createPublicClient } from 'https://esm.sh/@arkiv-network/sdk@0.8.0-dev.3?target=es2022&bundle-deps'
+import { eq } from 'https://esm.sh/@arkiv-network/sdk/query@0.8.0-dev.3?target=es2022&bundle-deps'
+import { cheesecake } from 'https://esm.sh/@arkiv-network/sdk/chains@0.8.0-dev.3?target=es2022&bundle-deps'
 import { http } from 'https://esm.sh/viem?target=es2022'
 ```
 
-If the user is working with a versioned CDN URL instead of the unpinned form above, make sure the selected SDK version supports what the code uses: `0.6.5+` for the `braga` import, `0.7.0+` for `select()` and viem-based imports.
+Pin the version in CDN URLs — the `cheesecake` chain export and `select()` require 0.8.0-dev.3+.

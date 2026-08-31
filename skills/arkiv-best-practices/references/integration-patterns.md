@@ -1,14 +1,17 @@
 # Arkiv Integration Patterns
 
-The three most common integration scenarios for Arkiv applications.
-
-All examples in this file assume `@arkiv-network/sdk` version `0.7.0` or higher, where viem is a peer dependency (`npm install @arkiv-network/sdk viem`) and `http`/`custom`/`privateKeyToAccount` import from `viem` / `viem/accounts`. Check the user's installed SDK version first: on `0.6.x` those helpers import from the SDK itself and queries use `buildQuery()` instead of `select()`; below `0.6.5` the `braga` chain export does not exist. Only recommend an upgrade if the project is below the minimum it actually needs.
+The three most common integration scenarios for Arkiv applications. All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Cheesecake devnet.
 
 ## Table of Contents
 
-1. [Backend Read/Write](#backend-readwrite)
-2. [Client-Side Reading (React Hook)](#client-side-reading)
-3. [Client-Side Writing (Wallet Integration)](#client-side-writing)
+- [Arkiv Integration Patterns](#arkiv-integration-patterns)
+  - [Table of Contents](#table-of-contents)
+  - [Backend Read/Write](#backend-readwrite)
+  - [Client-Side Reading](#client-side-reading)
+  - [Client-Side Writing](#client-side-writing)
+    - [Option A: Manual MetaMask integration](#option-a-manual-metamask-integration)
+    - [Option B: Wagmi / RainbowKit integration (recommended for dApps)](#option-b-wagmi--rainbowkit-integration-recommended-for-dapps)
+  - [Live Events with TanStack Query](#live-events-with-tanstack-query)
 
 ---
 
@@ -18,37 +21,40 @@ For server-side applications (Next.js API routes, Express, any Node.js backend).
 
 ```typescript
 // lib/arkiv-server.ts
-import { createWalletClient, createPublicClient } from "@arkiv-network/sdk"
-import { braga } from "@arkiv-network/sdk/chains"
-import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk/utils"
+import { createWalletClient, createPublicClient, ExpirationTime, jsonToPayload } from "@arkiv-network/sdk"
+import { cheesecake } from "@arkiv-network/sdk/chains"
 import { eq } from "@arkiv-network/sdk/query"
 import { http } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
-import { PROJECT_ATTRIBUTE } from "./arkiv" // your project attribute
+import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "./arkiv"
 
-// Initialize clients ONCE at module level
+// Include your API key in the URL: https://rpc.cheesecake.db-chain.devnet.gobas.me/<api-key>
+// Obtained from the Arkiv Hub: https://hub.arkiv.network
+const rpcUrl = process.env.CHEESECAKE_RPC_URL
+
+
 const walletClient = createWalletClient({
-  chain: braga,
-  transport: http(),
+  chain: cheesecake,
+  transport: http(rpcUrl),
   account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
-})
+});
 
 const publicClient = createPublicClient({
-  chain: braga,
-  transport: http(),
-})
+  chain: cheesecake,
+  transport: http(rpcUrl),
+});
 
 // Write example
 export async function createPost(title: string, content: string) {
   const { entityKey, txHash } = await walletClient.createEntity({
     payload: jsonToPayload({ title, content }),
     contentType: "application/json",
-    attributes: [
-      PROJECT_ATTRIBUTE,
-      { key: "entityType", value: "post" },
-      { key: "created", value: Date.now() },
-    ],
-    expiresIn: ExpirationTime.fromDays(30),
+    attributes: {
+      [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
+      entityType: "post",
+      created: Date.now(),
+    },
+    expires: ExpirationTime.fromDays(30),
   })
   return { entityKey, txHash }
 }
@@ -58,12 +64,20 @@ export async function getPosts() {
   const result = await publicClient
     .select({ key: true, payload: true })
     .where(
-      eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
+      eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
       eq("entityType", "post"),
     )
     .limit(50)
     .fetch()
   return result
+}
+
+export async function updatePostStatus(entityKey: `0x${string}`, status: string) {
+  const { txHash } = await walletClient.patchEntity({
+    entityKey,
+    set: { status },
+  })
+  return { txHash }
 }
 ```
 
@@ -114,37 +128,33 @@ app.listen(3000)
 
 For frontend applications that only need to query data. Uses a public client — no private key, safe to run in the browser.
 
-First, define the fetcher functions separately from hooks — these are reusable and testable:
-
 ```typescript
 // lib/arkiv-queries.ts
 import { createPublicClient } from "@arkiv-network/sdk"
-import { braga } from "@arkiv-network/sdk/chains"
+import { cheesecake } from "@arkiv-network/sdk/chains"
 import { eq } from "@arkiv-network/sdk/query"
 import { http } from "viem"
-import { PROJECT_ATTRIBUTE } from "@/lib/arkiv"
+import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "@/lib/arkiv"
 
-// Single public client instance — reuse across all queries
 export const publicClient = createPublicClient({
-  chain: braga,
-  transport: http(),
+  chain: cheesecake,
+  transport: http(process.env.NEXT_PUBLIC_CHEESECAKE_RPC_URL),
 })
 
 export async function fetchEntitiesByType<T>(entityType: string): Promise<(T & { arkivEntityKey: string })[]> {
   const result = await publicClient
     .select({ key: true, payload: true })
     .where(
-      eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
+      eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
       eq("entityType", entityType),
     )
     .limit(50)
     .fetch()
 
-  // Combine entity key with payload — gives each item a stable unique identifier
   return result.entities
     .map((entity) => {
       try {
-        return { arkivEntityKey: entity.key, ...entity.toJson() }
+        return { arkivEntityKey: entity.key!, ...entity.toJson() }
       } catch {
         return null
       }
@@ -153,26 +163,18 @@ export async function fetchEntitiesByType<T>(entityType: string): Promise<(T & {
 }
 
 export async function fetchEntityByKey<T>(entityKey: string): Promise<T> {
-  const entity = await publicClient.getEntity(entityKey)
+  const entity = await publicClient.getEntity(entityKey as `0x${string}`)
   return entity.toJson()
 }
 ```
 
-Then wrap them in hooks. Use TanStack Query (`@tanstack/react-query`) for caching, deduplication, and background refetching. **If the project already has a data-fetching library (SWR, Apollo, etc.), use that instead.** If nothing is set up yet, suggest installing TanStack Query:
-
-```bash
-npm install @tanstack/react-query
-```
+Wrap them in hooks with TanStack Query (`@tanstack/react-query`):
 
 ```typescript
 // hooks/useArkivQuery.ts
 import { useQuery } from "@tanstack/react-query"
 import { fetchEntitiesByType, fetchEntityByKey } from "@/lib/arkiv-queries"
 
-/**
- * Fetch a list of entities by type.
- * Uses TanStack Query for caching and automatic refetching.
- */
 export function useArkivQuery<T>(entityType: string) {
   return useQuery<T[]>({
     queryKey: ["arkiv", "entities", entityType],
@@ -180,10 +182,6 @@ export function useArkivQuery<T>(entityType: string) {
   })
 }
 
-/**
- * Fetch a single entity by key.
- * Only runs when entityKey is truthy.
- */
 export function useArkivEntity<T>(entityKey: string | null) {
   return useQuery<T>({
     queryKey: ["arkiv", "entity", entityKey],
@@ -231,8 +229,6 @@ For dApps where the user's own wallet signs transactions. Two approaches dependi
 
 ### Option A: Manual MetaMask integration
 
-Use this if you're not using wagmi or a wallet framework. You need to handle network switching yourself.
-
 **Adding the Arkiv network to MetaMask:**
 
 ```typescript
@@ -240,11 +236,11 @@ async function addArkivNetwork() {
   await window.ethereum.request({
     method: "wallet_addEthereumChain",
     params: [{
-      chainId: "0xe0087f86e",
-      chainName: "Arkiv Braga Testnet",
+      chainId: "0x75ff6e",
+      chainName: "Arkiv Cheesecake Testnet",
       nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
-      rpcUrls: ["https://braga.hoodi.arkiv.network/rpc"],
-      blockExplorerUrls: ["https://explorer.braga.hoodi.arkiv.network"],
+      rpcUrls: ["https://rpc.cheesecake.db-chain.devnet.gobas.me"],
+      blockExplorerUrls: ["https://indexer.cheesecake.db-chain.devnet.gobas.me"],
     }],
   })
 }
@@ -254,39 +250,32 @@ async function addArkivNetwork() {
 
 ```typescript
 import { createWalletClient } from "@arkiv-network/sdk"
-import { braga } from "@arkiv-network/sdk/chains"
+import { cheesecake } from "@arkiv-network/sdk/chains"
 import { custom } from "viem"
 
 await addArkivNetwork()
-const [address] = await window.ethereum.request({ method: "eth_requestAccounts" })
+await window.ethereum.request({ method: "eth_requestAccounts" })
 
 const walletClient = createWalletClient({
-  chain: braga,
+  chain: cheesecake,
   transport: custom(window.ethereum),
 })
 ```
 
 ### Option B: Wagmi / RainbowKit integration (recommended for dApps)
 
-If your project already uses wagmi (or a wagmi-powered framework like RainbowKit, ConnectKit, etc.), you can derive an Arkiv wallet client directly from the wagmi wallet client. This avoids duplicate wallet connection logic.
-
 ```tsx
-import { useAccount, useWalletClient } from "wagmi";
-import { createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk";
-import { braga } from "@arkiv-network/sdk/chains";
-import { custom } from "viem";
+import { useAccount, useWalletClient } from "wagmi"
+import { createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk"
+import { cheesecake } from "@arkiv-network/sdk/chains"
+import { custom } from "viem"
 
-// Inside your component:
-const { address } = useAccount();
-const { data: wagmiWalletClient } = useWalletClient();
-
-if (!wagmiWalletClient) {
-  // throw or return loading UI
-}
+const { address } = useAccount()
+const { data: wagmiWalletClient } = useWalletClient()
 
 const arkivWalletClient = createArkivWalletClient({
-  chain: braga,
-  transport: custom(wagmiWalletClient.transport),
+  chain: cheesecake,
+  transport: custom(wagmiWalletClient!.transport),
   account: address,
 });
 ```
@@ -294,17 +283,64 @@ const arkivWalletClient = createArkivWalletClient({
 Then use `arkivWalletClient` the same way as any other wallet client:
 
 ```typescript
-import { jsonToPayload, ExpirationTime } from "@arkiv-network/sdk/utils"
-import { PROJECT_ATTRIBUTE } from "@/lib/arkiv"
+import { jsonToPayload, ExpirationTime } from "@arkiv-network/sdk"
+import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "@/lib/arkiv"
 
 const { entityKey, txHash } = await arkivWalletClient.createEntity({
   payload: jsonToPayload({ title: "My Post", content: "Hello!" }),
   contentType: "application/json",
-  attributes: [
-    PROJECT_ATTRIBUTE,
-    { key: "entityType", value: "post" },
-    { key: "author", value: address },
-  ],
-  expiresIn: ExpirationTime.fromDays(30),
+  attributes: {
+    [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
+    entityType: "post",
+    author: address,
+  },
+  expires: ExpirationTime.fromDays(30),
 })
 ```
+
+---
+
+## Live Events with TanStack Query
+
+Use `watchEntityEvents` to invalidate TanStack Query caches when entities change on-chain. Do not await the return value — it is the unwatch function:
+
+```typescript
+// lib/arkiv-events.ts
+import { useEffect } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { publicClient } from "@/lib/arkiv-queries"
+import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "@/lib/arkiv"
+
+export function useArkivEventWatcher(entityType: string) {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const unwatch = publicClient.watchEntityEvents({
+      onEntityCreated: () => {
+        queryClient.invalidateQueries({ queryKey: ["arkiv", "entities", entityType] })
+      },
+      onEntityPatched: () => {
+        queryClient.invalidateQueries({ queryKey: ["arkiv", "entities", entityType] })
+      },
+      onEntityDeleted: () => {
+        queryClient.invalidateQueries({ queryKey: ["arkiv", "entities", entityType] })
+      },
+      onError: (error) => console.error("Arkiv event error:", error),
+    })
+
+    return unwatch
+  }, [queryClient, entityType])
+}
+```
+
+Mount the hook alongside your query hook:
+
+```tsx
+function PostList() {
+  useArkivEventWatcher("post")
+  const { data: posts, isLoading } = useArkivQuery<Post>("post")
+  // ...
+}
+```
+
+**Note:** Expiration fires no event in 0.8. To detect expired entities, poll with `getEntity()` and handle `NoEntityFoundError`, or query by `$expiresAt`.
