@@ -1,111 +1,123 @@
-# Kaolin to Braga Migration Guide
+# Braga to Cheesecake Migration Guide
 
-Use this guide when the user already has an Arkiv project that targets Kaolin and needs to move it to Braga.
+Use this guide when the user already has an Arkiv project that targets Braga and needs to move it to Cheesecake, including upgrading from SDK 0.7.x to 0.8.0-dev.3.
 
-## What Changes
+## What Changed
 
-- The SDK API stays the same.
-- The `braga` chain export requires `@arkiv-network/sdk` version `0.6.5` or higher.
-- The chain target changes from `kaolin` to `braga`.
-- The active RPC, WebSocket, faucet, explorer, and chain ID all change.
-- Braga uses `GLM` as the native gas token instead of test ETH.
-- Testnet state does not migrate: entities written to Kaolin stay on Kaolin.
+- Braga was **retired on 12 August 2026**. Its endpoints no longer respond.
+- The chain target changes from `braga` to `cheesecake`.
+- The SDK has a **breaking API change** from 0.7.x to 0.8.0-dev.3 — not just a version bump.
+- Braga entity state does **not** migrate: entities written to Braga stay on Braga.
 
-## Sunset Window
+## Network Values
 
-- Kaolin and Braga can run in parallel until `15 May 2026`.
-- After that date, Kaolin endpoints stop responding.
+| Property | Cheesecake value |
+| -------- | ---------------- |
+| Chain ID | `7733102` / `0x75ff6e` |
+| HTTP RPC | `https://rpc.cheesecake.db-chain.devnet.gobas.me` |
+| WebSocket RPC | `wss://rpc.cheesecake.db-chain.devnet.gobas.me` |
+| Block explorer | `https://indexer.cheesecake.db-chain.devnet.gobas.me` |
+| Faucet | `https://hub.arkiv.network/faucet` (0.1 GLM, 24h cooldown, wallet + SIWE required) |
+| API keys | `https://hub.arkiv.network/api-keys` (elevated RPC rate limits) |
+| Native gas token | `GLM` |
+| Bridge address | **Not published** — ask on [Discord](https://discord.gg/arkiv) |
 
 ## Migration Checklist
 
-### 1. Update SDK chain imports
+### 1. Update SDK version
 
-Before changing imports, verify that the project is already on `@arkiv-network/sdk` `0.6.5` or newer. Do not pin a replacement install command by default; tell the user to check the current SDK version and upgrade only if the project is below the minimum needed for `braga`.
+Install the dev release — npm `latest` is still 0.7.0:
+
+```bash
+npm install @arkiv-network/sdk@dev viem
+# or
+bun add @arkiv-network/sdk@dev viem
+```
+
+Verify the installed version is `0.8.0-dev.3` or newer.
+
+### 2. Update chain imports
 
 ```diff
-- import { kaolin } from "@arkiv-network/sdk/chains";
-+ import { braga } from "@arkiv-network/sdk/chains";
+- import { braga } from "@arkiv-network/sdk/chains";
++ import { cheesecake } from "@arkiv-network/sdk/chains";
 
   const client = createWalletClient({
--   chain: kaolin,
-+   chain: braga,
-    transport: http(),
+-   chain: braga,
++   chain: cheesecake,
+    transport: http(process.env.CHEESECAKE_RPC_URL),
     account,
   });
 ```
 
-Apply the same swap for `createWalletClient`, `createPublicClient`, wagmi-derived Arkiv clients, and any custom chain constants that still point to Kaolin.
+Apply the same swap for `createWalletClient`, `createPublicClient`, wagmi-derived Arkiv clients, and any custom chain constants.
 
-If the SDK upgrade lands on `0.7.0` or newer, additional breaking changes apply beyond the chain swap: viem becomes a peer dependency (`npm install @arkiv-network/sdk viem`), `http`/`custom`/`privateKeyToAccount` move to `viem` / `viem/accounts`, queries migrate from `buildQuery()` to `select()`, and `orderBy`/`asc`/`desc` become deprecated no-ops. Follow the "Upgrading to SDK 0.7.0" checklist in SKILL.md alongside this guide.
-
-### 2. Replace network constants and wallet settings
-
-Use these Braga values everywhere the project configures the network:
-
-| Property | Braga value |
-| -------- | ----------- |
-| Chain ID | `60138453102` / `0xe0087f86e` |
-| HTTP RPC | `https://braga.hoodi.arkiv.network/rpc` |
-| WebSocket RPC | `wss://braga.hoodi.arkiv.network/rpc/ws` |
-| Explorer | `https://explorer.braga.hoodi.arkiv.network` |
-| Faucet | `https://braga.hoodi.arkiv.network/faucet/` |
-| Native gas token | `GLM` |
-
-If the project adds the network to MetaMask or viem manually, update:
-
-- `chainId`
-- `chainName`
-- `rpcUrls`
-- `blockExplorers`
-- `nativeCurrency` so the symbol is `GLM`
+If the project adds the network to MetaMask or viem manually, update `chainId`, `chainName`, `rpcUrls`, `blockExplorers`, and `nativeCurrency` (symbol `GLM`).
 
 ### 3. Rename env vars and config keys
 
-Do not leave mixed Kaolin and Braga names in active codepaths. Rename env vars so the environment clearly reflects the current target network:
-
 ```diff
-- KAOLIN_RPC_URL=https://kaolin.hoodi.arkiv.network/rpc
-+ BRAGA_RPC_URL=https://braga.hoodi.arkiv.network/rpc
+- BRAGA_RPC_URL=https://braga.hoodi.arkiv.network/rpc
++ CHEESECAKE_RPC_URL=https://rpc.cheesecake.db-chain.devnet.gobas.me/<your-api-key>
++ CHEESECAKE_API_KEY=your-key-from-hub
 ```
 
-Check these places for stale Kaolin references:
+Register an API key at `https://hub.arkiv.network/api-keys` and pass it as a URL path segment, `X-API-KEY` header, or `Authorization: Bearer` header. Without a key, anonymous RPC access is rate-limited.
 
-- `.env*` files
-- deployment configs
-- Docker or container env wiring
-- shell scripts and seed scripts
-- README setup steps
-- frontend wallet config
+Check `.env*` files, deployment configs, Docker wiring, shell/seed scripts, README setup steps, and frontend wallet config for stale Braga references.
 
-### 4. Refresh funding and bridge configuration
+### 4. Apply SDK 0.7 → 0.8 API changes
 
-- Request fresh test `GLM` from the Braga faucet.
-- If the app bridges programmatically, update the Standard Bridge address to `0xB52b417A79c9dE21ffe221dF9a3821B7EaC60813`.
-- Funds already bridged into Kaolin stay there; withdraw them before the sunset if needed.
+These ship together — apply all of them:
 
-### 5. Re-create entities and seed data
+| 0.7.x (old) | 0.8.0-dev.3 (new) |
+| ----------- | ----------------- |
+| `import { … } from "@arkiv-network/sdk/utils"` | Import `ExpirationTime`, `jsonToPayload`, `stringToPayload` from `@arkiv-network/sdk` root |
+| `payloadToString(entity.payload)` | `entity.toText()` or `entity.toJson()` |
+| `attributes: [{ key: "type", value: "note" }]` | `attributes: { type: "note" }` |
+| `entity.attributes.find(a => a.key === "x")?.value` | `entity.attributes.x?.value` (object keyed by name) |
+| `expiresIn: ExpirationTime.fromHours(12)` | `expires: ExpirationTime.fromHours(12)` |
+| `walletClient.updateEntity({ entityKey, payload, contentType, attributes, expiresIn })` | `walletClient.patchEntity({ entityKey, set: { status: "done" }, unset: ["draft"] })` |
+| `walletClient.mutateEntities({ creates, updates, deletes, extensions })` | `walletClient.executeBatch({ creates, patches, deletes, extensions, ownershipChanges })` |
+| `subscribeEntityEvents(...)` (async, returns Promise) | `watchEntityEvents(...)` (sync, returns unwatch function — do not await) |
+| `InvalidAttributeError` | `InvalidValueError` |
+| `InvalidExpirationError` | `InvalidExpiryError` |
+| `orderBy()` / `asc()` / `desc()` (deprecated no-ops) | **Removed** — sort client-side |
+| `expiresAtBlock`, `createdAtBlock`, `lastModifiedAtBlock` | `expiresAt`, `createdAt`, `updatedAt` |
+| Bare float `19.99` as attribute value | `dec("19.99")` from `@arkiv-network/sdk/attr` |
 
-Kaolin entities do not migrate to Braga. If the app depends on seed data, startup entities, cached indexes, or demo content, run the seed/migration script against Braga before switching traffic.
+**New methods in 0.8:** `changeOwnership()`, `executeBatch()`.
 
-Pay special attention to:
+**New typed attribute helpers** from `@arkiv-network/sdk/attr`: `bool`, `i32`, `u64`, `u256`, `dec`, `decFromUnits`, `decUnits`, `str`, `addr`, `key`, `bytes32`.
 
-- entities loaded at app startup
-- admin-created demo data
-- test fixtures used by integration tests
-- dashboards that assume existing rows are already present
+**New expiry helpers:** `ExpirationTime.fromSeconds()`, `fromWeeks()`, `fromMonths()`, `fromYears()`, `fromBlocks()`, `atBlock()`, `atDate()`, `permanent()`.
 
-### 6. Verify both read and write paths
+**Event handler renames:** `onEntityUpdated` → `onEntityPatched`, `onEntityExpiresInExtended` → `onExpiryExtended`. New: `onOwnershipTransferred`, `onEvent`. `onEntityExpired` is **gone** — expiration fires no event; poll or handle `NoEntityFoundError` from `getEntity()`.
 
-After updating the network target:
+**Query operators:** `ne()`, `exists()`, and `hasType()` are exported by the SDK but **not implemented on the node** — queries using them fail to parse. Use `not(eq(...))` instead.
 
-- run one write flow end-to-end
-- verify queries return the newly written entity
-- confirm wallet prompts show Braga, not Kaolin
-- confirm gas is charged in `GLM`
+### 5. Refresh funding
+
+- Request fresh test GLM from the [Cheesecake faucet](https://hub.arkiv.network/faucet).
+- No bridge address is published for Cheesecake. Funds on Braga stay there.
+
+### 6. Re-create entities and seed data
+
+Braga entities do not migrate. If the app depends on seed data, startup entities, cached indexes, or demo content, run the seed/migration script against Cheesecake before switching traffic.
+
+### 7. Verify both read and write paths
+
+After updating:
+
+- Run one write flow end-to-end (`createEntity`)
+- Verify queries return the newly written entity
+- Confirm wallet prompts show Cheesecake, not Braga
+- Confirm gas is charged in `GLM`
+- Test a partial update with `patchEntity` (not a full replace)
 
 ## Migration Notes for Agents
 
-- Prefer narrow replacements: change active codepaths to Braga, then remove or isolate Kaolin-only compatibility code.
-- Keep Kaolin references only in migration docs, temporary fallback configs, or explicit legacy support blocks.
-- If the codebase uses direct viem or wagmi chain definitions instead of the Arkiv exported chain, update `id`, `rpcUrls`, `blockExplorers`, and `nativeCurrency` consistently.
-- If an app must run both networks during the overlap period, keep the network selection explicit and label data sources clearly to avoid mixing Kaolin and Braga entities.
+- Prefer narrow replacements: change active codepaths to Cheesecake, then remove Braga-only compatibility code.
+- Keep Braga references only in migration docs or explicit legacy support blocks.
+- If the codebase uses direct viem or wagmi chain definitions instead of the Arkiv exported chain, update `id`, `rpcUrls`, and `nativeCurrency` consistently.
+- Do not teach users to hand-build raw entity mutation transactions — the SDK handles encoding internally via the Arkiv precompile at `0x4400000000000000000000000000000000000044`.
