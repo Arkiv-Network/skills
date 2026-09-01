@@ -1,6 +1,6 @@
 ---
 name: arkiv-best-practices
-description: Best practices, patterns, and practical examples for building applications with Arkiv — a decentralized Ethereum database with queryable, time-scoped storage. Use this skill whenever the user is working with Arkiv SDK, the @arkiv-network/sdk package, Arkiv entities, Arkiv queries, the select() query API, Arkiv attributes, typed attributes, dec(), Expiry/expiration, the Cheesecake devnet, patchEntity, executeBatch, watchEntityEvents, changeOwnership, or building any application that stores, queries, or manages data on the Arkiv network. Also use when the user mentions decentralized data storage on Ethereum, blockchain database, Web3 data storage, on-chain data, entity CRUD operations with expiration, arkiv_query, migrating an Arkiv project from Braga to Cheesecake, or upgrading an Arkiv project to SDK 0.8.
+description: Best practices, patterns, and practical examples for building applications with Arkiv — a decentralized Ethereum database with queryable, time-scoped storage. Use this skill whenever the user is working with Arkiv SDK, the @arkiv-network/sdk package, Arkiv entities, Arkiv queries, the select() query API, Arkiv attributes, typed attributes, dec(), Expiry/expiration, the Tiramisu testnet, patchEntity, executeBatch, watchEntityEvents, changeOwnership, or building any application that stores, queries, or manages data on the Arkiv network. Also use when the user mentions decentralized data storage on Ethereum, blockchain database, Web3 data storage, on-chain data, entity CRUD operations with expiration, arkiv_query, migrating an Arkiv project from Braga to Tiramisu, or upgrading an Arkiv project to SDK 0.8.
 ---
 
 # Arkiv Best Practices & Practical Examples
@@ -15,7 +15,7 @@ Arkiv is **designed as three layers**:
 2. **Arkiv Coordination Layer** — Data management, registry, cross-chain sync.
 3. **Specialized DB-Chains** — High-performance CRUD via JSON-RPC, indexed queries, programmable expiration.
 
-Nothing in the current source repos confirms the coordination layer or mainnet settlement is live on Cheesecake — treat the devnet as the active layer for now.
+Nothing in the current source repos confirms the coordination layer or mainnet settlement is live on Tiramisu — treat the testnet as the active layer for now.
 
 ## Core Concepts
 
@@ -102,27 +102,27 @@ Two client types exist:
 
 ```typescript
 import { createWalletClient, createPublicClient } from "@arkiv-network/sdk"
-import { cheesecake } from "@arkiv-network/sdk/chains"
+import { tiramisu } from "@arkiv-network/sdk/chains"
 import { http } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
 
-const rpcUrl = process.env.CHEESECAKE_RPC_URL
+const rpcUrl = process.env.TIRAMISU_RPC_URL
 // Register an API key at https://hub.arkiv.network/api-keys
-// and include it in the URL: https://rpc.cheesecake.db-chain.devnet.gobas.me/<key>
+// and include it in the URL: https://rpc.tiramisu.db-chain.testnet.arkiv.network/<key>
 
 const walletClient = createWalletClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: http(rpcUrl),
   account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
 })
 
 const publicClient = createPublicClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: http(rpcUrl),
 })
 ```
 
-Cheesecake is the current Arkiv devnet. If you are upgrading from Braga, read `references/migration-guide.md` before editing code.
+Tiramisu is the current Arkiv testnet. If you are upgrading from Braga, read `references/migration-guide.md` before editing code.
 
 ## Wallet Actions
 
@@ -288,13 +288,13 @@ Without this, your queries will return data from other projects, and other proje
 
 ### 2. Register an RPC API Key
 
-Anonymous RPC access to Cheesecake is rate-limited. Register a project at `https://hub.arkiv.network/api-keys` for elevated rate limits (1,000,000 units/month). Pass the key as a URL path segment, `X-API-KEY` header, or `Authorization: Bearer` header:
+Anonymous RPC access to Tiramisu is rate-limited. Register a project at `https://hub.arkiv.network/api-keys` for elevated rate limits (1,000,000 units/month). Pass the key as a URL path segment, `X-API-KEY` header, or `Authorization: Bearer` header:
 
 ```typescript
-const rpcUrl = `https://rpc.cheesecake.db-chain.devnet.gobas.me/${process.env.CHEESECAKE_API_KEY}`
+const rpcUrl = `https://rpc.tiramisu.db-chain.testnet.arkiv.network/${process.env.TIRAMISU_API_KEY}`
 
 const publicClient = createPublicClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: http(rpcUrl),
 })
 ```
@@ -554,7 +554,7 @@ entities.sort((a, b) => priorityOf(b) - priorityOf(a))
 When a project upgrades `@arkiv-network/sdk` from 0.7.x to 0.8.0-dev.3+, apply all of these together:
 
 1. **Install the dev release:** `npm install @arkiv-network/sdk@dev viem`.
-2. **Swap chain:** `braga` → `cheesecake` in all imports and client setup.
+2. **Swap chain:** `braga` → `tiramisu` in all imports and client setup.
 3. **Fix imports:** import `ExpirationTime`, `jsonToPayload`, `stringToPayload` from `@arkiv-network/sdk` root (not `/utils`).
 4. **Attributes array → object:** `{ key: "type", value: "note" }` → `{ type: "note" }`.
 5. **`expiresIn` → `expires`:** rename the parameter on create/extend/batch.
@@ -568,7 +568,7 @@ When a project upgrades `@arkiv-network/sdk` from 0.7.x to 0.8.0-dev.3+, apply a
 
 For the full migration checklist including network constants, read `references/migration-guide.md`.
 
-## Migration from Braga to Cheesecake
+## Migration from Braga to Tiramisu
 
 Braga was retired on 12 August 2026. When a user wants to upgrade an existing Arkiv project, treat it as a migration instead of a generic refactor. The SDK API has breaking changes from 0.7 to 0.8, and the main work is swapping the target chain, updating wallet/network config, renaming Braga-specific env vars, and recreating testnet data.
 
@@ -576,13 +576,13 @@ Follow this sequence:
 
 1. Read `references/migration-guide.md` before making edits.
 2. Install `@arkiv-network/sdk@dev` and apply the "Upgrading to SDK 0.8.0" checklist above.
-3. Replace `braga` chain imports/usages with `cheesecake`.
+3. Replace `braga` chain imports/usages with `tiramisu`.
 4. Update RPC URLs, WebSocket URLs, chain IDs, explorer links, faucet links, and wallet `nativeCurrency` (symbol `GLM`).
 5. Register an RPC API key at `https://hub.arkiv.network/api-keys`.
 6. Rename env vars and config keys so `BRAGA_*` names do not remain in active codepaths.
-7. Re-seed or recreate any entities the app expects on startup, because Braga state does not migrate to Cheesecake.
+7. Re-seed or recreate any entities the app expects on startup, because Braga state does not migrate to Tiramisu.
 
-Keep Braga only as legacy context during migration work. For new code, examples, and setup instructions, default to Cheesecake.
+Keep Braga only as legacy context during migration work. For new code, examples, and setup instructions, default to Tiramisu.
 
 ## Reference Files
 
@@ -592,23 +592,23 @@ The `references/` directory contains detailed documentation for specific topics.
 - **`references/integration-patterns.md`** — Four integration scenarios: backend read/write (Next.js/Express), client-side reading (TanStack Query hooks), client-side writing (MetaMask and wagmi/RainbowKit), and live events with cache invalidation.
 - **`references/api-reference.md`** — Raw JSON-RPC 2.0 API: `arkiv_query` syntax, typed literals, query operators, synthetic attributes, pagination with cursors, and utility methods.
 - **`references/advanced-patterns.md`** — Advanced data modeling: schema validation with zod/valibot, and modeling lists with relationship entities.
-- **`references/migration-guide.md`** — Step-by-step Braga to Cheesecake migration checklist: chain swaps, SDK 0.7→0.8 API changes, env/config updates, faucet, and reseeding testnet data.
+- **`references/migration-guide.md`** — Step-by-step Braga to Tiramisu migration checklist: chain swaps, SDK 0.7→0.8 API changes, env/config updates, faucet, and reseeding testnet data.
 
 ## Testnet Resources
 
 | Resource | URL |
 | -------- | --- |
-| Chain ID | `7733102` / `0x75ff6e` |
-| HTTP RPC | `https://rpc.cheesecake.db-chain.devnet.gobas.me` |
-| WebSocket RPC | `wss://rpc.cheesecake.db-chain.devnet.gobas.me` |
-| Block explorer | `https://indexer.cheesecake.db-chain.devnet.gobas.me` |
+| Chain ID | `7738577` / `0x7614d1` |
+| HTTP RPC | `https://rpc.tiramisu.db-chain.testnet.arkiv.network` |
+| WebSocket RPC | `wss://rpc.tiramisu.db-chain.testnet.arkiv.network` |
+| Block explorer | `https://indexer.tiramisu.db-chain.testnet.arkiv.network` |
 | Faucet | `https://hub.arkiv.network/faucet` (0.1 GLM, 24h cooldown, wallet + SIWE) |
 | API keys | `https://hub.arkiv.network/api-keys` |
 
 ## Troubleshooting
 
-- **"Invalid sender"** — Your RPC URL may point to the wrong network. Verify it matches Cheesecake.
-- **"Insufficient funds"** — Get test GLM from the [Cheesecake faucet](https://hub.arkiv.network/faucet). Writes require gas.
+- **"Invalid sender"** — Your RPC URL may point to the wrong network. Verify it matches Tiramisu.
+- **"Insufficient funds"** — Get test GLM from the [Tiramisu faucet](https://hub.arkiv.network/faucet). Writes require gas.
 - **Queries return empty** — Check that attributes match exactly (case-sensitive). Verify entities haven't expired.
 - **`InvalidValueError` on a number** — Bare floats are rejected. Use `dec("19.99")` for decimals or `i32(1999)` for scaled integers.
 - **`NoEntityFoundError`** — The entity does not exist or has expired. Expiration fires no event in 0.8 — poll or query by `$expiresAt`.

@@ -1,6 +1,6 @@
 # Arkiv SDK Reference
 
-All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Cheesecake devnet.
+All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Tiramisu testnet.
 
 ## TypeScript SDK
 
@@ -21,7 +21,7 @@ bun add @arkiv-network/sdk@dev viem
 | Subpath | Contents |
 | ------- | -------- |
 | `@arkiv-network/sdk` | Client factories, errors, `ExpirationTime`, payload helpers, re-exports from `/attr`, `/entity` |
-| `@arkiv-network/sdk/chains` | `cheesecake`, `localhost` |
+| `@arkiv-network/sdk/chains` | `tiramisu`, `localhost` |
 | `@arkiv-network/sdk/query` | Query operators, `SelectQueryBuilder`, `QueryResult` |
 | `@arkiv-network/sdk/attr` | Typed value helpers: `i32`, `u64`, `u256`, `dec`, `str`, `addr`, `key`, `bytes32`, `bool` |
 | `@arkiv-network/sdk/entity` | `Expiry`, `Lifetime` types |
@@ -47,7 +47,7 @@ import {
 } from "@arkiv-network/sdk"
 
 import { i32, u64, dec, str, addr } from "@arkiv-network/sdk/attr"
-import { cheesecake } from "@arkiv-network/sdk/chains"
+import { tiramisu } from "@arkiv-network/sdk/chains"
 import { eq, gt, lt, gte, lte, and, or, not, startsWith } from "@arkiv-network/sdk/query"
 import { http, custom } from "viem"
 import { privateKeyToAccount, nonceManager } from "viem/accounts"
@@ -244,8 +244,8 @@ Two safe options:
 
 ```typescript
 const walletClient = createWalletClient({
-  chain: cheesecake,
-  transport: http(process.env.CHEESECAKE_RPC_URL),
+  chain: tiramisu,
+  transport: http(process.env.TIRAMISU_RPC_URL),
   account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`, {
     nonceManager,
   }),
@@ -392,19 +392,19 @@ Every event carries `{ blockNumber, transactionHash, logIndex }`. The old `cost`
 
 ```typescript
 import { createWalletClient, createPublicClient } from "@arkiv-network/sdk"
-import { cheesecake } from "@arkiv-network/sdk/chains"
+import { tiramisu } from "@arkiv-network/sdk/chains"
 import { custom, http } from "viem"
 
 await window.ethereum.request({ method: "eth_requestAccounts" })
 
 const walletClient = createWalletClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: custom(window.ethereum),
 })
 
 const publicClient = createPublicClient({
-  chain: cheesecake,
-  transport: http(process.env.CHEESECAKE_RPC_URL),
+  chain: tiramisu,
+  transport: http(process.env.TIRAMISU_RPC_URL),
 })
 ```
 
@@ -414,11 +414,11 @@ const publicClient = createPublicClient({
 await window.ethereum.request({
   method: "wallet_addEthereumChain",
   params: [{
-    chainId: "0x75ff6e",
-    chainName: "Arkiv Cheesecake Testnet",
+    chainId: "0x7614d1",
+    chainName: "Arkiv Tiramisu Testnet",
     nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
-    rpcUrls: ["https://rpc.cheesecake.db-chain.devnet.gobas.me"],
-    blockExplorerUrls: ["https://indexer.cheesecake.db-chain.devnet.gobas.me"],
+    rpcUrls: ["https://rpc.tiramisu.db-chain.testnet.arkiv.network"],
+    blockExplorerUrls: ["https://indexer.tiramisu.db-chain.testnet.arkiv.network"],
   }],
 })
 ```
@@ -430,8 +430,8 @@ For static HTML/JS pages without a bundler:
 ```javascript
 import { createPublicClient } from 'https://esm.sh/@arkiv-network/sdk@0.8.0-dev.3?target=es2022&bundle-deps'
 import { eq } from 'https://esm.sh/@arkiv-network/sdk/query@0.8.0-dev.3?target=es2022&bundle-deps'
-import { cheesecake } from 'https://esm.sh/@arkiv-network/sdk/chains@0.8.0-dev.3?target=es2022&bundle-deps'
+import { tiramisu } from 'https://esm.sh/@arkiv-network/sdk/chains@0.8.0-dev.3?target=es2022&bundle-deps'
 import { http } from 'https://esm.sh/viem?target=es2022'
 ```
 
-Pin the version in CDN URLs — the `cheesecake` chain export and `select()` require 0.8.0-dev.3+.
+Pin the version in CDN URLs — the `tiramisu` chain export and `select()` require 0.8.0-dev.3+.

@@ -1,15 +1,15 @@
 # Arkiv JSON-RPC API Reference
 
-Arkiv exposes a JSON-RPC 2.0 API over HTTP. Use this when you need raw HTTP access without the SDK, or for advanced query options. All examples target the Cheesecake devnet.
+Arkiv exposes a JSON-RPC 2.0 API over HTTP. Use this when you need raw HTTP access without the SDK, or for advanced query options. All examples target the Tiramisu testnet.
 
 ## Endpoint
 
 | Property  | Value                                                         |
 | --------- | ------------------------------------------------------------- |
-| Chain ID  | `7733102` / `0x75ff6e`                                        |
-| HTTP RPC  | `https://rpc.cheesecake.db-chain.devnet.gobas.me`             |
-| WebSocket | `wss://rpc.cheesecake.db-chain.devnet.gobas.me`               |
-| Explorer  | `https://indexer.cheesecake.db-chain.devnet.gobas.me`         |
+| Chain ID  | `7738577` / `0x7614d1`                                        |
+| HTTP RPC  | `https://rpc.tiramisu.db-chain.testnet.arkiv.network`             |
+| WebSocket | `wss://rpc.tiramisu.db-chain.testnet.arkiv.network`               |
+| Explorer  | `https://indexer.tiramisu.db-chain.testnet.arkiv.network`         |
 | Faucet    | `https://hub.arkiv.network/faucet`                            |
 | API keys  | `https://hub.arkiv.network/api-keys`                          |
 
@@ -18,17 +18,17 @@ Register an API key at `https://hub.arkiv.network/api-keys` for elevated RPC rat
 ```bash
 # Path segment
 curl --json '{"jsonrpc":"2.0","id":1,"method":"arkiv_getEntityCount","params":[]}' \
-  https://rpc.cheesecake.db-chain.devnet.gobas.me/YOUR_API_KEY
+  https://rpc.tiramisu.db-chain.testnet.arkiv.network/YOUR_API_KEY
 
 # X-API-KEY header
 curl --json '{"jsonrpc":"2.0","id":1,"method":"arkiv_getEntityCount","params":[]}' \
   -H "X-API-KEY: YOUR_API_KEY" \
-  https://rpc.cheesecake.db-chain.devnet.gobas.me
+  https://rpc.tiramisu.db-chain.testnet.arkiv.network
 
 # Authorization: Bearer header
 curl --json '{"jsonrpc":"2.0","id":1,"method":"arkiv_getEntityCount","params":[]}' \
   -H "Authorization: Bearer YOUR_API_KEY" \
-  https://rpc.cheesecake.db-chain.devnet.gobas.me
+  https://rpc.tiramisu.db-chain.testnet.arkiv.network
 ```
 
 ## Request Format
@@ -36,7 +36,7 @@ curl --json '{"jsonrpc":"2.0","id":1,"method":"arkiv_getEntityCount","params":[]
 All methods use standard JSON-RPC 2.0.
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"METHOD_NAME","params":[]}'
 ```
@@ -105,7 +105,7 @@ Use `*` to match all entities (cannot be combined with other predicates).
 **Example — query active NFTs:**
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":1,
@@ -120,7 +120,7 @@ curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
 **Example — query by owner:**
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":10,
@@ -135,7 +135,7 @@ curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
 **Example — numeric range:**
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":12,
@@ -147,7 +147,7 @@ curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
 **Example — prefix match with negation:**
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":13,
@@ -159,7 +159,7 @@ curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
 **Example — metadata only (omit payload):**
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":14,
@@ -244,7 +244,7 @@ Read a single entity by key. Returns all fields (full projection).
 | 1     | hex string | No       | Block number to read at (historical) |
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{
     "jsonrpc":"2.0","id":5,
@@ -260,7 +260,7 @@ Returns `null` if the entity does not exist or has expired.
 Returns total number of entities currently stored. No parameters.
 
 ```bash
-curl https://rpc.cheesecake.db-chain.devnet.gobas.me \
+curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   -d '{"jsonrpc":"2.0","id":3,"method":"arkiv_getEntityCount","params":[]}'
 ```

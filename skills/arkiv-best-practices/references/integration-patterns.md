@@ -1,6 +1,6 @@
 # Arkiv Integration Patterns
 
-The three most common integration scenarios for Arkiv applications. All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Cheesecake devnet.
+The three most common integration scenarios for Arkiv applications. All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Tiramisu testnet.
 
 ## Table of Contents
 
@@ -22,25 +22,25 @@ For server-side applications (Next.js API routes, Express, any Node.js backend).
 ```typescript
 // lib/arkiv-server.ts
 import { createWalletClient, createPublicClient, ExpirationTime, jsonToPayload } from "@arkiv-network/sdk"
-import { cheesecake } from "@arkiv-network/sdk/chains"
+import { tiramisu } from "@arkiv-network/sdk/chains"
 import { eq } from "@arkiv-network/sdk/query"
 import { http } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
 import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "./arkiv"
 
-// Include your API key in the URL: https://rpc.cheesecake.db-chain.devnet.gobas.me/<api-key>
+// Include your API key in the URL: https://rpc.tiramisu.db-chain.testnet.arkiv.network/<api-key>
 // Obtained from the Arkiv Hub: https://hub.arkiv.network
-const rpcUrl = process.env.CHEESECAKE_RPC_URL
+const rpcUrl = process.env.TIRAMISU_RPC_URL
 
 
 const walletClient = createWalletClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: http(rpcUrl),
   account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
 });
 
 const publicClient = createPublicClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: http(rpcUrl),
 });
 
@@ -131,14 +131,14 @@ For frontend applications that only need to query data. Uses a public client —
 ```typescript
 // lib/arkiv-queries.ts
 import { createPublicClient } from "@arkiv-network/sdk"
-import { cheesecake } from "@arkiv-network/sdk/chains"
+import { tiramisu } from "@arkiv-network/sdk/chains"
 import { eq } from "@arkiv-network/sdk/query"
 import { http } from "viem"
 import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "@/lib/arkiv"
 
 export const publicClient = createPublicClient({
-  chain: cheesecake,
-  transport: http(process.env.NEXT_PUBLIC_CHEESECAKE_RPC_URL),
+  chain: tiramisu,
+  transport: http(process.env.NEXT_PUBLIC_TIRAMISU_RPC_URL),
 })
 
 export async function fetchEntitiesByType<T>(entityType: string): Promise<(T & { arkivEntityKey: string })[]> {
@@ -236,11 +236,11 @@ async function addArkivNetwork() {
   await window.ethereum.request({
     method: "wallet_addEthereumChain",
     params: [{
-      chainId: "0x75ff6e",
-      chainName: "Arkiv Cheesecake Testnet",
+      chainId: "0x7614d1",
+      chainName: "Arkiv Tiramisu Testnet",
       nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
-      rpcUrls: ["https://rpc.cheesecake.db-chain.devnet.gobas.me"],
-      blockExplorerUrls: ["https://indexer.cheesecake.db-chain.devnet.gobas.me"],
+      rpcUrls: ["https://rpc.tiramisu.db-chain.testnet.arkiv.network"],
+      blockExplorerUrls: ["https://indexer.tiramisu.db-chain.testnet.arkiv.network"],
     }],
   })
 }
@@ -250,14 +250,14 @@ async function addArkivNetwork() {
 
 ```typescript
 import { createWalletClient } from "@arkiv-network/sdk"
-import { cheesecake } from "@arkiv-network/sdk/chains"
+import { tiramisu } from "@arkiv-network/sdk/chains"
 import { custom } from "viem"
 
 await addArkivNetwork()
 await window.ethereum.request({ method: "eth_requestAccounts" })
 
 const walletClient = createWalletClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: custom(window.ethereum),
 })
 ```
@@ -267,14 +267,14 @@ const walletClient = createWalletClient({
 ```tsx
 import { useAccount, useWalletClient } from "wagmi"
 import { createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk"
-import { cheesecake } from "@arkiv-network/sdk/chains"
+import { tiramisu } from "@arkiv-network/sdk/chains"
 import { custom } from "viem"
 
 const { address } = useAccount()
 const { data: wagmiWalletClient } = useWalletClient()
 
 const arkivWalletClient = createArkivWalletClient({
-  chain: cheesecake,
+  chain: tiramisu,
   transport: custom(wagmiWalletClient!.transport),
   account: address,
 });

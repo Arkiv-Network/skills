@@ -2,7 +2,7 @@
 
 Mirrors `Arkiv-Network/reported-issues/.github/ISSUE_TEMPLATE/1-bug.yml`. If that file changes, update this reference too.
 
-**Upstream drift:** the upstream `1-bug.yml` DB-chain dropdown still lists only Kaolin / Braga / Local / Other — it does not yet include Cheesecake. This skill adds Cheesecake as the first option so agents default to the current network. When upstream adds Cheesecake, keep this reference aligned.
+**Upstream drift:** the upstream `1-bug.yml` DB-chain dropdown still lists only Kaolin / Braga / Local / Other — it does not yet include Tiramisu. This skill adds Tiramisu as the first option so agents default to the current network. When upstream adds Tiramisu, keep this reference aligned.
 
 ## Form metadata
 
@@ -28,7 +28,7 @@ Ask each in this sequence. `R` = required, `O` = optional.
 
 ### DB-chain options
 
-1. Cheesecake (testnet)
+1. Tiramisu (testnet)
 2. Braga (testnet) — retired 12 August 2026
 3. Kaolin (testnet) — retired
 4. Local / devnet

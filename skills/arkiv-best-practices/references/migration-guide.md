@@ -1,22 +1,22 @@
-# Braga to Cheesecake Migration Guide
+# Braga to Tiramisu Migration Guide
 
-Use this guide when the user already has an Arkiv project that targets Braga and needs to move it to Cheesecake, including upgrading from SDK 0.7.x to 0.8.0-dev.3.
+Use this guide when the user already has an Arkiv project that targets Braga and needs to move it to Tiramisu, including upgrading from SDK 0.7.x to 0.8.0-dev.3.
 
 ## What Changed
 
 - Braga was **retired on 12 August 2026**. Its endpoints no longer respond.
-- The chain target changes from `braga` to `cheesecake`.
+- The chain target changes from `braga` to `tiramisu`.
 - The SDK has a **breaking API change** from 0.7.x to 0.8.0-dev.3 — not just a version bump.
 - Braga entity state does **not** migrate: entities written to Braga stay on Braga.
 
 ## Network Values
 
-| Property | Cheesecake value |
+| Property | Tiramisu value |
 | -------- | ---------------- |
-| Chain ID | `7733102` / `0x75ff6e` |
-| HTTP RPC | `https://rpc.cheesecake.db-chain.devnet.gobas.me` |
-| WebSocket RPC | `wss://rpc.cheesecake.db-chain.devnet.gobas.me` |
-| Block explorer | `https://indexer.cheesecake.db-chain.devnet.gobas.me` |
+| Chain ID | `7738577` / `0x7614d1` |
+| HTTP RPC | `https://rpc.tiramisu.db-chain.testnet.arkiv.network` |
+| WebSocket RPC | `wss://rpc.tiramisu.db-chain.testnet.arkiv.network` |
+| Block explorer | `https://indexer.tiramisu.db-chain.testnet.arkiv.network` |
 | Faucet | `https://hub.arkiv.network/faucet` (0.1 GLM, 24h cooldown, wallet + SIWE required) |
 | API keys | `https://hub.arkiv.network/api-keys` (elevated RPC rate limits) |
 | Native gas token | `GLM` |
@@ -40,12 +40,12 @@ Verify the installed version is `0.8.0-dev.3` or newer.
 
 ```diff
 - import { braga } from "@arkiv-network/sdk/chains";
-+ import { cheesecake } from "@arkiv-network/sdk/chains";
++ import { tiramisu } from "@arkiv-network/sdk/chains";
 
   const client = createWalletClient({
 -   chain: braga,
-+   chain: cheesecake,
-    transport: http(process.env.CHEESECAKE_RPC_URL),
++   chain: tiramisu,
+    transport: http(process.env.TIRAMISU_RPC_URL),
     account,
   });
 ```
@@ -58,8 +58,8 @@ If the project adds the network to MetaMask or viem manually, update `chainId`, 
 
 ```diff
 - BRAGA_RPC_URL=https://braga.hoodi.arkiv.network/rpc
-+ CHEESECAKE_RPC_URL=https://rpc.cheesecake.db-chain.devnet.gobas.me/<your-api-key>
-+ CHEESECAKE_API_KEY=your-key-from-hub
++ TIRAMISU_RPC_URL=https://rpc.tiramisu.db-chain.testnet.arkiv.network/<your-api-key>
++ TIRAMISU_API_KEY=your-key-from-hub
 ```
 
 Register an API key at `https://hub.arkiv.network/api-keys` and pass it as a URL path segment, `X-API-KEY` header, or `Authorization: Bearer` header. Without a key, anonymous RPC access is rate-limited.
@@ -98,12 +98,12 @@ These ship together — apply all of them:
 
 ### 5. Refresh funding
 
-- Request fresh test GLM from the [Cheesecake faucet](https://hub.arkiv.network/faucet).
-- No bridge address is published for Cheesecake. Funds on Braga stay there.
+- Request fresh test GLM from the [Tiramisu faucet](https://hub.arkiv.network/faucet).
+- No bridge address is published for Tiramisu. Funds on Braga stay there.
 
 ### 6. Re-create entities and seed data
 
-Braga entities do not migrate. If the app depends on seed data, startup entities, cached indexes, or demo content, run the seed/migration script against Cheesecake before switching traffic.
+Braga entities do not migrate. If the app depends on seed data, startup entities, cached indexes, or demo content, run the seed/migration script against Tiramisu before switching traffic.
 
 ### 7. Verify both read and write paths
 
@@ -111,13 +111,13 @@ After updating:
 
 - Run one write flow end-to-end (`createEntity`)
 - Verify queries return the newly written entity
-- Confirm wallet prompts show Cheesecake, not Braga
+- Confirm wallet prompts show Tiramisu, not Braga
 - Confirm gas is charged in `GLM`
 - Test a partial update with `patchEntity` (not a full replace)
 
 ## Migration Notes for Agents
 
-- Prefer narrow replacements: change active codepaths to Cheesecake, then remove Braga-only compatibility code.
+- Prefer narrow replacements: change active codepaths to Tiramisu, then remove Braga-only compatibility code.
 - Keep Braga references only in migration docs or explicit legacy support blocks.
 - If the codebase uses direct viem or wagmi chain definitions instead of the Arkiv exported chain, update `id`, `rpcUrls`, and `nativeCurrency` consistently.
 - Do not teach users to hand-build raw entity mutation transactions — the SDK handles encoding internally via the Arkiv precompile at `0x4400000000000000000000000000000000000044`.
