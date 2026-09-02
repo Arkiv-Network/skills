@@ -29,9 +29,11 @@ Use this guide when the user already has an Arkiv project that targets Braga and
 Install the dev release — npm `latest` is still 0.7.0:
 
 ```bash
-npm install @arkiv-network/sdk@dev viem
+npm install @arkiv-network/sdk viem
 # or
-bun add @arkiv-network/sdk@dev viem
+pnpm add @arkiv-network/sdk viem 
+# or
+bun add @arkiv-network/sdk viem
 ```
 
 Verify the installed version is `0.8.0-dev.3` or newer.
@@ -94,7 +96,7 @@ These ship together — apply all of them:
 
 **Event handler renames:** `onEntityUpdated` → `onEntityPatched`, `onEntityExpiresInExtended` → `onExpiryExtended`. New: `onOwnershipTransferred`, `onEvent`. `onEntityExpired` is **gone** — expiration fires no event; poll or handle `NoEntityFoundError` from `getEntity()`.
 
-**Query operators:** `ne()`, `exists()`, and `hasType()` are exported by the SDK but **not implemented on the node** — queries using them fail to parse. Use `not(eq(...))` instead.
+**Query operators:** `ne()`, `exists()`, and `hasType()` are exported by the SDK but **not implemented on the node** — queries using them fail to parse. For inequality, use `not(eq(...))` as the not-equal workaround. There is no substitute for `exists()` or `hasType()` today.
 
 ### 5. Refresh funding
 

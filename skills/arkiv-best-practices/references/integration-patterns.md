@@ -309,7 +309,6 @@ Use `watchEntityEvents` to invalidate TanStack Query caches when entities change
 import { useEffect } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { publicClient } from "@/lib/arkiv-queries"
-import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "@/lib/arkiv"
 
 export function useArkivEventWatcher(entityType: string) {
   const queryClient = useQueryClient()

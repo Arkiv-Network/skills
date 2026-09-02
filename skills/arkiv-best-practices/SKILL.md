@@ -33,14 +33,14 @@ An entity is a data record containing:
 Attributes are the backbone of querying. In SDK 0.8, attributes are passed as an **object keyed by name** (not an array):
 
 ```typescript
-import { i32, dec, str } from "@arkiv-network/sdk/attr"
+import { i32, u64, dec, str } from "@arkiv-network/sdk/attr"
 
 // Object form — each key is the attribute name
 attributes: {
   type: "note",              // bare string → str
   priority: i32(5),          // explicit i32 for range queries
   score: dec("4.5"),         // genuine decimal
-  created: i32(Date.now()),  // timestamp as i32
+  created: u64(Date.now()),  // timestamp as i32
 }
 ```
 
@@ -86,9 +86,11 @@ Arkiv provides a TypeScript SDK. For detailed SDK reference, read `references/sd
 ### TypeScript (Node.js / Bun)
 
 ```bash
-npm install @arkiv-network/sdk@dev viem
+npm install @arkiv-network/sdk viem
 # or
-bun add @arkiv-network/sdk@dev viem
+pnpm add @arkiv-network/sdk viem
+# or
+bun add @arkiv-network/sdk viem
 ```
 
 The SDK builds on [viem](https://viem.sh) and declares it as a **peer dependency**. Install `viem` alongside the SDK. The SDK no longer re-exports viem's internals — `http`, `custom`, `privateKeyToAccount`, `Hex`, etc. must be imported from `viem` / `viem/accounts` directly.
@@ -182,6 +184,13 @@ const entity = await publicClient.getEntity(entityKey)
 ```
 
 Available fields: `key`, `owner`, `creator`, `createdAt`, `updatedAt`, `expiresAt`, `creationFlags`, `contentType`, `payload`, `attributeSchema`, `attributes`.
+
+### Creation flags
+
+Set at entity creation only (`creationFlags` on create). Two flags matter in practice:
+
+- **`readonly`** — payload and attributes cannot be changed, even by the owner (only delete remains).
+- **`permissionlessExtension`** — any address can call `extendEntity()` on this entity, not just the owner.
 
 Pass the selection **inline**. A selection stored in a variable widens `true` to `boolean` and the result type can't be narrowed; if you must reuse one, annotate it `as const`.
 
@@ -301,7 +310,7 @@ const publicClient = createPublicClient({
 
 ### 3. Separate Read and Write Clients
 
-Always use `createPublicClient` for queries. It prevents accidental writes, doesn't require a private key, and is safe for frontend/public use. Reserve `createWalletClient` for backend services that need to create/patch/delete.
+Always use `createPublicClient` for queries. It prevents accidental writes, doesn't require a private key, and is safe for frontend/public use. Use `createWalletClient` only for write paths — backend services with a server-held key, or client-side via the user's injected wallet (MetaMask/wagmi).
 
 ### 4. Design Attributes for Queryability
 
@@ -553,7 +562,7 @@ entities.sort((a, b) => priorityOf(b) - priorityOf(a))
 
 When a project upgrades `@arkiv-network/sdk` from 0.7.x to 0.8.0-dev.3+, apply all of these together:
 
-1. **Install the dev release:** `npm install @arkiv-network/sdk@dev viem`.
+1. **Install the latest release:** `npm install @arkiv-network/sdk viem`.
 2. **Swap chain:** `braga` → `tiramisu` in all imports and client setup.
 3. **Fix imports:** import `ExpirationTime`, `jsonToPayload`, `stringToPayload` from `@arkiv-network/sdk` root (not `/utils`).
 4. **Attributes array → object:** `{ key: "type", value: "note" }` → `{ type: "note" }`.
@@ -575,7 +584,7 @@ Braga was retired on 12 August 2026. When a user wants to upgrade an existing Ar
 Follow this sequence:
 
 1. Read `references/migration-guide.md` before making edits.
-2. Install `@arkiv-network/sdk@dev` and apply the "Upgrading to SDK 0.8.0" checklist above.
+2. Install `@arkiv-network/sdk` and apply the "Upgrading to SDK 0.8.0" checklist above.
 3. Replace `braga` chain imports/usages with `tiramisu`.
 4. Update RPC URLs, WebSocket URLs, chain IDs, explorer links, faucet links, and wallet `nativeCurrency` (symbol `GLM`).
 5. Register an RPC API key at `https://hub.arkiv.network/api-keys`.
@@ -613,4 +622,4 @@ The `references/` directory contains detailed documentation for specific topics.
 - **`InvalidValueError` on a number** — Bare floats are rejected. Use `dec("19.99")` for decimals or `i32(1999)` for scaled integers.
 - **`NoEntityFoundError`** — The entity does not exist or has expired. Expiration fires no event in 0.8 — poll or query by `$expiresAt`.
 - **RPC rate limited** — Register an API key at `https://hub.arkiv.network/api-keys` and pass it in the RPC URL or as a header.
-- **Query parse error on `ne()`/`exists()`/`hasType()`** — These operators are exported by the SDK but not implemented on the node. Use `not(eq(...))` instead.
+- **Query parse error on `ne()`/`exists()`/`hasType()`** — These operators are exported by the SDK but not implemented on the node. For inequality, use `not(eq(...))` as the not-equal workaround (matches entities that never set the attribute). There is no substitute for `exists()` or `hasType()` today.

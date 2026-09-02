@@ -7,11 +7,14 @@ All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Tiramisu testnet.
 ### Installation
 
 ```bash
-# npm — install the dev release; npm "latest" is still 0.7.0
-npm install @arkiv-network/sdk@dev viem
+# npm — install the latest release
+npm install @arkiv-network/sdk viem
+
+# pnpm
+bun add @arkiv-network/sdk viem
 
 # Bun
-bun add @arkiv-network/sdk@dev viem
+bun add @arkiv-network/sdk viem
 ```
 
 [viem](https://viem.sh) is a **peer dependency** — install it alongside the SDK. The SDK no longer re-exports viem's internals (`http`, `custom`, `privateKeyToAccount`, `Hex`, etc.); import them from `viem` / `viem/accounts` directly.
@@ -404,7 +407,7 @@ const walletClient = createWalletClient({
 
 const publicClient = createPublicClient({
   chain: tiramisu,
-  transport: http(process.env.TIRAMISU_RPC_URL),
+  transport: http(tiramisu.rpcUrls.default.http),
 })
 ```
 

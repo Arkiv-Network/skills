@@ -85,7 +85,8 @@ An untagged number always means `i32`. System block heights (`$expiresAt`, `$cre
 - `$owner` — Entity owner address (queryable)
 - `$creator` — Entity creator address (queryable)
 - `$expiresAt` — Expiration block (queryable, must use `u64` tag)
-- `$createdAt`, `$updatedAt`, `$creationFlags`, `$contentType`, `$payload` — returned in projections only, not queryable
+- `$createdAt` — Creation block (queryable, must use `u64` tag)
+- `$updatedAt`, `$creationFlags`, `$contentType`, `$payload` — returned in projections only, not queryable
 
 Use `*` to match all entities (cannot be combined with other predicates).
 
