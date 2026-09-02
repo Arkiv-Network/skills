@@ -1,11 +1,13 @@
 # Advanced Data Modeling Patterns
 
-Patterns for handling type safety and complex relationships in Arkiv.
+Patterns for handling type safety and complex relationships in Arkiv. All examples target `@arkiv-network/sdk@0.8.0-dev.3`.
 
 ## Table of Contents
 
-1. [Validate Entity Data with a Schema Library](#validate-entity-data-with-a-schema-library)
-2. [Model Lists with Relationship Entities](#model-lists-with-relationship-entities)
+- [Advanced Data Modeling Patterns](#advanced-data-modeling-patterns)
+  - [Table of Contents](#table-of-contents)
+  - [Validate Entity Data with a Schema Library](#validate-entity-data-with-a-schema-library)
+  - [Model Lists with Relationship Entities](#model-lists-with-relationship-entities)
 
 ---
 
@@ -24,13 +26,12 @@ const PostSchema = z.object({
 
 type Post = z.infer<typeof PostSchema>;
 
-// Safe parsing — never trust raw entity data
-function parsePost(entity: any): Post {
-  const raw = entity.toJson();
-  const result = PostSchema.safeParse(raw);
+function parsePost(entity: { toJson(): unknown }): Post {
+  const raw = entity.toJson()
+  const result = PostSchema.safeParse(raw)
   if (!result.success) {
-    console.error("Invalid entity data:", result.error.flatten());
-    throw new Error("Entity data does not match expected schema");
+    console.error("Invalid entity data:", result.error.flatten())
+    throw new Error("Entity data does not match expected schema")
   }
   return result.data;
 }
@@ -39,20 +40,20 @@ function parsePost(entity: any): Post {
 const result = await publicClient
   .select({ key: true, payload: true })
   .where(
-    eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
+    eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
     eq("entityType", "post"),
   )
   .fetch();
 
 const posts: Post[] = result.entities
-  .map((e) => {
+  .map((entity) => {
     try {
-      return parsePost(e);
+      return parsePost(entity);
     } catch {
       return null;
     }
   })
-  .filter((p): p is Post => p !== null);
+  .filter((post): post is Post => post !== null);
 ```
 
 This protects against:
@@ -68,17 +69,17 @@ This protects against:
 Arkiv attributes are flat key-value pairs — there is no native array type. A common mistake is trying to encode lists into attributes:
 
 ```typescript
-// BAD — indexed attributes. Can't query "all profiles with skill frontend"
-attributes: [
-  { key: "skills_0", value: "frontend" },
-  { key: "skills_1", value: "backend" },
-  { key: "skills_2", value: "devops" },
-]
+// BAD — indexed attribute keys. Can't query "all profiles with skill frontend"
+attributes: {
+  skills_0: "frontend",
+  skills_1: "backend",
+  skills_2: "devops",
+}
 
 // BAD — comma-separated string. Can't query individual skills
-attributes: [
-  { key: "skills", value: "frontend, backend, devops" },
-]
+attributes: {
+  skills: "frontend, backend, devops",
+}
 ```
 
 Both approaches break querying. You can't efficiently find "all profiles that have the `frontend` skill" without fetching everything and filtering client-side.
@@ -86,31 +87,33 @@ Both approaches break querying. You can't efficiently find "all profiles that ha
 **The correct pattern:** Create separate **relationship entities** that link the parent entity to each value. This is the relational model — one entity per relationship:
 
 ```typescript
+import { jsonToPayload, ExpirationTime } from "@arkiv-network/sdk"
+
 // 1. Create the profile entity
 const { entityKey: profileKey } = await walletClient.createEntity({
   payload: jsonToPayload({ name: "Alice", bio: "Full-stack dev" }),
   contentType: "application/json",
-  attributes: [
-    PROJECT_ATTRIBUTE,
-    { key: "entityType", value: "profile" },
-    { key: "profileId", value: "alice-123" },
-  ],
-  expiresIn: ExpirationTime.fromDays(30),
-});
+  attributes: {
+    [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
+    entityType: "profile",
+    profileId: "alice-123",
+  },
+  expires: ExpirationTime.fromDays(30),
+})
 
 // 2. Create one relationship entity per skill
-const skills = ["frontend", "backend", "devops"];
-await walletClient.mutateEntities({
+const skills = ["frontend", "backend", "devops"]
+await walletClient.executeBatch({
   creates: skills.map((skill) => ({
     payload: jsonToPayload({ profileId: "alice-123", skill }),
     contentType: "application/json",
-    attributes: [
-      PROJECT_ATTRIBUTE,
-      { key: "entityType", value: "profileSkill" },
-      { key: "profileId", value: "alice-123" },
-      { key: "skill", value: skill },
-    ],
-    expiresIn: ExpirationTime.fromDays(30),
+    attributes: {
+      [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
+      entityType: "profileSkill",
+      profileId: "alice-123",
+      skill,
+    },
+    expires: ExpirationTime.fromDays(30),
   })),
 });
 
@@ -118,7 +121,7 @@ await walletClient.mutateEntities({
 const frontendDevs = await publicClient
   .select({ key: true, payload: true })
   .where(
-    eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
+    eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
     eq("entityType", "profileSkill"),
     eq("skill", "frontend"),
   )
@@ -128,7 +131,7 @@ const frontendDevs = await publicClient
 const aliceSkills = await publicClient
   .select({ key: true, payload: true })
   .where(
-    eq(PROJECT_ATTRIBUTE.key, PROJECT_ATTRIBUTE.value),
+    eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
     eq("entityType", "profileSkill"),
     eq("profileId", "alice-123"),
   )
