@@ -14,7 +14,7 @@ The skill mirrors the two GitHub issue forms hosted on the repo (`1-bug.yml`, `2
 Trigger on any of these signals from the user:
 
 - "I want to report a bug in Arkiv" / "file an issue" / "Arkiv is broken"
-- "the network is down" / "the SDK is throwing X" / "Kaolin/Braga is unreachable"
+- "the network is down" / "the SDK is throwing X" / "Tiramisu is unreachable"
 - "I have an idea for Arkiv" / "I'd like a feature" / "Arkiv should support X"
 
 Do **not** invoke for:

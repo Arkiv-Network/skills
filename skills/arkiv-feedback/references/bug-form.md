@@ -2,6 +2,8 @@
 
 Mirrors `Arkiv-Network/reported-issues/.github/ISSUE_TEMPLATE/1-bug.yml`. If that file changes, update this reference too.
 
+**Upstream drift:** the upstream `1-bug.yml` DB-chain dropdown still lists only Kaolin / Braga / Local / Other — it does not yet include Tiramisu. This skill adds Tiramisu as the first option so agents default to the current network. When upstream adds Tiramisu, keep this reference aligned.
+
 ## Form metadata
 
 - **Title prefix:** `[Bug]: `
@@ -17,7 +19,7 @@ Ask each in this sequence. `R` = required, `O` = optional.
 | 1 | Contact                        | Text      | O   | Discord handle, email, or GitHub username for follow-up.              |
 | 2 | DB-chain                       | Dropdown  | R   | Options below. Default to first if user is unsure.                    |
 | 3 | Surface                        | Dropdown  | R   | Options below.                                                        |
-| 4 | SDK / tool version             | Text      | O   | E.g. `@arkiv-network/sdk@0.6.5`.                                       |
+| 4 | SDK / tool version             | Text      | O   | E.g. `@arkiv-network/sdk@0.8.0-dev.3`.                               |
 | 5 | What happened?                 | Multiline | R   | What they did, expected, and actually saw.                            |
 | 6 | Steps to reproduce             | Multiline | R   | Minimal repro a teammate could follow.                                |
 | 7 | Logs                           | Multiline | O   | Render inside a ` ```shell ... ``` ` block when provided.              |
@@ -26,19 +28,21 @@ Ask each in this sequence. `R` = required, `O` = optional.
 
 ### DB-chain options
 
-1. Kaolin (testnet)
-2. Braga (testnet)
-3. Local / devnet
-4. Other (please describe in the steps)
+1. Tiramisu (testnet)
+2. Braga (testnet) — retired 12 August 2026
+3. Kaolin (testnet) — retired
+4. Local / devnet
+5. Other (please describe in the steps)
 
 ### Surface options
 
 1. SDK (`@arkiv-network/sdk`)
 2. CLI / tooling
 3. Block explorer
-4. Documentation
-5. Website
-6. Other
+4. Entity Explorer (data.arkiv.network)
+5. Documentation
+6. Website
+7. Other
 
 ## Body template
 
