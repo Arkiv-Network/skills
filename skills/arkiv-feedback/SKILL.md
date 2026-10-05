@@ -1,11 +1,18 @@
 ---
 name: arkiv-feedback
 description: Draft and submit an Arkiv bug report or feature request using the official GitHub issue forms. Use when the user asks to report an Arkiv issue or agrees to report a diagnosed Arkiv bug; troubleshoot ordinary errors before offering this flow.
+license: MIT
+metadata:
+  arkiv-sdk: ">=0.8.1 <0.9"
+  network: "tiramisu"
+  verified: "2026-10-05"
 ---
 
 # Arkiv feedback
 
 Report one issue at a time to [Arkiv-Network/reported-issues](https://github.com/Arkiv-Network/reported-issues). Public submission requires approval of the exact redacted draft. Application bugs belong to their application's team.
+
+Use `arkiv-troubleshooting` for an undiagnosed error. This skill drafts feedback and handles consented reporting; it does not grant permission to publish logs or send telemetry.
 
 Do not publish security disclosures. A pasted signing key or seed phrase is an incident: do not reuse or repeat it; tell the user to rotate the affected credential and move any funds controlled by a compromised signing key. Contact the Arkiv team privately through [Discord](https://discord.gg/golem) to establish a private reporting channel. Do not claim a security email address or private advisory channel exists without checking.
 
