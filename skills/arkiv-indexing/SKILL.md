@@ -1,0 +1,94 @@
+---
+name: arkiv-indexing
+description: Design and verify Arkiv-to-application entity mirrors from native operation logs, with checkpoints, replay, reorganization recovery and Entity Expiration sweeps. Use for an app or PostgreSQL projection and arkiv-sync compatibility checks. This skill's implementation direction is Arkiv to app; arkiv-sync adoption is gated pending a verified compatible release.
+license: MIT
+metadata:
+  arkiv-sdk: ">=0.8.1 <0.9"
+  network: "tiramisu"
+  verified: "2026-10-05"
+---
+
+# Mirror Arkiv state into an application
+
+## When to use
+
+Use this skill when an application needs a derived current-state projection or deliberately retained historical snapshots of Arkiv entities. Use arkiv-query for a one-off read, arkiv-app-integration for delivery/cache behavior, and arkiv-troubleshooting first for an existing error. Use arkiv-security-trust for creator policy and application authorization.
+
+The examples target SDK 0.8.1 and Tiramisu. Building a local projection does not authorize deleting source entities, dropping user tables, deploying a worker or retaining private application data. Keep the indexer's projection ownership and retention policy explicit.
+
+## Compatibility gate: arkiv-sync
+
+The reviewed **arkiv-sync 0.2.2** archive depends on SDK **`^0.6.8`**, statically imports a chain unavailable in SDK 0.8.1, and uses removed query/mutation APIs. It implements a different direction: chain events into Arkiv. Changing its RPC URL or dependency range does not make its published implementation compatible.
+
+Do not recommend installing it or use it in SDK 0.8.1/Tiramisu code until a compatible release is published and its integration is verified. This skill provides a custom Arkiv-to-app pattern instead. No third-party indexer version or compatibility is asserted.
+
+## Source contract
+
+- Read the five native operation events from **`0x4400000000000000000000000000000000000044`**, with SDK `ENTITY_EVENTS_ABI`. Filter by that address, not only matching topics. Event names are `EntityCreated`, `EntityPatched`, `ExpiryExtended`, `OwnershipTransferred`, `EntityDeleted`.
+- Logs identify entity keys and operation metadata; they contain neither payload nor attributes. A patch log says something changed, not its new content. The owner in an extension event is not necessarily the transaction sender.
+- SDK `watchEntityEvents` context has block number, transaction hash and log index. Fetch block hashes and parent hashes separately; its callback context is not a checkpoint hash or proof of canonicality.
+- Treat a watcher as a wake-up/invalidation signal. A durable consumer also scans complete bounded block ranges, including blocks with no matching logs, and awaits its own processing queue. Watcher callbacks are not an awaited database commit.
+- For replay, preserve block/log order and deduplicate delivery. Use chain identity, block hash, transaction hash and log index in event identities. A transaction may recur after a reorganization, so transaction hash alone is insufficient.
+- Scope fetched entities by configured project/type and trusted creator. Ownership changes do not replace original authorship. A derived database does not become an authorization service or proof that payload content is true.
+
+## Choose the mirror's meaning
+
+| Projection | Read and retention policy |
+| --- | --- |
+| Current-state mirror | Materialize final entity state at a pinned checkpoint block, remove rows absent from that scope, and sweep expired rows. Current app reads expose the checkpoint/lag. |
+| Historical mirror | Retain explicitly chosen block-end versions with source block/hash and retention policy. Historical reads require provider-retained data; logs alone cannot reconstruct payload versions. |
+
+Do not label a current `getEntity(key)` read as state at an older event block: SDK lookup reads head. Use a key-filtered query with `.atBlock(block)` for pinned block-end state, or raw historical lookup with its documented numeric block argument. A historical-read failure must not silently fall back to head.
+
+Several mutations in one block can be coalesced into one final row read per touched key for a **block-end mirror**. That does not reconstruct payload/attributes between operations within the block. A created-and-deleted entity may already be absent by the block end.
+
+## Checkpoint workflow
+
+1. Store the chain ID, genesis/reset identity, projection scope/schema version and baseline snapshot. A chain ID alone cannot distinguish a reset. Bootstrap with a complete pinned query before following later blocks.
+2. Choose confirmation lag, maximum range/read budget and a rollback journal window as application policies. Do not describe a fixed depth as irreversible finality.
+3. Before continuing, re-fetch the saved checkpoint block header and compare its hash. Fetch the next header and complete native log range; require contiguous numbers and matching parent/hash identity.
+4. Stage the affected row reads at that block, including owner and expiry updates. A read error or unavailable snapshot leaves the checkpoint unchanged.
+5. Sweep rows whose expiry is at or before that checkpoint, even when the block has no operation logs. An extension processed before its deadline changes the stored deadline before the sweep.
+6. Atomically commit projection changes, replay identities/journal and the checkpoint. In PostgreSQL, use a transaction scoped to this indexer's owned projection. Do not advance the cursor after only the first log or before writes finish.
+7. On a hash mismatch, find a verified common ancestor inside the retained journal, roll back only this indexer's derived state, and replay the new canonical blocks. A timeout is not evidence of a reorganization.
+8. If no ancestor or historical state is available, stop and rebuild an isolated projection generation from a fresh complete snapshot. A reset or changed genesis/config identity needs a new generation, not replay under the old cursor.
+
+Read [checkpoint-mirror.md](references/checkpoint-mirror.md) for a runnable SDK block reader, pinned row adapter and in-memory projection example. It demonstrates an owned rollback journal; it is not a production database adapter. Configure a transport timeout and quota budget before running it against RPC.
+
+## Worked scenario
+
+A marketplace mirror starts from a pinned snapshot, then processes complete blocks. A create adds a row; a patch re-fetches its typed price and payload; a transfer updates current owner while retaining creator. A delete removes the current projection row. An expiry-only block removes due rows without an event. Replaying a previously committed block is a no-op.
+
+If a saved block hash changes, restore this projection to the verified common ancestor, then process the replacement blocks. The local journal restores the prior row and deadline; replacement creates/patches produce the canonical view. A failed snapshot read commits neither rows nor checkpoint.
+
+The fixture walkthrough covers those transitions and a reset identity rejection. It changes only Maps created by the example. It does not delete database rows or send Arkiv transactions.
+
+## Expiration, recovery and privacy
+
+- There is **no Entity Expiration event**. A log-only mirror will retain stale live rows unless it sweeps deadlines or reconciles a current snapshot. Permissionless extension can keep an entity alive longer than its owner intended.
+- If the consumer was offline beyond provider retention, a current snapshot can rebuild a current-state mirror. It cannot reconstruct missing historical payload versions from operation logs. Report the gap in any historical archive.
+- Keep checkpoint integers exact when persisting them; convert bigint to decimal strings in JSON and restore bigint on load. Persist block hashes, not just numbers. Treat unavailable block data as a read failure until a canonical/reset condition is verified.
+- A historical mirror or rollback journal may retain data after deletion or expiration. Those operations cannot retract copies already read. Apply the app's explicit access and retention policy; a mirror is not a privacy control or canonical identity/authorization database.
+- Rebuilds and rollbacks affect only a projection this consumer owns. Preserve user/source resources. Verify a new generation before retiring an old generation created by the same workflow.
+
+## Failure conditions
+
+| Error or observable condition | Required handling |
+| --- | --- |
+| `QueryError.kind === 'block'` | Stop pinned reads and preserve the checkpoint. No historical-to-head fallback. |
+| HTTP `429` / `Retry-After` | Defer, preserving pending work and checkpoint. |
+| `Checkpoint hash mismatch` | Find a verified ancestor; roll back owned projection state and replay. |
+| `Noncontiguous block or parent hash mismatch` | Recheck canonical headers; do not skip missing blocks. |
+| `Chain identity changed; start a new projection generation` | Re-bootstrap under the new identity and scope. |
+| `Snapshot row belongs to another creator` | Reject the row; review scope/provenance. |
+| `Ancestor outside retained projection journal` | Rebuild from a verified baseline; do not invent old state. |
+
+If an available tool profile offers read-only entity verification, use it to corroborate an authorized key and state what it checked. No tool is required to implement this SDK consumer.
+
+## Sources
+
+- SDK 0.8.1: [five-event ABI](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/entity/events.ts), [watcher address/context/callback handling](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/public/watchEntityEvents.ts), [event types](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/types/events.ts), [head entity lookup](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/public/getEntity.ts), [pinned query engine](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/query/engine.ts).
+- Compatibility gate: [arkiv-sync 0.2.2 manifest](https://unpkg.com/arkiv-sync@0.2.2/package.json), [published module](https://unpkg.com/arkiv-sync@0.2.2/dist/index.js), [SDK 0.8.1 chain exports](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/chains/index.ts). Published source, not a repository assumption, establishes the mismatch.
+- Official [query guide](https://docs.arkiv.network/typescript-sdk/querying-data/) and [native operation protocol](https://docs.arkiv.network/json-rpc/mutating-entities/).
+
+Checked 2026-10-05. The worked consumer compiles against SDK 0.8.1 and runs with deterministic native-log/query fixtures; no live indexer, user database changes or funded transactions were performed.
