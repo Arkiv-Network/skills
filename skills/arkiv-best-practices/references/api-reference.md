@@ -1,288 +1,50 @@
-# Arkiv JSON-RPC API Reference
+# Raw JSON-RPC (Tiramisu, SDK 0.8.1 era)
 
-Arkiv exposes a JSON-RPC 2.0 API over HTTP. Use this when you need raw HTTP access without the SDK, or for advanced query options. All examples target the Tiramisu testnet.
+Use raw RPC when the host has no current TypeScript SDK or when a raw-only capability is required. Send JSON-RPC 2.0 requests to `https://rpc.tiramisu.db-chain.testnet.arkiv.network`. Do not assume an older language SDK uses this protocol.
 
-## Endpoint
+## Queries
 
-| Property  | Value                                                         |
-| --------- | ------------------------------------------------------------- |
-| Chain ID  | `7738577` / `0x7614d1`                                        |
-| HTTP RPC  | `https://rpc.tiramisu.db-chain.testnet.arkiv.network`             |
-| WebSocket | `wss://rpc.tiramisu.db-chain.testnet.arkiv.network`               |
-| Explorer  | `https://indexer.tiramisu.db-chain.testnet.arkiv.network`         |
-| Faucet    | `https://hub.arkiv.network/faucet`                            |
-| API keys  | `https://hub.arkiv.network/api-keys`                          |
-
-Register an API key at `https://hub.arkiv.network/api-keys` for elevated RPC rate limits. Pass the key as a URL path segment, or as an HTTP header:
-
-```bash
-# Path segment
-curl --json '{"jsonrpc":"2.0","id":1,"method":"arkiv_getEntityCount","params":[]}' \
-  https://rpc.tiramisu.db-chain.testnet.arkiv.network/YOUR_API_KEY
-
-# X-API-KEY header
-curl --json '{"jsonrpc":"2.0","id":1,"method":"arkiv_getEntityCount","params":[]}' \
-  -H "X-API-KEY: YOUR_API_KEY" \
-  https://rpc.tiramisu.db-chain.testnet.arkiv.network
-
-# Authorization: Bearer header
-curl --json '{"jsonrpc":"2.0","id":1,"method":"arkiv_getEntityCount","params":[]}' \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  https://rpc.tiramisu.db-chain.testnet.arkiv.network
-```
-
-## Request Format
-
-All methods use standard JSON-RPC 2.0.
-
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"METHOD_NAME","params":[]}'
-```
-
-## Methods
-
-### arkiv_query
-
-Query entities from the indexed store.
-
-**Parameters:**
-
-| Index | Type        | Required | Description      |
-| ----- | ----------- | -------- | ---------------- |
-| 0     | string      | Yes      | Query expression |
-| 1     | object/null | No       | Query options    |
-
-**Query Syntax — Operators:**
-
-- Logical: `AND`, `OR`
-- Negation: `NOT`
-- Comparisons: `=`, `<`, `>`, `<=`, `>=`
-- Prefix matching: `STARTSWITH` (raw UTF-8 byte prefix on `str` attributes)
-
-**Reserved but not implemented:** `!=`, `EXISTS(…)`, `TYPEOF(…)`. Queries using these fail to parse. Use `NOT (attr = value)` for the complement — it also matches entities that never set the attribute.
-
-**Typed literals** — every value carries a type tag:
-
-| Type | Syntax | Example |
-| ---- | ------ | ------- |
-| bool | bare `true` / `false` | `flagged = true` |
-| i32 | bare number or `i32(n)` | `level >= 10` or `level >= i32(10)` |
-| u64 | `u64(n)` | `$expiresAt < u64(1200000)` |
-| u256 | `u256(n)` | `balance > u256(1000000)` |
-| dec | `dec("n.n")` | `score >= dec(3.5)` |
-| str | `str('text')` | `name = str('Bob')` |
-| addr | `addr(0x…)` | `$owner = addr(0xAbC…)` |
-| key | `key(0x…)` | `parent = key(0x123…)` |
-| bytes32 | `bytes32(0x…)` | `hash = bytes32(0xabc…)` |
-
-An untagged number always means `i32`. System block heights (`$expiresAt`, `$createdAt`) must be explicitly tagged as `u64`.
-
-**Synthetic Attributes (use with `$` prefix):**
-
-- `$key` — Entity key
-- `$owner` — Entity owner address (queryable)
-- `$creator` — Entity creator address (queryable)
-- `$expiresAt` — Expiration block (queryable, must use `u64` tag)
-- `$createdAt` — Creation block (queryable, must use `u64` tag)
-- `$updatedAt`, `$creationFlags`, `$contentType`, `$payload` — returned in projections only, not queryable
-
-Use `*` to match all entities (cannot be combined with other predicates).
-
-**Options:**
-
-| Field    | Type       | Description                                      |
-| -------- | ---------- | ------------------------------------------------ |
-| atBlock  | hex string | Query at specific block (default: latest)        |
-| select   | object     | Controls which fields are returned               |
-| limit    | hex/number | Page size, max 200 (default: 100)                |
-| cursor   | string     | Pagination cursor from previous response         |
-
-**select fields** (all opt-in; absent `select` returns key only):
-
-`key`, `owner`, `creator`, `createdAt`, `updatedAt`, `expiresAt`, `creationFlags`, `contentType`, `payload`, `attributeSchema`, `attributes`
-
-**Example — query active NFTs:**
-
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc":"2.0","id":1,
-    "method":"arkiv_query",
-    "params":[
-      "type = str(\"nft\") AND status = str(\"active\")",
-      {"limit":"0xa"}
-    ]
-  }'
-```
-
-**Example — query by owner:**
-
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc":"2.0","id":10,
-    "method":"arkiv_query",
-    "params":[
-      "$owner = addr(0x2222222222222222222222222222222222222222)",
-      null
-    ]
-  }'
-```
-
-**Example — numeric range:**
-
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc":"2.0","id":12,
-    "method":"arkiv_query",
-    "params":["price >= i32(100) AND price <= i32(1000)", null]
-  }'
-```
-
-**Example — prefix match with negation:**
-
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc":"2.0","id":13,
-    "method":"arkiv_query",
-    "params":["name STARTSWITH str(\"test\") AND NOT (status = str(\"deleted\"))", null]
-  }'
-```
-
-**Example — metadata only (omit payload):**
-
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc":"2.0","id":14,
-    "method":"arkiv_query",
-    "params":[
-      "*",
-      {
-        "limit":"0xa",
-        "select":{
-          "key":true,"attributes":true,"payload":false,
-          "contentType":true,"expiresAt":true,
-          "creator":true,"owner":true
-        }
-      }
-    ]
-  }'
-```
-
-**Response structure:**
+`arkiv_query` accepts `[expression, options]`. Allowed options are `atBlock`, `select`, `limit`, `cursor`. `atBlock` is a hexadecimal block string; `limit` is page size, up to 200. A cursor is opaque and bound to expression, snapshot and selection: copy the response value unchanged. For cursor errors, restart the entire walk at a fresh pinned block.
 
 ```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "data": [
-      {
-        "key": "0x...",
-        "contentType": "application/json",
-        "payload": "0x...",
-        "expiresAt": "0x124f80",
-        "creator": "0x...",
-        "owner": "0x...",
-        "createdAt": "0x191",
-        "updatedAt": "0x1bb",
-        "attributes": [
-          { "name": "status", "type": "str", "value": "active" },
-          { "name": "rarity", "type": "i32", "value": 5 }
-        ]
-      }
-    ],
-    "blockNumber": "0x1bc",
-    "cursor": "0x2a"
-  }
-}
+{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":["entity_type = str('nft')",{"limit":100}]}
 ```
 
-**Response encoding notes:**
+This is a single page. For an all-page walk, obtain `eth_blockNumber`, put that returned hex string in `atBlock` on the first request, and retain identical options for subsequent requests while adding the returned cursor.
 
-If you select a field, it appears in the response. If you do not select a field, it does not appear at all. The response never sends an unselected field as `null`.
+Raw text uses single quotes: `str('nft')`. Escape embedded apostrophes by doubling them. Do not interpolate untrusted text without encoding it. The TypeScript helper `str("nft")` is valid TypeScript but those double quotes are invalid in raw query syntax. Raw decimal syntax is `dec(3.5)`, while the TypeScript helper takes `dec("3.5")`.
 
-- `payload` is hex-encoded bytes. Decode it to read the entity content.
-- `createdAt`, `updatedAt`, and `expiresAt` are hex block numbers.
-- When no more pages remain, `cursor` is omitted.
+Typed literals use `str`, `i32`, `u64`, `u256`, `dec`, `addr`, `key`, and `bytes32`; booleans are bare `true` or `false`, not `bool(...)`. Match the stored attribute's type, not a visually equivalent value of another type. `*` is the raw all-entity expression; the SDK builder instead requires a predicate.
 
-The `type` of an attribute decides the JSON encoding of its `value`:
+Comparison, `AND`, `OR`, `NOT` and string-prefix `STARTSWITH` are supported. `ne`, `exists`, and `hasType` are rejected by the node even though SDK exports exist. `NOT (field = value)` includes entities without that field. The documented query API provides no server sort; `STARTSWITH` is its only pattern operator, not full-text search.
 
-- `i32`: a JSON number
-- `u64` and `u256`: a `0x` hex quantity
-- `dec`: a decimal string
-- The byte-shaped types: `0x` bytes
-- `str`: a plain string
-- `bool`: a JSON boolean
+The SDK filters `$key`, `$owner`, `$creator`, `$expiresAt`. Raw RPC also permits `$createdAt` and `$contentType`; do not copy those predicates into the SDK builder. `$expiresAt` and block metadata use u64 block values, not application millisecond timestamps. Application timestamp filters must match the application's chosen type.
 
-**Pagination:**
+## Counts and history
 
-Use the returned `cursor` in the next request:
+- `arkiv_getEntityCount` with no arguments counts chain-wide. A filtered count uses `params: [{ "query": "entity_type = str('nft')" }]`, not a bare expression string. SDK `getEntityCount()` only sends the chain-wide form. A misspelled `filter` field is silently ignored by this node; verify your request shape rather than trusting an apparently successful count.
+- `arkiv_getEntity` takes `[entityKey, block]` for history. Here block is a JSON u64 **number**, unlike the hexadecimal `atBlock` option for queries. Reject unsafe integers in JavaScript before serializing a block; the RPC's type can exceed JavaScript precision.
+- SDK `getEntity()` reads head. A missing entity is not proof it never existed or that past calldata has been erased.
 
-```json
-{"method":"arkiv_query","params":["type = str(\"nft\")",{"cursor":"0x2a","limit":"0x2"}]}
-```
+## Error boundaries
 
-### arkiv_getEntity
+| Code | Observed diagnosis |
+| --- | --- |
+| `-32001` | Query syntax parse error. |
+| `-32002` | Unsupported or invalid typed operation, including the unsupported exported predicates. |
+| `-32003` | Invalid literal, including `str` with double quotes. |
+| `-32005` | Cursor malformed or bound to a different query, block, or selection. |
+| `-32006` | Requested snapshot block is unavailable or ahead of head. |
+| `-32602` | Invalid parameters: unknown options or a non-u64 historical block. |
 
-Read a single entity by key. Returns all fields (full projection).
+Inspect the complete error response. A transport failure, HTTP 429, parse error, empty result, and failed transaction require different recovery. An invalid access key can produce HTTP 401 with `INVALID_KEY` instead of a JSON-RPC error. Do not label a network failure as a valid empty query. Read current rate-limit headers; no fixed monthly quota is promised here. For an unavailable block, preserve a historical request's target rather than silently switching it to head.
 
-**Parameters:**
+## Native write encoding
 
-| Index | Type       | Required | Description                          |
-| ----- | ---------- | -------- | ------------------------------------ |
-| 0     | hex string | Yes      | Entity key                           |
-| 1     | hex string | No       | Block number to read at (historical) |
+Prefer the current TypeScript SDK for writing. Raw callers ABI-encode `execute((uint8 operation, bytes operationData)[] ops)` to `0x4400000000000000000000000000000000000044`. This system entry point is valid despite user-deployed contracts being disabled.
 
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc":"2.0","id":5,
-    "method":"arkiv_getEntity",
-    "params":["0xYOUR_ENTITY_KEY"]
-  }'
-```
+Read `src/entity/operations.ts`, `src/entity/params.ts`, `src/attr/codec.ts` and `src/entity/expiry.ts` from the published SDK before encoding: operation tags, type IDs, byte widths and sorted bytes32 attribute names are protocol data, not guesses. Include required `$payload` and `$contentType` cells on create; their capitalization is a system exception, not permission for uppercase application attributes. `eth_estimateGas` validates calldata without broadcasting or signing.
 
-Returns `null` if the entity does not exist or has expired.
+Check canonical encodings against SDK-generated calldata and the live node. Operation logs are `EntityCreated`, `EntityPatched`, `ExpiryExtended`, `OwnershipTransferred`, `EntityDeleted`; they do not contain payload or attributes. A mirror fetches entity contents separately and sweeps expiration because no expiration log exists.
 
-### arkiv_getEntityCount
-
-Returns total number of entities currently stored. No parameters.
-
-```bash
-curl https://rpc.tiramisu.db-chain.testnet.arkiv.network \
-  -H "content-type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"arkiv_getEntityCount","params":[]}'
-```
-
-Result: plain JSON number (e.g., `18427`).
-
-### arkiv_getBlockTiming
-
-Returns timing for the current head block. No parameters.
-
-Response:
-
-```json
-{
-  "result": {
-    "current_block": 582143,
-    "current_block_time": 1742721127,
-    "duration": 2
-  }
-}
-```
-
-- `current_block_time` — Unix timestamp in seconds
-- `duration` — seconds since previous block
+Sources: published SDK 0.8.1 query expression renderer, select builder, entity operation encoders and event ABI; live Tiramisu RPC checks on 2026-10-05. Recheck raw capabilities when the server changes.
