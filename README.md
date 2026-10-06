@@ -5,32 +5,113 @@ Agent skills for working with [Arkiv](https://arkiv.network) — the Web3 databa
 ## Available skills
 
 | Skill | What it does |
-|-------|--------------|
-| [`arkiv-best-practices`](skills/arkiv-best-practices) | Best practices, patterns, and practical examples for building on Arkiv. Covers the SDK, entities, attributes, queries, and expiration. |
-| [`arkiv-feedback`](skills/arkiv-feedback) | Walks the user through reporting a bug or feature request to [`Arkiv-Network/reported-issues`](https://github.com/Arkiv-Network/reported-issues), then submits it via `gh` (with a graceful fallback when `gh` isn't available). |
+| --- | --- |
+| [`arkiv`](skills/arkiv/SKILL.md) | Routes Arkiv tasks to the appropriate focused skill. |
+| [`arkiv-first-write`](skills/arkiv-first-write/SKILL.md) | Sets up Tiramisu and verifies a first entity and read-back. |
+| [`arkiv-data-modeling`](skills/arkiv-data-modeling/SKILL.md) | Designs attributes, payloads, relations, and schema mappings. |
+| [`arkiv-query`](skills/arkiv-query/SKILL.md) | Builds typed queries, pinned pagination, counts, and historical reads. |
+| [`arkiv-entity-lifecycle`](skills/arkiv-entity-lifecycle/SKILL.md) | Explains flags, patching, ownership, deletion, and backup/restore. |
+| [`arkiv-entity-expiration`](skills/arkiv-entity-expiration/SKILL.md) | Chooses expiration deadlines and reconciles Lifetime Extension. |
+| [`arkiv-write-safety`](skills/arkiv-write-safety/SKILL.md) | Serializes bounded batches and reconciles uncertain transaction outcomes. |
+| [`arkiv-app-integration`](skills/arkiv-app-integration/SKILL.md) | Connects browser wallets, authenticated server routes, DTOs, and events. |
+| [`arkiv-security-trust`](skills/arkiv-security-trust/SKILL.md) | Defines public-data, publisher, signer, and authorization boundaries. |
+| [`arkiv-troubleshooting`](skills/arkiv-troubleshooting/SKILL.md) | Diagnoses exact errors, missing results, and stale reads. |
+| [`arkiv-encryption`](skills/arkiv-encryption/SKILL.md) | Encrypts payloads and explains key custody and remaining metadata exposure. |
+| [`arkiv-large-files`](skills/arkiv-large-files/SKILL.md) | Plans chunks, images, and hybrid pointers; current package adoption is gated. |
+| [`arkiv-social-graph`](skills/arkiv-social-graph/SKILL.md) | Models relationships and scopes arkiv-graph visualization. |
+| [`arkiv-indexing`](skills/arkiv-indexing/SKILL.md) | Builds Arkiv-to-app projections; incompatible ingestion packages stay gated. |
+| [`arkiv-feedback`](skills/arkiv-feedback/SKILL.md) | Prepares sanitized bug/feature reports and submits only with authorization. |
+| [`arkiv-mcp`](skills/arkiv-mcp/SKILL.md) | Documents read-only profiles and tool/schema checks for an existing connection. |
+| [`arkiv-best-practices`](skills/arkiv-best-practices/SKILL.md) | Deprecated compatibility entrypoint; start with arkiv. |
 
 ## Installation
 
-Install a single skill:
+This branch is a release preview. The official repository commands below require the plugin and focused skills to be merged into the upstream default branch. For local review, use this checkout with the host's local-plugin loader.
+
+<!-- arkiv-install:start -->
+
+### Full plugin
+
+The plugin bundles the skills, an MCP connection, and project guidance. It does not install the Arkiv SDK or fund a wallet. Use `arkiv-first-write` to set up the SDK and verify a first entity.
+
+**Claude Code**
+
+```bash
+claude plugin marketplace add Arkiv-Network/skills
+claude plugin install arkiv@arkiv
+```
+
+Restart the session. The SessionStart hook adds the rules when the project package.json declares @arkiv-network/sdk. Skills are namespaced: start with `arkiv:arkiv`.
+
+**Codex**
+
+```bash
+codex plugin marketplace add Arkiv-Network/skills
+codex plugin add arkiv@arkiv
+```
+
+Restart Codex and load `arkiv` for an Arkiv task. Review the plugin hooks before trusting them; installation alone does not enable untrusted hooks. Until then, ask your agent to append the [project rules](templates/AGENTS.snippet.md) to your project AGENTS.md while preserving its existing guidance.
+
+**Cursor**
+
+Copy this repository into a new folder at `~/.cursor/plugins/local/arkiv`, then restart Cursor or run Developer: Reload Window. In Customize, confirm the skills, the MCP connection, and the Arkiv rule. The plugin supplies an always-apply rule. External symlinks are skipped; organization policy can block local imports.
+
+A Cursor marketplace install requires a reviewed listing. See the [official local installation instructions](https://cursor.com/docs/plugins#test-plugins-locally).
+
+### Individual skills
+
+Use this route for skills without the plugin. Start with the router; replace its name to install another skill from the index above.
 
 ```bash
 # npm
-npx skills add https://github.com/Arkiv-Network/skills --skill arkiv-best-practices
-npx skills add https://github.com/Arkiv-Network/skills --skill arkiv-feedback
+npx skills add Arkiv-Network/skills --skill arkiv
 
 # pnpm
-pnpm dlx skills add https://github.com/Arkiv-Network/skills --skill arkiv-best-practices
-pnpm dlx skills add https://github.com/Arkiv-Network/skills --skill arkiv-feedback
+pnpm dlx skills add Arkiv-Network/skills --skill arkiv
 ```
 
-Install everything in this repo at once:
+The default scope is the current project. Add `--global` for your user account. Check `npx skills --help` for host selection. Maintainers can use `--all` to install every skill into every supported agent without prompts; use the selected-skill route for a focused install.
+
+### MCP only
+
+Endpoint: [https://mcp.arkiv.network/](https://mcp.arkiv.network/). This connects source discovery and available profile tools; it does not install local skills or project rules. It never signs entity transactions. Optional feedback tools require consent before sharing data.
 
 ```bash
-# npm
-npx skills add https://github.com/Arkiv-Network/skills --all
+# Claude Code: personal connection available across projects
+claude mcp add --transport http --scope user arkiv https://mcp.arkiv.network/
 
-# pnpm
-pnpm dlx skills add https://github.com/Arkiv-Network/skills --all
+# Codex: personal connection
+codex mcp add arkiv --url https://mcp.arkiv.network/
 ```
 
-Pass `-g` / `--global` to install at the user level instead of the current project. See `npx skills --help` (or `pnpm dlx skills --help`) for the full set of flags.
+For Cursor, add this server through its MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "arkiv": {
+      "url": "https://mcp.arkiv.network/"
+    }
+  }
+}
+```
+
+When using the full plugin, use its bundled connection instead of adding a second copy. Host approval and authentication policies still apply.
+
+### Install prompt for other agents
+
+Paste this into your agent and review the proposed host configuration and project-rule edits:
+
+> Install the Arkiv skills from https://github.com/Arkiv-Network/skills, starting with arkiv. If I choose MCP tools, configure https://mcp.arkiv.network/ using this host's supported MCP format. Read templates/AGENTS.snippet.md from that repository and propose appending its Arkiv rules to my project AGENTS.md, preserving existing instructions. Ask before changing host settings or that file. Load the arkiv router for Arkiv tasks. Keep credentials out of source code, URLs and chat.
+
+### Verification and maintenance
+
+This release targets SDK >=0.8.1 <0.9 and Tiramisu (chain ID 7738577). Skills declare their checked SDK range, network, and date. These declarations do not certify a completed funded test or current service health.
+
+Installation files come from `plugin.config.json` and `source/always-on.md`. Regenerate them with `node scripts/build-plugin.mjs`; verify freshness with `node scripts/build-plugin.mjs --check` and content with `node scripts/check-static.mjs`.
+
+Host formats: [Claude Code](https://code.claude.com/docs/en/plugins-reference), [Codex](https://developers.openai.com/plugins/build/plugins), [Cursor](https://cursor.com/docs/reference/plugins).
+
+Licensed under [MIT](LICENSE).
+
+<!-- arkiv-install:end -->

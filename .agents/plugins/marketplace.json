@@ -1,0 +1,20 @@
+{
+  "name": "arkiv",
+  "interface": {
+    "displayName": "Arkiv"
+  },
+  "plugins": [
+    {
+      "name": "arkiv",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

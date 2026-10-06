@@ -1,0 +1,640 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "arkiv-trigger",
+      "skill": "arkiv",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-negative",
+      "skill": "arkiv",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-outcome",
+      "skill": "arkiv",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-first-write-trigger",
+      "skill": "arkiv-first-write",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-first-write-negative",
+      "skill": "arkiv-first-write",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-first-write-outcome",
+      "skill": "arkiv-first-write",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-data-modeling-trigger",
+      "skill": "arkiv-data-modeling",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-data-modeling/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-data-modeling-negative",
+      "skill": "arkiv-data-modeling",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-data-modeling/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-data-modeling-outcome",
+      "skill": "arkiv-data-modeling",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-data-modeling/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-query-trigger",
+      "skill": "arkiv-query",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-query/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-query-negative",
+      "skill": "arkiv-query",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-query/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-query-outcome",
+      "skill": "arkiv-query",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-query/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-entity-lifecycle-trigger",
+      "skill": "arkiv-entity-lifecycle",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-entity-lifecycle/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-entity-lifecycle-negative",
+      "skill": "arkiv-entity-lifecycle",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-entity-lifecycle/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-entity-lifecycle-outcome",
+      "skill": "arkiv-entity-lifecycle",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-entity-lifecycle/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-entity-expiration-trigger",
+      "skill": "arkiv-entity-expiration",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-entity-expiration/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-entity-expiration-negative",
+      "skill": "arkiv-entity-expiration",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-entity-expiration/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-entity-expiration-outcome",
+      "skill": "arkiv-entity-expiration",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-entity-expiration/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-write-safety-trigger",
+      "skill": "arkiv-write-safety",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-write-safety/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-write-safety-negative",
+      "skill": "arkiv-write-safety",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-write-safety/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-write-safety-outcome",
+      "skill": "arkiv-write-safety",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-write-safety/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-app-integration-trigger",
+      "skill": "arkiv-app-integration",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-app-integration/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-app-integration-negative",
+      "skill": "arkiv-app-integration",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-app-integration/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-app-integration-outcome",
+      "skill": "arkiv-app-integration",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-app-integration/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-security-trust-trigger",
+      "skill": "arkiv-security-trust",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-security-trust/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-security-trust-negative",
+      "skill": "arkiv-security-trust",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-security-trust/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-security-trust-outcome",
+      "skill": "arkiv-security-trust",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-security-trust/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-troubleshooting-trigger",
+      "skill": "arkiv-troubleshooting",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-troubleshooting/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-troubleshooting-negative",
+      "skill": "arkiv-troubleshooting",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-troubleshooting/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-troubleshooting-outcome",
+      "skill": "arkiv-troubleshooting",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-troubleshooting/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-encryption-trigger",
+      "skill": "arkiv-encryption",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-encryption/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-encryption-negative",
+      "skill": "arkiv-encryption",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-encryption/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-encryption-outcome",
+      "skill": "arkiv-encryption",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-encryption/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-large-files-trigger",
+      "skill": "arkiv-large-files",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-large-files/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-large-files-negative",
+      "skill": "arkiv-large-files",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-large-files/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-large-files-outcome",
+      "skill": "arkiv-large-files",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-large-files/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-social-graph-trigger",
+      "skill": "arkiv-social-graph",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-social-graph/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-social-graph-negative",
+      "skill": "arkiv-social-graph",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-social-graph/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-social-graph-outcome",
+      "skill": "arkiv-social-graph",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-social-graph/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-indexing-trigger",
+      "skill": "arkiv-indexing",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-indexing/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-indexing-negative",
+      "skill": "arkiv-indexing",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-indexing/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-indexing-outcome",
+      "skill": "arkiv-indexing",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-indexing/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-feedback-trigger",
+      "skill": "arkiv-feedback",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-feedback/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-feedback-negative",
+      "skill": "arkiv-feedback",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-feedback/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-feedback-outcome",
+      "skill": "arkiv-feedback",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-feedback/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-mcp-trigger",
+      "skill": "arkiv-mcp",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-mcp/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-mcp-negative",
+      "skill": "arkiv-mcp",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-mcp/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-mcp-outcome",
+      "skill": "arkiv-mcp",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-mcp/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-best-practices-trigger",
+      "skill": "arkiv-best-practices",
+      "category": "trigger",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-best-practices/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-best-practices-negative",
+      "skill": "arkiv-best-practices",
+      "category": "negative",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-best-practices/SKILL.md"
+      ]
+    },
+    {
+      "id": "arkiv-best-practices-outcome",
+      "skill": "arkiv-best-practices",
+      "category": "outcome",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-best-practices/SKILL.md"
+      ]
+    },
+    {
+      "id": "multi-encrypted-expiring",
+      "skills": [
+        "arkiv-encryption",
+        "arkiv-entity-expiration"
+      ],
+      "category": "integration",
+      "sources": [
+        "skills/arkiv-encryption/SKILL.md",
+        "skills/arkiv-entity-expiration/SKILL.md"
+      ]
+    },
+    {
+      "id": "adversarial-untrusted-payload",
+      "skills": [
+        "arkiv-security-trust"
+      ],
+      "category": "integration",
+      "sources": [
+        "skills/arkiv-security-trust/SKILL.md"
+      ]
+    },
+    {
+      "id": "adversarial-rpc-url",
+      "skills": [
+        "arkiv-security-trust",
+        "arkiv-first-write"
+      ],
+      "category": "integration",
+      "sources": [
+        "skills/arkiv-security-trust/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md",
+        "skills/arkiv-troubleshooting/SKILL.md"
+      ]
+    },
+    {
+      "id": "adversarial-key-custody",
+      "skills": [
+        "arkiv-security-trust",
+        "arkiv-mcp"
+      ],
+      "category": "integration",
+      "sources": [
+        "skills/arkiv-security-trust/SKILL.md",
+        "skills/arkiv-mcp/SKILL.md"
+      ]
+    },
+    {
+      "id": "version-mismatch",
+      "skills": [
+        "arkiv",
+        "arkiv-troubleshooting"
+      ],
+      "category": "integration",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-troubleshooting/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-version-without-block",
+      "category": "always-on",
+      "rule": "version",
+      "blockVariant": "without-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-version-with-block",
+      "category": "always-on",
+      "rule": "version",
+      "blockVariant": "with-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-names-without-block",
+      "category": "always-on",
+      "rule": "names",
+      "blockVariant": "without-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-names-with-block",
+      "category": "always-on",
+      "rule": "names",
+      "blockVariant": "with-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-timestamps-without-block",
+      "category": "always-on",
+      "rule": "timestamps",
+      "blockVariant": "without-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-timestamps-with-block",
+      "category": "always-on",
+      "rule": "timestamps",
+      "blockVariant": "with-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-custody-without-block",
+      "category": "always-on",
+      "rule": "custody",
+      "blockVariant": "without-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-custody-with-block",
+      "category": "always-on",
+      "rule": "custody",
+      "blockVariant": "with-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-native-without-block",
+      "category": "always-on",
+      "rule": "native",
+      "blockVariant": "without-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-native-with-block",
+      "category": "always-on",
+      "rule": "native",
+      "blockVariant": "with-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-router-without-block",
+      "category": "always-on",
+      "rule": "router",
+      "blockVariant": "without-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    },
+    {
+      "id": "rule-router-with-block",
+      "category": "always-on",
+      "rule": "router",
+      "blockVariant": "with-block",
+      "sources": [
+        "skills/arkiv/SKILL.md",
+        "skills/arkiv-first-write/SKILL.md"
+      ]
+    }
+  ]
+}

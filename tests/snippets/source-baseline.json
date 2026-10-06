@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "checkedAt": "2026-10-06T11:40:17.234Z",
+  "sdk": {
+    "package": "@arkiv-network/sdk",
+    "version": "0.8.1",
+    "integrity": "sha512-J2Qn7OOPZet5qGtN2XwLkSEnzk70FZCYDNclS/a4vrYBmsW4xgblTXWrczZXAhD2x4unSgGQwqpGZkBta/x7ow=="
+  },
+  "docs": [
+    {
+      "url": "https://docs.arkiv.network/json-rpc/querying-data/",
+      "skills": [
+        "arkiv",
+        "arkiv-first-write",
+        "arkiv-query",
+        "arkiv-troubleshooting"
+      ],
+      "sha256": "b39970b335c51fef56c9d18a2f5aef8a46d1161bf68b216a7362fa7a80c784e1"
+    },
+    {
+      "url": "https://docs.arkiv.network/start-here/access-keys/",
+      "skills": [
+        "arkiv",
+        "arkiv-app-integration",
+        "arkiv-troubleshooting"
+      ],
+      "sha256": "152a477ef8f80f4de11b5305cf3c47bbfd67741966297d408b8a37b8ebac9f3d"
+    },
+    {
+      "url": "https://docs.arkiv.network/start-here/fundamentals/",
+      "skills": [
+        "arkiv",
+        "arkiv-data-modeling",
+        "arkiv-entity-expiration",
+        "arkiv-security-trust"
+      ],
+      "sha256": "ce15d896a987e20843ba2edde745c2e748ae771f5dc63c8abc437704a6232330"
+    },
+    {
+      "url": "https://docs.arkiv.network/networks/tiramisu/",
+      "skills": [
+        "arkiv",
+        "arkiv-app-integration"
+      ],
+      "sha256": "ba7a777c270088839fa179158222f62acb842652c1b0a58f3522ece5b93480b9"
+    },
+    {
+      "url": "https://docs.arkiv.network/typescript-sdk/live-events/",
+      "skills": [
+        "arkiv-app-integration"
+      ],
+      "sha256": "5fa965c589095d3e131f48b07212bc52c82b119f4b483ab6e015029a74743240"
+    },
+    {
+      "url": "https://docs.arkiv.network/typescript-sdk/querying-data/",
+      "skills": [
+        "arkiv-data-modeling",
+        "arkiv-entity-lifecycle",
+        "arkiv-indexing",
+        "arkiv-query"
+      ],
+      "sha256": "fd6f208530c1708fb8f802b64865d9de5e36e397caee1043f98fb529adb4f2d9"
+    },
+    {
+      "url": "https://docs.arkiv.network/json-rpc/mutating-entities/",
+      "skills": [
+        "arkiv-data-modeling",
+        "arkiv-entity-expiration",
+        "arkiv-entity-lifecycle",
+        "arkiv-indexing",
+        "arkiv-query",
+        "arkiv-security-trust",
+        "arkiv-write-safety"
+      ],
+      "sha256": "3af93e90c3a1336b57c1231c3c4532da66feac2e2827bb9d2b87987322af7873"
+    },
+    {
+      "url": "https://docs.arkiv.network/typescript-sdk/api-reference/query/classes/queryerror/",
+      "skills": [
+        "arkiv-first-write"
+      ],
+      "sha256": "d4eab774351b15b5f9127bf207f2d8bcae5d3289ff8ec417f834c9276541f09c"
+    }
+  ]
+}

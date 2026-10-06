@@ -1,141 +1,54 @@
-# Advanced Data Modeling Patterns
+# Data modeling
 
-Patterns for handling type safety and complex relationships in Arkiv. All examples target `@arkiv-network/sdk@0.8.0-dev.3`.
+Use attributes for indexed filters and payloads for nested data. Validate decoded payloads before using them; a generic type does not validate data. Reuse the parser pattern in [integration patterns](integration-patterns.md) or the project's installed schema library.
 
-## Table of Contents
+Names start with a lowercase letter, then use lowercase letters, digits and `_`; avoid reserved query words. Index `project`, `entity_type`, application IDs, status and queryable timestamps. Store timestamps with `u64`, and use that constructor in predicates. Respect 30 application attributes on create. A schema validator cannot prevent another wallet from writing matching namespace values: scope trusted reads by creator and inspect mutable ownership.
 
-- [Advanced Data Modeling Patterns](#advanced-data-modeling-patterns)
-  - [Table of Contents](#table-of-contents)
-  - [Validate Entity Data with a Schema Library](#validate-entity-data-with-a-schema-library)
-  - [Model Lists with Relationship Entities](#model-lists-with-relationship-entities)
+## Relationship entities
 
----
-
-## Validate Entity Data with a Schema Library
-
-`entity.toJson()` (available when the query selects `payload`) returns `any` in TypeScript — the SDK types which *fields* were selected, but not the payload's shape. Always validate the shape of data you read from Arkiv using a schema validation library (e.g., `zod`, `valibot`, `yup`). Before adding a new library, check if the project already uses one.
+There is no indexed array attribute. Model each queryable membership as an entity. This two-transaction pattern uses a stable application ID as the join; it does not require predicting a chain key. Treat the second write as independently recoverable: the first may have succeeded when membership creation fails.
 
 ```typescript
-import { z } from "zod"; // or use whatever validation library the project already has
+import {
+  createWalletClient, createPublicClient, ExpirationTime, jsonToPayload,
+} from "@arkiv-network/sdk"
+import { eq } from "@arkiv-network/sdk/query"
 
-const PostSchema = z.object({
-  title: z.string(),
-  content: z.string(),
-  author: z.string().optional(),
-});
+type Wallet = ReturnType<typeof createWalletClient>
+type Reader = ReturnType<typeof createPublicClient>
 
-type Post = z.infer<typeof PostSchema>;
-
-function parsePost(entity: { toJson(): unknown }): Post {
-  const raw = entity.toJson()
-  const result = PostSchema.safeParse(raw)
-  if (!result.success) {
-    console.error("Invalid entity data:", result.error.flatten())
-    throw new Error("Entity data does not match expected schema")
-  }
-  return result.data;
-}
-
-// Usage in queries
-const result = await publicClient
-  .select({ key: true, payload: true })
-  .where(
-    eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
-    eq("entityType", "post"),
-  )
-  .fetch();
-
-const posts: Post[] = result.entities
-  .map((entity) => {
-    try {
-      return parsePost(entity);
-    } catch {
-      return null;
-    }
-  })
-  .filter((post): post is Post => post !== null);
-```
-
-This protects against:
-
-- Other projects accidentally writing to your attribute namespace
-- Data format changes between versions
-- Corrupted or malformed payloads
-
----
-
-## Model Lists with Relationship Entities
-
-Arkiv attributes are flat key-value pairs — there is no native array type. A common mistake is trying to encode lists into attributes:
-
-```typescript
-// BAD — indexed attribute keys. Can't query "all profiles with skill frontend"
-attributes: {
-  skills_0: "frontend",
-  skills_1: "backend",
-  skills_2: "devops",
-}
-
-// BAD — comma-separated string. Can't query individual skills
-attributes: {
-  skills: "frontend, backend, devops",
-}
-```
-
-Both approaches break querying. You can't efficiently find "all profiles that have the `frontend` skill" without fetching everything and filtering client-side.
-
-**The correct pattern:** Create separate **relationship entities** that link the parent entity to each value. This is the relational model — one entity per relationship:
-
-```typescript
-import { jsonToPayload, ExpirationTime } from "@arkiv-network/sdk"
-
-// 1. Create the profile entity
-const { entityKey: profileKey } = await walletClient.createEntity({
-  payload: jsonToPayload({ name: "Alice", bio: "Full-stack dev" }),
-  contentType: "application/json",
-  attributes: {
-    [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
-    entityType: "profile",
-    profileId: "alice-123",
-  },
-  expires: ExpirationTime.fromDays(30),
-})
-
-// 2. Create one relationship entity per skill
-const skills = ["frontend", "backend", "devops"]
-await walletClient.executeBatch({
-  creates: skills.map((skill) => ({
-    payload: jsonToPayload({ profileId: "alice-123", skill }),
-    contentType: "application/json",
-    attributes: {
-      [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
-      entityType: "profileSkill",
-      profileId: "alice-123",
-      skill,
-    },
+export async function createProfileWithSkills(wallet: Wallet, profileId: string) {
+  const profile = await wallet.createEntity({
+    payload: jsonToPayload({ name: "Alice" }), contentType: "application/json",
+    attributes: { project: "example_profiles", entity_type: "profile", profile_id: profileId },
     expires: ExpirationTime.fromDays(30),
-  })),
-});
+  })
+  const memberships = await wallet.executeBatch({
+    creates: ["frontend", "backend"].map(skill => ({
+      payload: new Uint8Array(), contentType: "application/octet-stream",
+      attributes: {
+        project: "example_profiles", entity_type: "profile_skill",
+        profile_id: profileId, skill,
+      },
+      expires: ExpirationTime.fromDays(30),
+    })),
+  })
+  return { profile, memberships }
+}
 
-// 3. Query all profiles with "frontend" skill — fast and indexed
-const frontendDevs = await publicClient
-  .select({ key: true, payload: true })
-  .where(
-    eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
-    eq("entityType", "profileSkill"),
-    eq("skill", "frontend"),
-  )
-  .fetch();
-
-// 4. Query all skills for a specific profile
-const aliceSkills = await publicClient
-  .select({ key: true, payload: true })
-  .where(
-    eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
-    eq("entityType", "profileSkill"),
-    eq("profileId", "alice-123"),
-  )
-  .fetch();
+export async function findFrontendMemberships(reader: Reader) {
+  return reader.select({ key: true, attributes: true })
+    .where(eq("project", "example_profiles"), eq("entity_type", "profile_skill"), eq("skill", "frontend"))
+    .limit(100).fetch()
+}
 ```
 
-This pattern applies to any one-to-many or many-to-many relationship: tags, categories, permissions, memberships, etc.
+The query returns memberships, not profiles. Follow their `profile_id` values to fetch profiles, and paginate if the result set is larger than one page. For trust, add your application's creator or ownership policy. Namespace filtering alone is not authenticity.
+
+Application IDs are strings and do not imply uniqueness. Serialize or coordinate writers and reconcile existing IDs before seeding; query-then-create races under concurrency. Duplicate memberships need an application policy. Expiration of either endpoint leaves dangling relationships; decide whether to hide, preserve or recreate them. Align lifetimes and verify actual expiration blocks, since separate transactions can land at different heights.
+
+For direct chain-key relations, store a typed `key(parentKey)` attribute and query it with the same constructor. A same-batch parent/child create can use predicted entity keys, but only with custody of the entity-minting nonce and known salts in exact create order. Concurrent creates from that owner invalidate predictions. A bare hex string is `str`, not `key`.
+
+Schema versioning belongs in an explicit attribute or validated payload. Soft deletion is an application status filter, not erasure; remember to apply it in every reader. Counts and aggregates need raw filtered count or client-side computation; SQL joins and server ordering are not available from the builder.
+
+Sources checked on 2026-10-05: published SDK 0.8.1 attribute values, key derivation, create and batch encoders, and query builder. The example demonstrates two transactions and one membership page, not an atomic upsert or all-page join.

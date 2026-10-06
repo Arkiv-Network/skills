@@ -1,345 +1,99 @@
-# Arkiv Integration Patterns
+# Integration patterns
 
-The three most common integration scenarios for Arkiv applications. All examples target `@arkiv-network/sdk@0.8.0-dev.3` on the Tiramisu testnet.
+Use the SDK for Tiramisu. Check the application's installed versions and conventions before adapting these examples. They export functions and do not run writes on import.
 
-## Table of Contents
+## Server boundary
 
-- [Arkiv Integration Patterns](#arkiv-integration-patterns)
-  - [Table of Contents](#table-of-contents)
-  - [Backend Read/Write](#backend-readwrite)
-  - [Client-Side Reading](#client-side-reading)
-  - [Client-Side Writing](#client-side-writing)
-    - [Option A: Manual MetaMask integration](#option-a-manual-metamask-integration)
-    - [Option B: Wagmi / RainbowKit integration (recommended for dApps)](#option-b-wagmi--rainbowkit-integration-recommended-for-dapps)
-  - [Live Events with TanStack Query](#live-events-with-tanstack-query)
+- Keep signing keys and access keys on the server. Access keys use `X-API-KEY` headers; public RPC URLs contain no credential. An access key does not pay gas.
+- Authenticate first; authorize the specific operation, verify ownership where needed, validate input, and rate-limit before signing. Derive an actor from the verified session, never from a request body alone.
+- A shared signer owns the entities it creates. User-session authorization must then be enforced by your backend; namespace attributes cannot enforce it on-chain. Serialize its write queue to avoid nonce collisions.
+- Use the project's existing session and authorization implementation. A placeholder auth check that returns true is not a working endpoint. Add CSRF defenses when cookie authentication is used.
+- Bound read-proxy filters, page size, total pages and response size. Rate-limit public read endpoints separately; never expose a generic credentialed RPC proxy.
+- For fresh Next.js reads, use `http(url, { fetchOptions: { cache: "no-store" } })`; inspect route, application, service-worker and CDN caches too. Do not cache authenticated API routes in a service worker.
+- Convert bigint fields to decimal strings explicitly in response DTOs. Do not return `QueryResult` or whole entities through `Response.json`.
 
----
+## Validate payloads and keep entity identity
 
-## Backend Read/Write
-
-For server-side applications (Next.js API routes, Express, any Node.js backend). The private key lives in environment variables — never in client code.
+Use the application's existing validation library or a specific runtime parser. A TypeScript generic does not validate `toJson()` output. This complete parser drops unrecognized fields and attaches the chain key after validation, so a payload cannot overwrite it.
 
 ```typescript
-// lib/arkiv-server.ts
-import { createWalletClient, createPublicClient, ExpirationTime, jsonToPayload } from "@arkiv-network/sdk"
-import { tiramisu } from "@arkiv-network/sdk/chains"
-import { eq } from "@arkiv-network/sdk/query"
-import { http } from "viem"
-import { privateKeyToAccount } from "viem/accounts"
-import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "./arkiv"
+import type { Hex } from "viem"
 
-// Include your API key in the URL: https://rpc.tiramisu.db-chain.testnet.arkiv.network/<api-key>
-// Obtained from the Arkiv Hub: https://hub.arkiv.network
-const rpcUrl = process.env.TIRAMISU_RPC_URL
+export type Post = { title: string; content: string }
+export type StoredPost = Post & { arkivEntityKey: Hex }
 
-
-const walletClient = createWalletClient({
-  chain: tiramisu,
-  transport: http(rpcUrl),
-  account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
-});
-
-const publicClient = createPublicClient({
-  chain: tiramisu,
-  transport: http(rpcUrl),
-});
-
-// Write example
-export async function createPost(title: string, content: string) {
-  const { entityKey, txHash } = await walletClient.createEntity({
-    payload: jsonToPayload({ title, content }),
-    contentType: "application/json",
-    attributes: {
-      [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
-      entityType: "post",
-      created: Date.now(),
-    },
-    expires: ExpirationTime.fromDays(30),
-  })
-  return { entityKey, txHash }
+export function parsePost(raw: unknown): Post {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error("Post payload must be an object")
+  }
+  if (!("title" in raw) || typeof raw.title !== "string" ||
+      !("content" in raw) || typeof raw.content !== "string") {
+    throw new Error("Invalid post payload")
+  }
+  return { title: raw.title, content: raw.content }
 }
 
-// Read example
-export async function getPosts() {
-  const result = await publicClient
-    .select({ key: true, payload: true })
-    .where(
-      eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
-      eq("entityType", "post"),
-    )
-    .limit(50)
-    .fetch()
-  return result
-}
-
-export async function updatePostStatus(entityKey: `0x${string}`, status: string) {
-  const { txHash } = await walletClient.patchEntity({
-    entityKey,
-    set: { status },
-  })
-  return { txHash }
+export function postDto(entity: { key: Hex; toJson(): unknown }): StoredPost {
+  return { ...parsePost(entity.toJson()), arkivEntityKey: entity.key }
 }
 ```
 
-Use in a Next.js API route:
+A React/TanStack Query hook should retain `StoredPost[]` as its result type, including `arkivEntityKey`. Query keys include chain ID, relevant account or trusted publisher, namespace, entity type and filters. Changing account or chain must clear stale write state and choose the new cache scope. If a detail query has no key, disable it and still guard its query function; do not use a non-null assertion to bypass connection or input checks.
 
-```typescript
-// app/api/posts/route.ts
-import { createPost, getPosts } from "@/lib/arkiv-server"
+## Browser wallet
 
-export async function GET() {
-  const posts = await getPosts()
-  return Response.json(posts)
-}
-
-export async function POST(request: Request) {
-  const { title, content } = await request.json()
-  const result = await createPost(title, content)
-  return Response.json(result)
-}
-```
-
-Or in Express:
-
-```typescript
-import express from "express"
-import { createPost, getPosts } from "./lib/arkiv-server"
-
-const app = express()
-app.use(express.json())
-
-app.get("/posts", async (req, res) => {
-  const posts = await getPosts()
-  res.json(posts)
-})
-
-app.post("/posts", async (req, res) => {
-  const { title, content } = req.body
-  const result = await createPost(title, content)
-  res.json(result)
-})
-
-app.listen(3000)
-```
-
----
-
-## Client-Side Reading
-
-For frontend applications that only need to query data. Uses a public client — no private key, safe to run in the browser.
-
-```typescript
-// lib/arkiv-queries.ts
-import { createPublicClient } from "@arkiv-network/sdk"
-import { tiramisu } from "@arkiv-network/sdk/chains"
-import { eq } from "@arkiv-network/sdk/query"
-import { http } from "viem"
-import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "@/lib/arkiv"
-
-export const publicClient = createPublicClient({
-  chain: tiramisu,
-  transport: http(process.env.NEXT_PUBLIC_TIRAMISU_RPC_URL),
-})
-
-export async function fetchEntitiesByType<T>(entityType: string): Promise<(T & { arkivEntityKey: string })[]> {
-  const result = await publicClient
-    .select({ key: true, payload: true })
-    .where(
-      eq(PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE),
-      eq("entityType", entityType),
-    )
-    .limit(50)
-    .fetch()
-
-  return result.entities
-    .map((entity) => {
-      try {
-        return { arkivEntityKey: entity.key!, ...entity.toJson() }
-      } catch {
-        return null
-      }
-    })
-    .filter((item): item is T & { arkivEntityKey: string } => item !== null)
-}
-
-export async function fetchEntityByKey<T>(entityKey: string): Promise<T> {
-  const entity = await publicClient.getEntity(entityKey as `0x${string}`)
-  return entity.toJson()
-}
-```
-
-Wrap them in hooks with TanStack Query (`@tanstack/react-query`):
-
-```typescript
-// hooks/useArkivQuery.ts
-import { useQuery } from "@tanstack/react-query"
-import { fetchEntitiesByType, fetchEntityByKey } from "@/lib/arkiv-queries"
-
-export function useArkivQuery<T>(entityType: string) {
-  return useQuery<T[]>({
-    queryKey: ["arkiv", "entities", entityType],
-    queryFn: () => fetchEntitiesByType<T>(entityType),
-  })
-}
-
-export function useArkivEntity<T>(entityKey: string | null) {
-  return useQuery<T>({
-    queryKey: ["arkiv", "entity", entityKey],
-    queryFn: () => fetchEntityByKey<T>(entityKey!),
-    enabled: !!entityKey,
-  })
-}
-```
-
-Usage in components:
-
-```tsx
-// components/PostList.tsx
-import { useArkivQuery } from "@/hooks/useArkivQuery"
-
-interface Post {
-  title: string
-  content: string
-}
-
-function PostList() {
-  const { data: posts, isLoading, error } = useArkivQuery<Post>("post")
-
-  if (isLoading) return <p>Loading...</p>
-  if (error) return <p>Error: {error.message}</p>
-
-  return (
-    <ul>
-      {posts?.map((post) => (
-        <li key={post.arkivEntityKey}>{post.title}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-> **Tip:** Every Arkiv entity has a unique `entity.key`. The fetcher merges it as `arkivEntityKey` into each item — use this as your React key instead of array indices.
-> **Note:** `useEffect` + `useState` for data fetching is an anti-pattern — it doesn't handle caching, race conditions, deduplication, or background refetching. Always use a data-fetching library.
-
----
-
-## Client-Side Writing
-
-For dApps where the user's own wallet signs transactions. Two approaches depending on your stack.
-
-### Option A: Manual MetaMask integration
-
-**Adding the Arkiv network to MetaMask:**
-
-```typescript
-async function addArkivNetwork() {
-  await window.ethereum.request({
-    method: "wallet_addEthereumChain",
-    params: [{
-      chainId: "0x7614d1",
-      chainName: "Arkiv Tiramisu Testnet",
-      nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
-      rpcUrls: ["https://rpc.tiramisu.db-chain.testnet.arkiv.network"],
-      blockExplorerUrls: ["https://indexer.tiramisu.db-chain.testnet.arkiv.network"],
-    }],
-  })
-}
-```
-
-**Creating a wallet client from MetaMask:**
+Ask the injected wallet to connect and switch to Tiramisu. If switching returns code 4902, add the chain and switch again. Include the explorer explicitly: the SDK chain export does not supply `blockExplorers`.
 
 ```typescript
 import { createWalletClient } from "@arkiv-network/sdk"
 import { tiramisu } from "@arkiv-network/sdk/chains"
-import { custom } from "viem"
+import { custom, isAddress, type EIP1193Provider } from "viem"
 
-await addArkivNetwork()
-await window.ethereum.request({ method: "eth_requestAccounts" })
-
-const walletClient = createWalletClient({
-  chain: tiramisu,
-  transport: custom(window.ethereum),
-})
-```
-
-### Option B: Wagmi / RainbowKit integration (recommended for dApps)
-
-```tsx
-import { useAccount, useWalletClient } from "wagmi"
-import { createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk"
-import { tiramisu } from "@arkiv-network/sdk/chains"
-import { custom } from "viem"
-
-const { address } = useAccount()
-const { data: wagmiWalletClient } = useWalletClient()
-
-const arkivWalletClient = createArkivWalletClient({
-  chain: tiramisu,
-  transport: custom(wagmiWalletClient!.transport),
-  account: address,
-});
-```
-
-Then use `arkivWalletClient` the same way as any other wallet client:
-
-```typescript
-import { jsonToPayload, ExpirationTime } from "@arkiv-network/sdk"
-import { PROJECT_ATTRIBUTE_NAME, PROJECT_ATTRIBUTE_VALUE } from "@/lib/arkiv"
-
-const { entityKey, txHash } = await arkivWalletClient.createEntity({
-  payload: jsonToPayload({ title: "My Post", content: "Hello!" }),
-  contentType: "application/json",
-  attributes: {
-    [PROJECT_ATTRIBUTE_NAME]: PROJECT_ATTRIBUTE_VALUE,
-    entityType: "post",
-    author: address,
-  },
-  expires: ExpirationTime.fromDays(30),
-})
-```
-
----
-
-## Live Events with TanStack Query
-
-Use `watchEntityEvents` to invalidate TanStack Query caches when entities change on-chain. Do not await the return value — it is the unwatch function:
-
-```typescript
-// lib/arkiv-events.ts
-import { useEffect } from "react"
-import { useQueryClient } from "@tanstack/react-query"
-import { publicClient } from "@/lib/arkiv-queries"
-
-export function useArkivEventWatcher(entityType: string) {
-  const queryClient = useQueryClient()
-
-  useEffect(() => {
-    const unwatch = publicClient.watchEntityEvents({
-      onEntityCreated: () => {
-        queryClient.invalidateQueries({ queryKey: ["arkiv", "entities", entityType] })
-      },
-      onEntityPatched: () => {
-        queryClient.invalidateQueries({ queryKey: ["arkiv", "entities", entityType] })
-      },
-      onEntityDeleted: () => {
-        queryClient.invalidateQueries({ queryKey: ["arkiv", "entities", entityType] })
-      },
-      onError: (error) => console.error("Arkiv event error:", error),
+export async function connectArkivWallet(provider: EIP1193Provider) {
+  const addresses = await provider.request({ method: "eth_requestAccounts" })
+  const account = addresses[0]
+  if (!account || !isAddress(account)) throw new Error("Connect an EOA wallet")
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain", params: [{ chainId: "0x7614d1" }],
     })
-
-    return unwatch
-  }, [queryClient, entityType])
+  } catch (error) {
+    if (typeof error !== "object" || error === null || !("code" in error) ||
+        error.code !== 4902) throw error
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [{
+        chainId: "0x7614d1", chainName: "Arkiv Tiramisu Testnet",
+        nativeCurrency: tiramisu.nativeCurrency,
+        rpcUrls: [tiramisu.rpcUrls.default.http[0]],
+        blockExplorerUrls: ["https://tiramisu.explorer.arkiv.network"],
+      }],
+    })
+    await provider.request({
+      method: "wallet_switchEthereumChain", params: [{ chainId: "0x7614d1" }],
+    })
+  }
+  if (await provider.request({ method: "eth_chainId" }) !== "0x7614d1") {
+    throw new Error("Wallet is not on Tiramisu")
+  }
+  return createWalletClient({ chain: tiramisu, account, transport: custom(provider) })
 }
 ```
 
-Mount the hook alongside your query hook:
+Recheck account and chain at write time; either can change after connection. Register cleanup for provider account/chain listeners. Never export a server account or private key into browser code.
 
-```tsx
-function PostList() {
-  useArkivEventWatcher("post")
-  const { data: posts, isLoading } = useArkivQuery<Post>("post")
-  // ...
-}
-```
+For wagmi 2, call `useAccount` and `useWalletClient` inside a React custom hook or component, unconditionally and in a stable order. Check installed exports before adapting this guidance to another wagmi version. Return no Arkiv wallet until both a connected address and a wallet client for Tiramisu exist. Then create the Arkiv wallet with that explicit address and `custom(wagmiWalletClient.transport)`. Do not use module-level hooks or `wagmiWalletClient!` before connection. RainbowKit is a connection UI, not account abstraction. Embedded wallet EOA integrations need their own Tiramisu end-to-end test; do not claim an untested provider works.
 
-**Note:** Expiration fires no event in 0.8. To detect expired entities, poll with `getEntity()` and handle `NoEntityFoundError`, or query by `$expiresAt`.
+Faucet SIWE authentication is not an application session. Establish and verify your application's own session before enabling server signing.
+
+## Events and cache invalidation
+
+The watcher filters the native system address, not your application. Keep a set of relevant entity keys and filter every event. Existing-key patch, extension, ownership and deletion events invalidate both detail and affected collection queries. When ownership or filter attributes change, invalidate the old scope too so entities can leave the list.
+
+For a new key, fetch the entity, validate payload and check namespace plus creator/owner policy before invalidating the collection and adding the key. A new entity is not yet in the known-key set, so filtering only known keys would miss it. Deleted entities cannot be fetched at head: retain their prior collection membership for invalidation.
+
+Catch asynchronous fetch and invalidation failures inside handlers. SDK event context exposes block number, transaction hash and log index, not block hash: deduplicate by chain, transaction hash and log index. For reorg detection, fetch block hashes separately, invalidate affected checkpoint state and replay; deduplication alone does not handle a reorg. Stop the synchronous unwatch function in React effect cleanup. Use stable dependencies to avoid recreating the watcher on every render.
+
+Replay from a verified checkpoint; never use an arbitrary future block. Expiration has no event: sweep deadlines or periodically refetch. HTTP watches poll; WebSocket without a replay `fromBlock` can push, while a bigint replay block forces polling.
+
+Sources checked on 2026-10-05: SDK 0.8.1 wallet account guard, entity decoder and watcher; viem HTTP fetch options and watcher; React hook rules and Vercel React Best Practices. Application authorization and CSRF behavior must be tested in the consumer app, not inferred from these snippets.

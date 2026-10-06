@@ -1,0 +1,7 @@
+node_modules/
+/tests/snippets/.generated/
+/tests/snippets/results/
+.env
+.env.*
+*.key
+*.pem
