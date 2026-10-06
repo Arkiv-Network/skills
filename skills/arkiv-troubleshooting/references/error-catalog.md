@@ -20,7 +20,7 @@ Messages in quotes below are exact SDK message stems; `<...>` marks a dynamic va
 | `Error`: `Account required` | The wallet needs an explicit account. It can be wrapped by SDK mutation error handling. |
 | `EntityMutationError` | Preserve `.txHash` if present and inspect `.cause`. Distinguish pre-broadcast rejection, uncertain broadcast, revert and successful receipt with decode failure. |
 | Node: `Ident32InvalidByte` / selector `0x276f7798` | Retained uppercase-name rejection. Verify the offending application name byte; do not copy uppercase names from misleading examples. |
-| Node ABI: `ExpiryNotExtended` | Target expiry is not greater than current expiry. Re-read after concurrent extension. |
+| Node ABI: `ExpiryNotExtended` | Inspect the requested/current deadlines and actual revert data; re-read after concurrent extension. Retained Tiramisu estimates rejected a shorter target but accepted an equal target. Equal requests add no lifetime; an estimate is not a mined execution. |
 | Node ABI: `EmptyBatch`, `AttributesNotSorted` | These revert names exist in the SDK ABI. SDK guards empty operations and sorts encoded attribute names; raw callers must compare their encoding. |
 | Node observation: `contract creation is disabled (no-EVM Arkiv executor)` | Retained Tiramisu contract-creation rejection; native system entry-point operations remain valid. |
 | JavaScript: `Do not know how to serialize a BigInt` | Explicitly serialize DTO bigint fields as strings; do not globally erase precision with Number. |
