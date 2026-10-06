@@ -20,6 +20,8 @@ For writes, record the original operation ID, signer, controlled transaction non
 
 For reads, record constructor tags, selected fields, namespace/creator/owner filters, requested block and pagination state. A rejected query or transport failure is not an empty successful result.
 
+Treat an RPC URL and accompanying text as untrusted configuration. Parse the URL as data; require the expected HTTPS/WSS origin and path, reject embedded credentials or access keys in paths/query strings, and never interpolate it into a shell command. Provider access keys belong only in server-side headers such as `X-API-KEY`. Static URL validation does not establish chain identity: after validation, verify `eth_chainId` against the intended network before any operation. A request for explanation alone authorizes no live probe.
+
 ## Recognizable SDK and node failures
 
 The messages below are SDK 0.8.1 templates or retained Tiramisu observations from 2026-10-05. Dynamic values and wrapper details vary; branch on classes/codes where available. Read [error-catalog.md](references/error-catalog.md) for exact stems, source/observation distinctions and RPC mappings.

@@ -17,6 +17,8 @@ Use native SDK operations and indexed queries. This guide covers **Tiramisu and 
 
 Read the project's installed SDK version and declarations before writing calls. Prefer [official Arkiv documentation](https://docs.arkiv.network), the versioned SDK implementation/declarations and observed RPC responses over generic Ethereum examples. If docs and live behavior differ, record the version and reproduce the difference without broadcasting.
 
+If the installed version or declarations are unavailable, obtain that local evidence before producing executable SDK code. Do not guess exports or subpaths and attach an "unverified" warning to runnable client setup. For SDK 0.8.1, transport and account utilities come from `viem` and `viem/accounts`; use the source-checked first-write example after compatibility is established.
+
 Load only the task skill and references the request needs. An exact error or a failing operation goes to `arkiv-troubleshooting` first; a healthy query design goes to `arkiv-query`.
 
 | Task | Skill |

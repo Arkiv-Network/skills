@@ -1,0 +1,114 @@
+name: Arkiv nightly evidence
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      live:
+        description: Run the reviewed funded suite using the configured budget
+        type: boolean
+        default: false
+      publish_status:
+        description: Publish sanitized status to the owned fork status branch
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [arkiv-sdk-release]
+
+permissions:
+  contents: read
+
+jobs:
+  nightly:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ARKIV_HEALTH_DIRECTORY: ${{ runner.temp }}/arkiv-evidence
+    concurrency:
+      group: arkiv-nightly-evidence
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tests/snippets/package-lock.json
+      - run: npm ci --prefix tests/snippets --ignore-scripts --no-audit --no-fund
+      - run: node --test tests/snippets/infrastructure.test.mjs
+      - run: node --test tests/snippets/mcp.test.mjs
+      - run: node --test tests/snippets/eval-evidence.test.mjs
+      - run: node --test tests/live/live.test.mjs
+      - run: node scripts/check-evals.mjs
+      - run: node scripts/run-local-checks.mjs --output "$ARKIV_HEALTH_DIRECTORY"
+      - name: Check exact upstream feedback field labels
+        if: always()
+        run: node scripts/check-feedback-forms.mjs "$ARKIV_HEALTH_DIRECTORY/static.json"
+      - name: Watch published SDK and cited semantic documentation
+        if: always()
+        run: node scripts/check-sources.mjs "$ARKIV_HEALTH_DIRECTORY/sources.json"
+      - name: Verify readonly gateway protocol and published skill bytes
+        if: always()
+        env:
+          VERIFICATION_TOKEN: ${{ secrets.ARKIV_MCP_VERIFICATION_TOKEN }}
+        run: node scripts/check-mcp.mjs "$ARKIV_HEALTH_DIRECTORY/mcp.json"
+      - name: Import observed model evidence or preserve its absence
+        if: always()
+        run: node scripts/import-eval-results.mjs "$ARKIV_HEALTH_DIRECTORY/evals.json"
+      - name: Run separately authorized funded checks or preserve a skip reason
+        if: always()
+        env:
+          ARKIV_ENABLE_LIVE: ${{ inputs.live || (github.event_name == 'schedule' && vars.ARKIV_ENABLE_LIVE == 'true') }}
+          ARKIV_PRIVATE_KEY: ${{ secrets.ARKIV_PRIVATE_KEY }}
+          ARKIV_RPC_URL: ${{ vars.ARKIV_RPC_URL }}
+          ARKIV_CHAIN_ID: ${{ vars.ARKIV_CHAIN_ID }}
+          ARKIV_MAX_SPEND_WEI: ${{ vars.ARKIV_MAX_SPEND_WEI }}
+          ARKIV_ACCESS_KEY: ${{ secrets.ARKIV_ACCESS_KEY }}
+        run: node scripts/run-live-check.mjs "$ARKIV_HEALTH_DIRECTORY/live.json"
+      - name: Aggregate only available current evidence
+        if: always()
+        env:
+          ARKIV_HEALTH_WORKFLOW: nightly
+        run: node scripts/build-health.mjs "$ARKIV_HEALTH_DIRECTORY/status.json" "$ARKIV_HEALTH_DIRECTORY/static.json" "$ARKIV_HEALTH_DIRECTORY/typecheck.json" "$ARKIV_HEALTH_DIRECTORY/runtime.json" "$ARKIV_HEALTH_DIRECTORY/sources.json" "$ARKIV_HEALTH_DIRECTORY/live.json" "$ARKIV_HEALTH_DIRECTORY/mcp.json" "$ARKIV_HEALTH_DIRECTORY/evals.json"
+      - name: Preserve nightly reports and status
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: arkiv-nightly-evidence
+          path: ${{ runner.temp }}/arkiv-evidence/
+          if-no-files-found: warn
+  publish:
+    needs: nightly
+    if: >-
+      always() && needs.nightly.result != 'cancelled' &&
+      github.repository == 'SantiagoDevRel/skills' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      (inputs.publish_status || vars.ARKIV_PUBLISH_STATUS == 'true')
+    permissions:
+      contents: write
+    concurrency:
+      group: arkiv-health-status
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: arkiv-nightly-evidence
+          path: health-evidence/
+      - name: Create or update only the owned status artifact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ARKIV_PUBLISH_STATUS: 'true'
+        run: node scripts/publish-health.mjs health-evidence/status.json --publish

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Arkiv verification report v1",
+  "type": "object",
+  "required": ["version", "checkedAt", "sdk", "chain", "kind", "result", "cases"],
+  "properties": {
+    "version": { "const": 1 },
+    "checkedAt": { "type": "string", "format": "date-time" },
+    "head": { "type": ["string", "null"] },
+    "sdk": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "chain": {
+      "type": "object", "required": ["name", "id"],
+      "properties": { "name": { "type": "string" }, "id": { "type": ["integer", "null"], "minimum": 1 } }
+    },
+    "kind": { "enum": ["static", "typecheck", "runtime", "live", "sources", "mcp", "evals"] },
+    "executionMode": { "enum": ["live_rpc", "mcp_readonly", "synthetic_transport"] },
+    "result": { "enum": ["PASS", "FAIL", "SKIPPED"] },
+    "reason": { "type": "string" },
+    "operational": { "type": "boolean" },
+    "sourceFiles": { "type": "array", "items": { "type": "object", "required": ["file", "sha256"],
+      "properties": { "file": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" } } } },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["PASS", "FAIL", "SKIPPED"] },
+          "skill": { "type": "string" },
+          "skills": { "type": "array", "items": { "type": "string" } },
+          "reason": { "type": "string" },
+          "evidence": { "type": "object" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "arkiv",
+  "version": "0.1.0",
+  "description": "Arkiv plugin: focused skills, MCP source discovery, and project rules for the Web3 database.",
+  "author": {
+    "name": "Arkiv Network"
+  },
+  "repository": "https://github.com/Arkiv-Network/skills",
+  "license": "MIT",
+  "extensions": {
+    "com.openai": {
+      "hooks": "./hooks/hooks.json"
+    }
+  }
+}

@@ -64,7 +64,7 @@ export async function fetchAllListings(
   }
   let requests = 0; // Total page requests across all attempts, including failed ones.
   for (let attempt = 0; attempt <= maxRestarts; attempt++) {
-    const snapshot = historicalBlock ?? await client.getBlockNumber();
+    const snapshot = historicalBlock ?? await client.getBlockNumber({ cacheTime: 0 });
     try {
       if (requests >= maxPages) throw new Error('Query page budget exhausted; discard incomplete results');
       requests++;

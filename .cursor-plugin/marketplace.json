@@ -1,0 +1,16 @@
+{
+  "name": "arkiv",
+  "owner": {
+    "name": "Arkiv Network"
+  },
+  "plugins": [
+    {
+      "name": "arkiv",
+      "source": "./",
+      "description": "Arkiv plugin: focused skills, MCP source discovery, and project rules for the Web3 database."
+    }
+  ],
+  "metadata": {
+    "description": "Arkiv plugin: focused skills, MCP source discovery, and project rules for the Web3 database."
+  }
+}

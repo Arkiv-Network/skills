@@ -16,7 +16,7 @@ type Reader = ReturnType<typeof createPublicClient>
 export async function captureSnapshot(
   reader: Reader, project: string, trustedCreator: Address,
 ) {
-  const atBlock = await reader.getBlockNumber()
+  const atBlock = await reader.getBlockNumber({ cacheTime: 0 })
   let page = await reader.select("*")
     .where(eq("project", project)).createdBy(trustedCreator)
     .atBlock(atBlock).limit(100).fetch()

@@ -1,0 +1,16 @@
+{
+  "name": "arkiv",
+  "version": "0.1.0",
+  "description": "Arkiv plugin: focused skills, MCP source discovery, and project rules for the Web3 database.",
+  "author": {
+    "name": "Arkiv Network"
+  },
+  "repository": "https://github.com/Arkiv-Network/skills",
+  "license": "MIT",
+  "skills": "./skills/",
+  "rules": "./cursor/rules/",
+  "mcpServers": "./mcp.json",
+  "hooks": {
+    "hooks": {}
+  }
+}

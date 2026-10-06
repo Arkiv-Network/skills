@@ -60,4 +60,6 @@ For SDK writes/reads, load [sdk-payload.md](references/sdk-payload.md). Encrypt 
 
 Verify known-byte round trips, fresh envelopes, wrong keys, tampering, envelope bounds, lost-key behavior and SDK payload read-back. Separate local/mock results from funded network evidence and browser/XSS testing. A successful decrypt still requires schema and publisher checks.
 
-HMAC equality indexes, Lit-style gates, wallet-derived recovery and encrypted group sharing are separate designs with their own verification. They are not public APIs or guarantees of this library.
+A keyed HMAC equality index is a separate application design, not a library API. It still reveals equality/frequency; exposing the index key permits enumeration of low-entropy values such as emails. Decide normalization, field/project/version domain separation, independent index-key custody and rotation before suggesting it; it does not provide private ranges, prefixes or ordering. Read the [privacy threat model](../arkiv-security-trust/references/privacy.md) for these limits.
+
+Lit-style gates, wallet-derived recovery and encrypted group sharing also need their own implementation and verification. They are not guarantees of this library. Deletion or rotation cannot retract already read copies; historical provider retention is a separate question, not a permanence guarantee.

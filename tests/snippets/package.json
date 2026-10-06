@@ -1,0 +1,21 @@
+{
+  "name": "arkiv-skill-snippets",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "typecheck": "node ../../scripts/check-snippets.mjs",
+    "fixtures": "node ../../scripts/run-snippet-fixtures.mjs",
+    "test": "node --test ./*.test.mjs"
+  },
+  "dependencies": {
+    "@arkiv-network/sdk": "0.8.1",
+    "arkiv-encryption": "0.1.0",
+    "arkiv-graph": "0.3.1",
+    "viem": "2.57.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "7.0.2"
+  }
+}

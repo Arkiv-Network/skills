@@ -7,17 +7,18 @@ Pass the same `CreateEntityParameters` used for the proposed write, such as `fir
 ```typescript
 import { createWalletClient, type CreateEntityParameters } from "@arkiv-network/sdk";
 import { tiramisu } from "@arkiv-network/sdk/chains";
-import { custom, http, type LocalAccount } from "viem";
+import { custom, http, type Chain, type LocalAccount } from "viem";
 
 export async function estimateCreate(
   account: LocalAccount,
   data: CreateEntityParameters,
   rpcUrl: string = tiramisu.rpcUrls.default.http[0],
+  chain: Chain = tiramisu,
 ): Promise<bigint> {
-  const rpc = http(rpcUrl, { retryCount: 0, timeout: 10_000 })({ chain: tiramisu });
+  const rpc = http(rpcUrl, { retryCount: 0, timeout: 10_000 })({ chain });
   const chainId = await rpc.request({ method: "eth_chainId" });
   if (typeof chainId !== "string" || !/^0x[0-9a-f]+$/i.test(chainId)
-      || BigInt(chainId) !== BigInt(tiramisu.id)) throw new Error("Wrong chain for dry run");
+      || BigInt(chainId) !== BigInt(chain.id)) throw new Error("Wrong chain for dry run");
   const reads = new Set([
     "eth_chainId", "eth_blockNumber", "eth_getBlockByNumber", "eth_getTransactionCount",
     "eth_gasPrice", "eth_maxPriorityFeePerGas", "eth_estimateGas", "eth_fillTransaction",
@@ -48,7 +49,7 @@ export async function estimateCreate(
       return result;
     },
   }, { retryCount: 0 });
-  const wallet = createWalletClient({ account, chain: tiramisu, transport });
+  const wallet = createWalletClient({ account, chain, transport });
   try {
     await wallet.createEntity(data);
   } catch (error) {
