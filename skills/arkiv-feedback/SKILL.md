@@ -26,7 +26,7 @@ If no form was selected, ask whether this is a bug or feature request. Diagnose 
 
 ## 3. Collect fields
 
-Read [bug form](references/bug-form.md) or [feature form](references/feature-form.md). Fetch the current upstream YAML if available and compare labels, required fields and options; the references describe the checked snapshot. Keep Tiramisu available even if upstream's network dropdown has not caught up. Required fields need an answer. Use `_No response_` for every skipped optional field.
+Read [bug form](references/bug-form.md) or [feature form](references/feature-form.md). Fetch the current upstream YAML if available and compare labels, required fields and options; the references describe the checked snapshot. If network access is unavailable or prohibited, draft from that snapshot and explicitly state that current-form verification was not performed and remains required before submission. Keep Tiramisu available even if upstream's network dropdown has not caught up. Required fields need an answer. Use `_No response_` for every skipped optional field.
 
 Keep the user's meaning and technical detail, with secrets removed. Ask for a transaction/entity explorer URL or minimal repro when useful, and record which skill/version taught a failing example if applicable. Translate public issue prose into English and show the translation in the draft before approval. Do not expose private logs or internal URLs. Never add credentials to a URL to reproduce an issue.
 

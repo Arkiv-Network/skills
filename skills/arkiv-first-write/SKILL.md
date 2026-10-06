@@ -76,7 +76,7 @@ export async function ensureFirstNote(
     .select({ key: true, payload: true, expiresAt: true, creationFlags: true })
     .where(eq("project", "first_note"), eq("entity_type", "note"), eq("seed_id", "welcome_v1"))
     .createdBy(account.address)
-    .atBlock(await publicClient.getBlockNumber())
+    .atBlock(await publicClient.getBlockNumber({ cacheTime: 0 }))
     .limit(2)
     .fetch();
   if (prior.entities.length > 1 || prior.hasNextPage()) throw new Error("Duplicate seed: reconcile");
@@ -105,7 +105,7 @@ export async function ensureFirstNote(
   const page = await publicClient
     .select({ key: true, payload: true, expiresAt: true })
     .where(eq("$key", key(created.entityKey)))
-    .atBlock(await publicClient.getBlockNumber())
+    .atBlock(await publicClient.getBlockNumber({ cacheTime: 0 }))
     .limit(1)
     .fetch();
   const entity = page.entities[0];

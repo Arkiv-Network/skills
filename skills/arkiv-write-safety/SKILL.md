@@ -46,6 +46,8 @@ RPC transport retries and submitting a new transaction are different actions. Do
 
 This example sends only when its exported importer is called. The caller supplies an authorized wallet, validated rows, a measured batch size, and `save`, a durable journal that resolves only after persistence. Keep one queue per account and coordinate other writers separately. The example stops at the first uncertain write or failed outcome checkpoint.
 
+`confirmed` denotes a successful chain receipt; it does not mean the import is fully verified. For a confirmed outcome, the caller's `save` handler first persists the hash and keys, then checks the receipt, matching transaction inputs/key order and fresh intended fields before resolving. If verification fails, throw from that handler: the importer saves `checkpointError` and stops the next batch while preserving the confirmed identities. Advance a separate verified-completion checkpoint only after every batch passes these checks; never discard a known hash or resend because readback failed.
+
 ```typescript
 import {
   createPublicClient, createWalletClient, EntityMutationError,
