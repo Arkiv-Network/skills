@@ -16,7 +16,7 @@ export async function publishHealth({status, repository, token, event, ref, requ
   validateStatus(status);
   if (repository !== expectedRepository || !token || !['schedule', 'workflow_dispatch'].includes(event)) throw new Error('Status publication is limited to the reviewed fork and trusted events');
   const call = async (route, method = 'GET', body) => {
-    const response = await request(`https://api.github.com/repos/${repository}/${route}`, {method,
+    const response = await request(`https://api.github.com/repos/${repository}${route ? `/${route}` : ''}`, {method,
       headers: {Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28'},
       ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15000)});
     if (response.status === 404 && method === 'GET') return null;
