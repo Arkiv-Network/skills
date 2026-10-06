@@ -179,7 +179,7 @@ test('publisher preserves a preexisting branch without its ownership marker', as
   const calls = [];
   const request = async (url, options) => {
     calls.push({url, method: options.method});
-    if (url.endsWith('/skills/')) return Response.json({fork: true, full_name: 'SantiagoDevRel/skills', default_branch: 'main'});
+    if (url === 'https://api.github.com/repos/SantiagoDevRel/skills') return Response.json({fork: true, full_name: 'SantiagoDevRel/skills', default_branch: 'main'});
     if (url.includes('/git/ref/heads/')) return Response.json({object: {sha: 'existing'}});
     return new Response('', {status: 404});
   };
@@ -190,11 +190,31 @@ test('publisher updates its own status using prior SHA and never force-updates a
   const writes = [];
   const request = async (url, options) => {
     if (options.method !== 'GET') { writes.push({url, body: JSON.parse(options.body), method: options.method}); return Response.json({commit: {sha: 'new'}}); }
-    if (url.endsWith('/skills/')) return Response.json({fork: true, full_name: 'SantiagoDevRel/skills', default_branch: 'main'});
+    if (url === 'https://api.github.com/repos/SantiagoDevRel/skills') return Response.json({fork: true, full_name: 'SantiagoDevRel/skills', default_branch: 'main'});
     if (url.includes('/git/ref/heads/')) return Response.json({object: {sha: 'existing'}});
     if (url.includes('.arkiv-health-owner.json')) return Response.json({content: Buffer.from(JSON.stringify({version: 1, generator: 'arkiv-skills-ci', repository: 'SantiagoDevRel/skills'})).toString('base64')});
     return Response.json({sha: 'previous', content: Buffer.from('{}').toString('base64')});
   };
   const result = await publishHealth({status: statusArtifact, repository: 'SantiagoDevRel/skills', token: 'synthetic', event: 'schedule', ref: 'refs/heads/main', request});
   assert.equal(result.changed, true); assert.equal(writes.length, 1); assert.equal(writes[0].body.sha, 'previous'); assert.equal(writes[0].method, 'PUT'); assert.ok(writes[0].url.endsWith('/contents/status.json'));
+});
+test('publisher verifies the canonical repository route before initializing an owned status branch', async () => {
+  const calls = [], repositoryUrl = 'https://api.github.com/repos/SantiagoDevRel/skills';
+  const request = async (url, options) => {
+    calls.push({url, method: options.method, ...(options.body ? {body: JSON.parse(options.body)} : {})});
+    if (url === repositoryUrl) return Response.json({fork: true, full_name: 'SantiagoDevRel/skills', default_branch: 'main'});
+    if (url === repositoryUrl + '/') return new Response('', {status: 404});
+    if (options.method !== 'GET') return Response.json({commit: {sha: 'new'}});
+    if (url.endsWith('/git/ref/heads/main')) return Response.json({object: {sha: 'verified-base'}});
+    return new Response('', {status: 404});
+  };
+  const result = await publishHealth({status: statusArtifact, repository: 'SantiagoDevRel/skills', token: 'synthetic', event: 'workflow_dispatch', ref: 'refs/heads/main', request});
+  assert.equal(result.changed, true);
+  assert.deepEqual(calls[0], {url: repositoryUrl, method: 'GET'});
+  assert.equal(calls.some(call => call.url === repositoryUrl + '/'), false);
+  const writes = calls.filter(call => call.method !== 'GET');
+  assert.deepEqual(writes.map(call => call.method), ['POST', 'PUT', 'PUT']);
+  assert.deepEqual(writes[0].body, {ref: 'refs/heads/arkiv-status', sha: 'verified-base'});
+  assert.ok(writes[1].url.endsWith('/contents/.arkiv-health-owner.json'));
+  assert.ok(writes[2].url.endsWith('/contents/status.json'));
 });
