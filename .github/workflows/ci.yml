@@ -28,9 +28,10 @@ jobs:
   local:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      ARKIV_HEALTH_DIRECTORY: ${{ runner.temp }}/arkiv-evidence
     steps:
+      - name: Set verification evidence directory
+        shell: bash
+        run: printf 'ARKIV_HEALTH_DIRECTORY=%s/arkiv-evidence\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
