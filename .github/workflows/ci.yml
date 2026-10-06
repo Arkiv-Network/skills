@@ -43,11 +43,15 @@ jobs:
       - run: npm ci --prefix tests/snippets --ignore-scripts --no-audit --no-fund
       - run: node --test tests/snippets/infrastructure.test.mjs
       - run: node --test tests/snippets/mcp.test.mjs
+      - run: node --test tests/snippets/rpc.test.mjs
       - run: node --test tests/snippets/eval-evidence.test.mjs
       - run: node --test tests/live/live.test.mjs
       - run: node scripts/check-evals.mjs
       - run: npm exec --yes --package=@anthropic-ai/claude-code@2.1.291 -- claude plugin validate --strict .
       - run: node scripts/run-local-checks.mjs --output "$ARKIV_HEALTH_DIRECTORY"
+      - name: Record anonymous network identity and head separately
+        if: always()
+        run: node scripts/check-rpc.mjs "$ARKIV_HEALTH_DIRECTORY/network.json"
       - name: Check exact upstream feedback field labels
         if: always()
         run: node scripts/check-feedback-forms.mjs "$ARKIV_HEALTH_DIRECTORY/static.json"

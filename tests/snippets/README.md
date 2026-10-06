@@ -30,6 +30,15 @@ The check initializes the canonical gateway, then confirms `server_status.traffi
 
 The nightly calls `import-eval-results.mjs /external/evals.json` separately. Until observed native-model bundles and their input/trace proofs are supplied, it emits skipped evidence. Deterministic fixtures do not substitute for those runs.
 
+`check-rpc.mjs` is a separate anonymous network diagnostic. It reads the exact SDK 0.8.1 Tiramisu chain export, checks it against `plugin.config.json`, and sends only `eth_chainId` and `eth_blockNumber` to that official endpoint. It does not use signing keys, access keys or RPC overrides. Each request and body has a ten-second deadline; responses are limited to 64 KiB. Wrong network identity or malformed observed responses fail. HTTP 429, timeout, provider outage or missing pinned dependencies stay skipped/yellow, without retries. The report contains two network cases and does not enter the skill health aggregation or certify any entity operation.
+
+```bash
+node --test tests/snippets/rpc.test.mjs
+node scripts/check-rpc.mjs /absolute/external/network.json
+```
+
+The report path must be absolute, outside the repository and new. To reuse installed dependencies, append `--workspace /absolute/dependencies` to the diagnostic command; the tests also accept `ARKIV_SNIPPET_WORKSPACE`. Fixtures use `executionMode: synthetic_transport`; the default HTTP transport uses `rpc_readonly`. A network diagnostic pass is separate from live-write evidence.
+
 `status.json` includes `catalogHash`, the SHA256 of `JSON.stringify(sourceFiles)` after sorting `{file, sha256}` entries by file name. Consumers compare it with their generated skill catalog and re-check `generatedAt`/`maxAgeHours` when displaying status. A missing, stale or mismatched artifact is unavailable/yellow. `sourceCommit` and `observation` are null for local checks. The nightly aggregation adds its Actions repository, commit, event, ref, run ID/attempt and run URL only in an actual nightly Actions context. That proves a run was observed; the individual report results still decide health.
 
 Publication is opt-in after review. The nightly upload is an artifact; `publish-health.mjs` can create/update only `SantiagoDevRel/skills:arkiv-status` from trusted default-branch schedule/manual runs. It preserves an existing branch unless its ownership marker matches, updates `status.json` with its prior SHA, and never deletes files or force-updates references. Enable publication with the reviewed `publish_status` input or `ARKIV_PUBLISH_STATUS` repository variable. Release dispatch produces evidence; no external npm webhook is configured here.
