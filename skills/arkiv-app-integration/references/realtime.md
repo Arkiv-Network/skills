@@ -59,10 +59,13 @@ This example bounds each request to at most 1,000 blocks and halves the range on
 ```typescript
 import { ENTITY_EVENTS_ABI } from "@arkiv-network/sdk"
 import type { PublicArkivClient } from "@arkiv-network/sdk"
-import type { GetLogsReturnType, Hex } from "viem"
+import { decodeEventLog } from "viem"
+import type { DecodeEventLogReturnType, GetLogsReturnType, Hex } from "viem"
 
 type Checkpoint = { blockNumber: bigint; blockHash: Hex }
-type EntityLogs = GetLogsReturnType<undefined, typeof ENTITY_EVENTS_ABI, true, bigint, bigint>
+type RawLog = GetLogsReturnType<undefined, undefined, undefined, bigint, bigint>[number]
+type EntityEvent = DecodeEventLogReturnType<typeof ENTITY_EVENTS_ABI, undefined, Hex[], Hex, true>
+type EntityLogs = (RawLog & EntityEvent)[]
 type Range = { fromBlock: bigint; checkpoint: Checkpoint; logs: EntityLogs }
 type ReplayReader = Pick<PublicArkivClient, "getBlockNumber" | "getBlock" | "getLogs">
 const nativeAddress = "0x4400000000000000000000000000000000000044"
@@ -103,8 +106,10 @@ export async function replayEntityRanges(reader: ReplayReader, saved: Checkpoint
     if (!end.hash) throw new Error("Missing canonical range header")
     let logs: EntityLogs
     try {
-      logs = await reader.getLogs({ address: nativeAddress, events: ENTITY_EVENTS_ABI,
-        strict: true, fromBlock, toBlock })
+      // Fetch raw logs: viem's strict getLogs filtering can silently discard malformed events.
+      const rawLogs = await reader.getLogs({ address: nativeAddress, fromBlock, toBlock })
+      logs = rawLogs.map(log => ({ ...log, ...decodeEventLog({ abi: ENTITY_EVENTS_ABI,
+        data: log.data, topics: log.topics, strict: true }) }))
     } catch (error) {
       if (!isLogCapacityError(error) || fromBlock === toBlock) throw error
       span = (toBlock - fromBlock + 1n) / 2n || 1n
@@ -147,7 +152,7 @@ export async function replayEntityRanges(reader: ReplayReader, saved: Checkpoint
 }
 ```
 
-Verify chain/genesis and projection scope before loading `saved`. `applyRange` must persist state and checkpoint together, or use idempotent event identities with recoverable commits. Reload the durable checkpoint after an error or restart; never restart from a newer in-memory cursor. Run ranges serially and schedule another bounded pass when `complete` is false. Empty ranges still advance progress and trigger expiration reconciliation. Canonical validation adds one header read per distinct block containing logs; budget range/pass sizes for provider quotas. Decode/create membership is only a pre-filter; validate fetched authorship before accepting a new entity.
+Verify chain/genesis and projection scope before loading `saved`. `applyRange` must persist state and checkpoint together, or use idempotent event identities with recoverable commits. Reload the durable checkpoint after an error or restart; never restart from a newer in-memory cursor. Run ranges serially and schedule another bounded pass when `complete` is false. Empty ranges still advance progress and trigger expiration reconciliation. Canonical validation adds one header read per distinct block containing logs; budget range/pass sizes for provider quotas. Malformed or unknown native events fail decoding and preserve the checkpoint. Decode/create membership is only a pre-filter; validate fetched authorship before accepting a new entity.
 
 For persistent projections, use [checkpoint-mirror.md](../../arkiv-indexing/references/checkpoint-mirror.md) for canonical hashes, rollback and pinned state reads. Verify the range header inside the consumer's commit boundary too: a reorg after the network check is still possible. The helper detects a changed checkpoint and refuses; it does not invent a common ancestor or replace durable reorg recovery.
 
