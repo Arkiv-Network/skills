@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {repositoryRoot} from '../../scripts/build-plugin.mjs';
 import {supportedSdkVersion} from '../../scripts/sdk-version-range.mjs';
 import {checkSdkCompatibility,compatibilityExitCode,latestSdkMetadata} from '../../scripts/check-sdk-compatibility.mjs';
@@ -49,4 +53,19 @@ test('request failure gets no retry and no incompatible-version claim',async()=>
 });
 test('the canonical parser is portable through the declared snippet dependency',async()=>{
   assert.equal(supportedSdkVersion('0.8.1000',range,{root:repositoryRoot}),true);
+});
+
+test('CLI saves its diagnostic when the evidence directory does not exist',async t=>{
+  const directory=await mkdtemp(path.join(tmpdir(),'arkiv-sdk-cli-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const output=path.join(directory,'new','evidence','sdk-compatibility.json');
+  const bootstrap='data:text/javascript,'+encodeURIComponent(
+    'globalThis.fetch=async()=>new Response(JSON.stringify({name:"@arkiv-network/sdk",version:"0.8.1"}),{status:200});');
+  const stdout=execFileSync(process.execPath,['--import',bootstrap,
+    path.join(repositoryRoot,'scripts/check-sdk-compatibility.mjs'),output],
+    {cwd:repositoryRoot,encoding:'utf8',timeout:10000});
+  assert.equal(JSON.parse(stdout).result,'PASS');
+  const report=JSON.parse(await readFile(output,'utf8'));
+  assert.equal(report.result,'PASS');
+  assert.equal(report.latest,'0.8.1');
 });

@@ -1,4 +1,4 @@
-import {readFile,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {repositoryRoot} from './build-plugin.mjs';
@@ -52,7 +52,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
   try {
     const [output]=process.argv.slice(2);
     if(!output||!path.isAbsolute(output)||process.argv.length!==3)throw new Error('Pass an absolute compatibility diagnostic output path');
-    const report=await checkSdkCompatibility();await writeFile(output,JSON.stringify(report,null,2)+'\n');
+    const report=await checkSdkCompatibility();
+    await mkdir(path.dirname(output),{recursive:true});
+    await writeFile(output,JSON.stringify(report,null,2)+'\n');
     console.log(JSON.stringify({result:report.result,latest:report.latest,range:report.range,reason:report.reason}));
     process.exitCode=compatibilityExitCode(report);
   } catch(error) {console.error(error.message);process.exitCode=2;}
