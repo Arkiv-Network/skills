@@ -117,3 +117,9 @@ Host formats: [Claude Code](https://code.claude.com/docs/en/plugins-reference), 
 Licensed under [MIT](LICENSE).
 
 <!-- arkiv-install:end -->
+
+## Maintainer SDK compatibility
+
+After installing the pinned verification dependencies with `npm ci --prefix tests/snippets --ignore-scripts --no-audit --no-fund`, run `node --test tests/snippets/sdk-compatibility.test.mjs`. CI also runs `node scripts/check-sdk-compatibility.mjs /absolute/path/sdk-compatibility.json`: a published SDK version outside the declared supported range fails CI. Unavailable or malformed registry metadata produces a nonzero operational result rather than an invented compatibility verdict.
+
+The source watcher shares the canonical SemVer parser. Its health evidence remains separate: new, unverified SDK versions or cited documentation changes require re-verification and keep affected skills yellow; only a current observed failure makes them red. The compatibility diagnostic is not a health report and does not add an eighth producer.
