@@ -28,8 +28,6 @@ The library guides cover published `arkiv-chunking@0.1.1`, `arkiv-images@0.1.2`,
 
 ## Installation
 
-This branch is a release preview. The official repository commands below require the focused skills to be merged into the upstream default branch. For local review, read the `SKILL.md` files in this checkout.
-
 Start with the router:
 
 ```bash
