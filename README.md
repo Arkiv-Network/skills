@@ -21,7 +21,7 @@ Agent skills for working with [Arkiv](https://arkiv.network) — the Web3 databa
 | [`arkiv-social-graph`](skills/arkiv-social-graph/SKILL.md) | Models relationships and scopes arkiv-graph visualization. |
 | [`arkiv-indexing`](skills/arkiv-indexing/SKILL.md) | Builds Arkiv-to-app projections and explains the separate EVM-to-Arkiv sync package. |
 | [`arkiv-feedback`](skills/arkiv-feedback/SKILL.md) | Prepares sanitized bug/feature reports and submits only with authorization. |
-| [`arkiv-mcp`](skills/arkiv-mcp/SKILL.md) | Documents available profiles and schema checks for an existing authorized connection. |
+| [`arkiv-mcp`](skills/arkiv-mcp/SKILL.md) | Explains existing MCP profiles, read-only checks, consent-gated feedback and service privacy boundaries. |
 | [`arkiv-best-practices`](skills/arkiv-best-practices/SKILL.md) | Deprecated compatibility entrypoint; start with arkiv. |
 
 The library guides cover published `arkiv-chunking@0.1.1`, `arkiv-images@0.1.2`, `arkiv-sync@0.3.0` and `create-arkiv-sync@0.3.0`, verified with SDK 0.8.1. Read the installed package's `AGENTS.md` and relevant skill for configuration, tested scope and recovery limits.
