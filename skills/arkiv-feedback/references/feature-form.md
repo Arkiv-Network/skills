@@ -1,29 +1,17 @@
-# Feature-request form — fields and body template
+# Feature-request form — checked 2026-10-08
 
-Mirrors `Arkiv-Network/reported-issues/.github/ISSUE_TEMPLATE/2-feature-request.yml`. If that file changes, update this reference too.
+Source: [upstream feature form](https://github.com/Arkiv-Network/reported-issues/blob/main/.github/ISSUE_TEMPLATE/2-feature-request.yml), [raw YAML](https://raw.githubusercontent.com/Arkiv-Network/reported-issues/main/.github/ISSUE_TEMPLATE/2-feature-request.yml). Title prefix: `[Idea]: `. The web form prefills it; paste only the summary. Upstream labels: `feature-request`, `triage`, `reported-issue`; project: `Arkiv-Network/4`. CLI submission does not apply this metadata automatically.
 
-## Form metadata
-
-- **Title prefix:** `[Idea]: `
-- **Labels (auto-applied on submit):** `feature-request`, `triage`, `reported-issue`
-- **Issue type:** none (don't pass `--type` for features)
-
-## Fields, in order
-
-| # | Field                                       | Type      | R/O | Notes                                                                 |
-|---|---------------------------------------------|-----------|-----|-----------------------------------------------------------------------|
-| 1 | Contact                                     | Text      | O   | Discord handle, email, or GitHub username for follow-up.              |
-| 2 | What problem are you trying to solve?       | Multiline | R   | Lead with the user pain or use case, not the solution.                |
-| 3 | What do you have in mind?                   | Multiline | O   | Optional rough sketch of a solution. Don't push for completeness.     |
-| 4 | What workarounds or alternatives have you considered? | Multiline | O   | Anything tried, looked at, or ruled out.                              |
-| 5 | Anything else                               | Multiline | O   | Links, screenshots, related issues, extra context.                    |
-
-## Body template
-
-Render the body exactly like this. Keep section headings verbatim. For **skipped optional fields**, write `_No response_` on its own line — this matches what the GitHub form itself renders, so a skill-submitted issue is structurally indistinguishable from a form-submitted one.
+| Heading | Required? |
+| --- | --- |
+| How can we reach you? | No |
+| What problem are you trying to solve? | Yes |
+| What do you have in mind? | No |
+| What workarounds or alternatives have you considered? | No |
+| Anything else we should know? | No |
 
 ```markdown
-### Contact
+### How can we reach you?
 {{contact or "_No response_"}}
 
 ### What problem are you trying to solve?
@@ -35,10 +23,8 @@ Render the body exactly like this. Keep section headings verbatim. For **skipped
 ### What workarounds or alternatives have you considered?
 {{alternatives or "_No response_"}}
 
-### Anything else
+### Anything else we should know?
 {{extra or "_No response_"}}
 ```
 
-## Triage hint for the agent
-
-If the user only has a vague idea and skips the problem field with something like "I dunno, just thought it'd be cool", push back gently and ask for the underlying use case before drafting. A feature request without a problem is hard to triage and will likely sit in the backlog. The user is better served by a five-minute Discord conversation first.
+Use `_No response_` for optional blanks. Help clarify a vague problem before drafting, without inventing one. Show the exact English public draft and get approval before submission. Contact information is optional and public.
