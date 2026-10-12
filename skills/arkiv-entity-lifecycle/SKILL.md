@@ -33,7 +33,9 @@ These permissions apply to live entities. Choose a later deadline to add lifetim
 
 To add N blocks, target `ExpirationTime.atBlock(current.expiresAt + N)`. `fromHours(1)` means one hour from inclusion, not one additional hour on the current deadline; see `arkiv-entity-expiration`.
 
-For a typo in readonly content, create a corrected entity with a new key and update references. Plan the replacement and verify it before retiring an old entity the user authorized you to remove. Readonly refers to payload and attributes, not the entity's entire lifecycle.
+For a typo in readonly content, create a corrected entity with a new key and update references. Verify the replacement and preserve the old-to-new mapping and creation provenance. **A correction never authorizes deletion of the original. Retain the original unless the user separately authorizes its removal.** Authorization to change references also needs its own operation and spending scope. Readonly refers to payload and attributes, not the entity's entire lifecycle.
+
+Ownership transfer uses `wallet.changeOwnership({ entityKey, newOwner })`, authorized by the current owner to a different, nonzero address. After confirmation, inspect `owner`, immutable `creator` and creation flags with `reader.getEntity(entityKey)`. Explain the transfer operation even when diagnosing a completed transfer, but never replay it just to verify: later head reads and the confirmed transaction are different observations. The current owner may patch mutable content; the creator field identifies the creating wallet and cannot prove authorship of a later replacement payload.
 
 Permissionless extension lets others pay to keep an entity alive. It grants no patch, transfer, or delete permission, and another party can postpone expiration the owner wanted. Neither expiration nor readonly is a privacy control; plaintext data is public.
 
@@ -178,11 +180,13 @@ export async function createRelatedNotes(
       },
     ],
   })
-  return {
-    ...batch,
-    predictionsMatch: batch.createdEntities[0] === parent.key &&
-      batch.createdEntities[1] === child.key,
+  if (batch.createdEntities.length !== 2 ||
+      batch.createdEntities[0] !== parent.key || batch.createdEntities[1] !== child.key ||
+      batch.patchedEntities.length !== 0 || batch.deletedEntities.length !== 0 ||
+      batch.extendedEntities.length !== 0 || batch.ownershipChanges.length !== 0) {
+    throw new Error(`Batch result mismatch after ${batch.txHash}; reconcile before any retry`)
   }
+  return { ...batch, predictionsMatch: true }
 }
 ```
 
@@ -196,7 +200,7 @@ Transfer inspection is a subsequent head read. Later transactions can change own
 
 To transfer several authorized entities atomically, use `await wallet.executeBatch({ ownershipChanges: [{ entityKey, newOwner }] })` with one entry per entity. Validate every destination and retain the transaction hash; a recipient does not consent to incoming ownership, and receiving a batch does not authenticate its content.
 
-The related-note example uses the creator's entity-minting nonce, not its transaction nonce. `NO_SALT` resolves to zero salt; it does not bypass nonce-based identity. Reuse the returned salts exactly. Any intervening create from that owner invalidates predictions, even from another application or wallet session. If `predictionsMatch` is false, keep the confirmed transaction hash and actual keys, inspect and repair the child reference; do not resubmit the batch.
+The related-note example uses the creator's entity-minting nonce, not its transaction nonce. `NO_SALT` resolves to zero salt; it does not bypass nonce-based identity. Reuse the returned salts exactly. Any intervening create from that owner invalidates predictions, even from another application or wallet session. If result validation throws after confirmation, keep the transaction hash and actual keys, inspect and repair the child reference; do not resubmit the batch. Validation compares the complete create count and all predicted keys, not just the parent's key.
 
 Zero salts make keys predictable to anyone who knows the creator and minting nonce. When public predictability is unnecessary, request `count: 2` instead of explicit salts and reuse the returned random salts. For a cycle, predict every key first and place references on both creates; readonly references cannot be patched afterward. Both helpers accept a caller-selected `Expiry` instead of requiring the default 30 days.
 

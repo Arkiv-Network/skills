@@ -16,7 +16,7 @@ Use this skill before implementing an Arkiv entity schema. Start with the reques
 
 For an existing error, use arkiv-troubleshooting first. Use arkiv-query for pagination, arkiv-entity-lifecycle for mutation permissions, and arkiv-security-trust for authorization. Use arkiv-write-safety to journal and reconcile multi-step writes, arkiv-entity-expiration for related deadlines, and arkiv-first-write for a first transaction.
 
-Check the installed SDK version and declarations. Examples below target SDK 0.8.1 on Tiramisu. Producing a model does not authorize publishing data or spending GLM.
+Check the installed SDK version and declarations. Examples below target SDK 0.8.1 on Tiramisu. Without that local evidence, explain the model and documented operations conceptually and ask for the missing declarations; do not assemble executable code from guessed imports. Producing a model does not authorize publishing data or spending GLM.
 
 ## Storage rules
 
@@ -150,7 +150,7 @@ The `seller` attribute is an application claim, not proof of who signed. Keep pa
 
 - **Returned keys:** create a parent first, then use `key(parent.entityKey)` on children. Key references do not enforce foreign keys or cascades. Handle missing, deleted or expired targets with a policy such as hiding an orphan or repairing the relation.
 - **Application IDs:** stable string IDs survive recreation and cross-provider mappings. Keep them distinct from entity keys. Resolve joins within project/type/creator scope; multiple matches require an explicit duplicate/version policy.
-- **Same-batch references:** predict keys only under an exclusive creator queue shared by every process using that account. Read the entity nonce inside that queue; fix salts and create order; compare receipt keys to predictions. See [relationships.md](references/relationships.md) before using this mode.
+- **Same-batch references:** load [relationships.md](references/relationships.md) before explaining or implementing this mode. Predict every created key under an exclusive creator queue shared by every process using that account; reuse every returned salt in create order. Validate the complete result: the created-key count must match the submitted creates, and every returned key must match its prediction in order. Checking only the parent's key does not validate the child. Publish references only after validation and the selected confirmation/read-back policy; a mismatch after confirmation requires reconciliation, never a blind resend.
 - **Uniqueness/upserts:** a read-then-create can race and create duplicates. Arkiv does not implement SQL unique constraints for application attributes. Use a coordinated writer or choose deterministic conflict resolution; a random salt does not enforce application uniqueness. A transaction nonce is different from the entity nonce.
 - **Versioning:** index `schema_version` for migrations. Define how old/new schemas coexist, how consumers choose revisions, and how replaced entity keys are remapped. Readonly content requires a new entity and updated references.
 - **Soft delete:** `active: bool(false)` is an application filter, not deletion or a privacy control. Other readers can still request the data. Deletion and Entity Expiration remove live entities but cannot retract copies someone already read.

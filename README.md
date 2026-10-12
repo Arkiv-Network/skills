@@ -45,3 +45,7 @@ Load `arkiv` for an Arkiv task, then the task skill it selects. Use `arkiv-first
 The guidance targets SDK `>=0.8.1 <0.9` and Tiramisu (chain ID 7738577). Before using another version, inspect its installed declarations and current official documentation. Keep credentials out of source code, URLs and chat; writes require an authorized signer and spending budget.
 
 Each skill declares its checked SDK range, network, date and MIT license in frontmatter. These declarations describe the documented scope and do not certify every provider, application or future release.
+
+For the combined Claude Code plugin, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/claude-plugin). It imports a fixed canonical revision and bundles the existing MCP connection and project rules. Read its installation and verification scope before use.
+
+Contributors and agents should read [AGENTS.md](AGENTS.md). Recent safety guidance covers complete atomic batch validation, separately authorized removal after readonly corrections, transfer provenance and conservative recovery of checkpoints without authenticated hash lineage.

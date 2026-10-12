@@ -6,17 +6,16 @@ The key depends on chain ID, native system address, creator, **entity nonce** an
 
 Inside the exclusive queue:
 
-1. Read `getEntityNonce(creator)`. Keep all prior uncertain/in-flight creations reconciled.
-2. Fix the parent salt and the creates array. A randomly generated salt must be reused in the prediction and the actual create.
-3. Predict the parent key using that nonce, creator and Tiramisu chain ID. Use `key(predicted)` on the child.
-4. Submit the batch through the same authorized creator. Compare returned receipt keys to predictions before publishing references.
+1. Keep all prior uncertain/in-flight creations reconciled before prediction.
+2. Use `predictEntityKeys({ owner: creator, count: 2 })`, which reads the creator's entity nonce and returns a key/salt pair for each create in order.
+3. Reuse both returned salts in the fixed creates array. Use `key(parent.key)` on the child.
+4. Submit the batch through the same authorized creator. Validate the returned create count and every key in order before publishing references.
 5. If the nonce/prediction is stale or the result is uncertain, stop and reconcile receipt/state. Do not retry the same stale relationship blindly.
 
 ```typescript
 import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
 import { key, str } from '@arkiv-network/sdk/attr';
 import { tiramisu } from '@arkiv-network/sdk/chains';
-import { predictEntityKey, randomSalt } from '@arkiv-network/sdk/entity';
 import type { Address } from 'viem';
 
 type Public = ReturnType<typeof createPublicClient>;
@@ -36,13 +35,11 @@ export async function createAtomicListingAndTag(
   if (wallet.chain?.id !== tiramisu.id || publicClient.chain?.id !== tiramisu.id) {
     throw new Error('Both clients must use Tiramisu');
   }
-  const nonce = await publicClient.getEntityNonce(creator);
-  const salt = randomSalt();
-  const predicted = predictEntityKey({ owner: creator, nonce, salt, chainId: tiramisu.id });
+  const [parent, child] = await publicClient.predictEntityKeys({ owner: creator, count: 2 });
   const result = await wallet.executeBatch({
     creates: [
       {
-        salt,
+        salt: parent.salt,
         payload: new TextEncoder().encode(JSON.stringify({ listing_id })),
         contentType: 'application/json',
         attributes: {
@@ -53,12 +50,13 @@ export async function createAtomicListingAndTag(
         expires: ExpirationTime.fromDays(30),
       },
       {
+        salt: child.salt,
         payload: new Uint8Array(),
         contentType: 'application/octet-stream',
         attributes: {
           project: str('example_marketplace'),
           entity_type: str('listing_tag'),
-          listing_key: key(predicted),
+          listing_key: key(parent.key),
           listing_id: str(listing_id),
           tag: str(tag),
         },
@@ -66,14 +64,17 @@ export async function createAtomicListingAndTag(
       },
     ],
   });
-  if (result.createdEntities[0] !== predicted) {
+  if (result.createdEntities.length !== 2 ||
+      result.createdEntities[0] !== parent.key || result.createdEntities[1] !== child.key ||
+      result.patchedEntities.length !== 0 || result.deletedEntities.length !== 0 ||
+      result.extendedEntities.length !== 0 || result.ownershipChanges.length !== 0) {
     throw new Error(`Reference prediction mismatch after ${result.txHash}; reconcile the receipt before any retry`);
   }
   return result;
 }
 ```
 
-A mismatch check runs **after** a successful transaction. It cannot roll back the batch or repair a child that already points at the wrong target. Exclusive creator coordination is the prevention; the check detects a violated contract. Application IDs and a repair policy remain useful for remapping.
+A mismatch check runs **after** a successful transaction. It cannot roll back the batch or repair a child that already points at the wrong target. Exclusive creator coordination is the prevention; the check detects a violated contract. Preserve the confirmed transaction hash and actual keys for reconciliation. The non-create result arrays reflect the submitted SDK operation lists; their absence is not an independent on-chain proof. Application IDs and a repair policy remain useful for remapping.
 
 Neither `key()` validation nor key prediction checks that a target exists. Parent deletion, expiration or replacement can leave a valid dangling reference. A transaction receipt is not a promise about future retention or the application's reorganization policy.
 

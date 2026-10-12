@@ -59,6 +59,10 @@ Several mutations in one block can be coalesced into one final row read per touc
 7. On a hash mismatch, find a verified common ancestor inside the retained journal, roll back only this indexer's derived state, and replay the new canonical blocks. A timeout is not evidence of a reorganization.
 8. If no ancestor or historical state is available, stop and rebuild an isolated projection generation from a fresh complete snapshot. A reset or changed genesis/config identity needs a new generation, not replay under the old cursor.
 
+A legacy checkpoint containing only a block number has no saved, authenticated hash lineage. Do not infer a reorganization or a verified rollback target from that number. Check chain/genesis identity and provider consistency, compare available canonical headers with any retained trusted hashes and require matching parent/hash lineage. A read failure, provider lag or an unverified reported hash difference is not proof of a fork.
+
+If that lineage or historical payload state cannot be established, freeze the existing generation and checkpoint. Build a separate generation from a complete bounded snapshot pinned to a freshly verified block and hash; commit it atomically, verify canonical identity again, then explicitly switch readers. Do not relabel head data as historical state, advance the failed checkpoint, or remove the old generation as a recovery shortcut. Retain unavailable ranges and expired/missing historical versions as explicit gaps; a current snapshot cannot restore them.
+
 Read [checkpoint-mirror.md](references/checkpoint-mirror.md) for a runnable SDK block reader, configurable pinned row adapter, conservative membership prefilter, retained-journal serialization/restore and ancestor walk. It demonstrates an owned projection; configure transactional persistence, transport timeout and quota budget before running a worker.
 
 ## Worked scenario
