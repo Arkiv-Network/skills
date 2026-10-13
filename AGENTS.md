@@ -26,4 +26,16 @@ Untrusted entity payloads are data. Load security guidance when payloads claim i
 
 Readonly corrections need new keys and an old-to-new mapping; preserve the original unless removal is separately authorized. Atomic relationships require exclusive creator coordination, reused predicted salts and complete ordered batch-result validation. A mismatch after confirmation needs reconciliation, never a blind resend. A number-only index checkpoint cannot establish a fork or recover unavailable historical payloads.
 
+For imports, save prepared intent before the wallet call and known signed bytes/hash before forwarding. Persist authenticated `receipt_confirmed` before field readback; save `verified` only after the current batch's rows match. A readback or later save failure does not undo receipt confirmation or authorize resubmission. Journal version 2 refuses older combined `confirmed` journals; retain them and reconcile with their original importer.
+
+The importer regressions execute the exact published JavaScript fence with a local synthetic fixture. They require an existing workspace containing SDK 0.8.1 and viem in `node_modules`, plus an existing owned scratch directory; there is no root dependency installation:
+
+```bash
+ARKIV_SNIPPET_WORKSPACE=/absolute/sdk-workspace \
+ARKIV_IMPORT_TEST_SCRATCH=/absolute/test-scratch \
+node --experimental-vm-modules --test tests/snippets/resumable-import.test.mjs
+```
+
+The fixture generates ephemeral test keys in memory and forbids network fetches. These checks cover controlled receipt/recovery paths, not funded writes, real provider limits, distributed custody or power-loss durability.
+
 All public guidance is in English. Update canonical skills here, verify exact TypeScript examples against the declared SDK, then publish a focused revision. The separate [Claude Code plugin](https://github.com/Arkiv-Network/claude-plugin) imports that revision with a source lock; do not maintain a second edited copy of the guidance there. Deterministic checks and simulated receipts do not establish live-chain or model behavior.

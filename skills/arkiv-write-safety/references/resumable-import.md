@@ -6,7 +6,9 @@ Call `prepareImport(options)` once, retain its `planSha256` in a trusted job rec
 
 All writers sharing this signer must use this coordinator on the same host, or you must retain exclusive signer custody. The loopback listener is a mutex, not an HTTP service: it closes incoming sockets and the OS releases it on process exit. A port collision refuses admission. This does not coordinate signers on different machines or wallet applications that bypass it. The plan captures the account, chain ID and genesis hash, port, starting transaction nonce, predicted entity keys, ordered rows, exact SDK calldata, gas, fees, and total spend cap.
 
-The journal stores signed bytes and their hash **before** forwarding a send. Keep it private: signed bytes can be rebroadcast by someone who obtains them, and calldata exposes the payload. Never print it or commit it. Every append calls `FileHandle.sync()`. A torn record, altered plan, uncertain send, failed save, changed nonce, missing receipt, reverted receipt, reorg, or mismatching readback stops the job. A restart never resends captured bytes automatically. If a crash happened between durable capture and provider admission, a missing receipt still requires operator reconciliation; an empty query is not permission to create again.
+The journal saves `prepared` intent before the wallet call, then signed bytes and their hash in `submitting` **before** forwarding a send. After authenticating the transaction, canonical receipt and ordered create events against the frozen plan, it saves `receipt_confirmed` **before** reading entity fields. Only a matching readback of that batch's rows earns `verified` and admits the next batch. For 60 rows in batches of 20, each batch verifies its own 20 rows; the job completes after all three batches are verified. Keep the journal private: signed bytes can be rebroadcast by someone who obtains them, and calldata exposes the payload. Never print it or commit it. Every append calls `FileHandle.sync()`.
+
+A torn record, altered plan, uncertain send, failed save, changed nonce, missing receipt, reverted receipt, reorg, or mismatching readback stops the job. A readback or verified-checkpoint failure leaves the earlier `receipt_confirmed` entry available; a receipt-checkpoint failure leaves `submitting` available. Restart authenticates that original hash and repairs verification without resending. If a crash happened between durable capture and provider admission, a missing receipt still requires operator reconciliation; an empty query is not permission to create again. This helper writes journal version 2 and explicitly refuses older journals, including the former combined `confirmed` state. Retain those files and reconcile with the original importer; do not rename states or clear the journal to bypass this check.
 
 This is process-crash recovery over an existing durable filesystem, not a guarantee against storage loss or machine power failure. Provision and back up the job directory before starting; this example does not fsync its parent directory or provide distributed locking. Confirmed batches are authenticated again on restart. If entities have expired or been changed since confirmation, this conservative example stops instead of recreating them.
 
@@ -104,6 +106,7 @@ async function loadJournal(path, planSha256) {
     previous = hash;
   }
   check(records[0]?.state === "initialized", "Journal header missing");
+  check(records[0].journalVersion === 2, "Legacy or unsupported importer journal; retain original files and reconcile with the original importer");
   return records;
 }
 async function append(path, records, planSha256, event) {
@@ -166,7 +169,7 @@ export async function prepareImport(options) {
       startBlock: startBlock.toString(), firstNonce: latest, fees: JSON.parse(json(fees)), maxTotalCost: maxTotalCost.toString(), batches };
     const text = `${json(plan)}\n`, planSha256 = digest(text);
     await createFile(planPath, text);
-    const header = { planSha256, previous: "", state: "initialized" };
+    const header = { planSha256, previous: "", state: "initialized", journalVersion: 2 };
     await createFile(journalPath, `${json({ ...header, hash: digest(json(header)) })}\n`);
     return { planSha256, batches: batches.length, maximumCost: totalCap.toString() };
   });
@@ -221,15 +224,19 @@ async function authenticateReceipt(reader, plan, batch, captured) {
       && event.args.creationFlags === ((row.flags.readonly ? 1 : 0) | (row.flags.permissionlessExtension ? 2 : 0)), "Created key/order/flags/expiry mismatch");
     return event.args.entityKey;
   });
+  return { keys, blockHash: receipt.blockHash, blockNumber: receipt.blockNumber.toString() };
+}
+async function verifyReadback(reader, plan, batch, inclusion) {
   const snapshot = await reader.getBlockNumber({ cacheTime: 0 });
-  check(snapshot >= receipt.blockNumber, "Readback provider is behind the receipt");
-  for (let i = 0; i < keys.length; i++) {
+  check(snapshot >= BigInt(inclusion.blockNumber), "Readback provider is behind the receipt");
+  // Read only this batch's authenticated keys, never rows in later unsent batches.
+  for (let i = 0; i < batch.rows.length; i++) {
     const row = batch.rows[i];
-    const page = await reader.select("*").where(eq("$key", key(keys[i]))).atBlock(snapshot).limit(1).fetch();
+    const page = await reader.select("*").where(eq("$key", key(inclusion.keys[i]))).atBlock(snapshot).limit(1).fetch();
     const entity = page.entities[0];
     check(entity !== undefined, "Created entity is absent at the readback snapshot");
-    check(entity.key === keys[i] && sameAddress(entity.creator, plan.account) && sameAddress(entity.owner, plan.account)
-      && entity.createdAt === receipt.blockNumber && entity.expiresAt === BigInt(row.expiresAt)
+    check(entity.key === inclusion.keys[i] && sameAddress(entity.creator, plan.account) && sameAddress(entity.owner, plan.account)
+      && entity.createdAt === BigInt(inclusion.blockNumber) && entity.expiresAt === BigInt(row.expiresAt)
       && entity.contentType === row.contentType && bytesToHex(entity.payload) === row.payloadHex
       && entity.creationFlags.readonly === row.flags.readonly
       && entity.creationFlags.permissionlessExtension === row.flags.permissionlessExtension, "Entity readback mismatch");
@@ -237,7 +244,7 @@ async function authenticateReceipt(reader, plan, batch, captured) {
     const actual = Object.entries(entity.attributes).map(([n, v]) => [n, canonicalValue(v)]).sort();
     check(json(actual) === json(expected), "Typed attributes/order mismatch");
   }
-  return { keys, blockHash: receipt.blockHash, blockNumber: receipt.blockNumber.toString() };
+  return snapshot.toString();
 }
 
 export async function runImport({ account, chain, request, planPath, journalPath, planSha256 }) {
@@ -253,18 +260,39 @@ export async function runImport({ account, chain, request, planPath, journalPath
     for (const batch of plan.batches) {
       check(batch.index === plan.batches.indexOf(batch) && batch.nonce === plan.firstNonce + batch.index, "Unstable batch numbering");
       const history = records.filter((r) => r.index === batch.index);
-      check(history.every((r) => ["prepared", "submitting", "uncertain", "confirmed"].includes(r.state))
-        && history.filter((r) => r.state === "submitting").length <= 1
-        && history.filter((r) => r.state === "confirmed").length <= 1, "Invalid batch journal transitions");
-      let captured = history.find((r) => r.state === "submitting");
-      const confirmed = history.find((r) => r.state === "confirmed");
-      if (captured) {
-        const verified = await authenticateReceipt(reader, plan, batch, captured);
-        if (confirmed) check(json(confirmed.verified) === json(verified), "Confirmed checkpoint differs from current authenticated inclusion");
-        else await append(journalPath, records, planSha256, { index: batch.index, state: "confirmed", txHash: captured.txHash, verified });
-        continue;
+      let prepared = false, captured, receiptConfirmed, verified;
+      for (const record of history) {
+        check(record.state !== "confirmed", "Legacy confirmed state is incompatible; retain original files and reconcile with the original importer");
+        if (record.state === "prepared") {
+          check(!captured, "Prepared intent cannot follow submission");
+          prepared = true;
+        } else if (record.state === "submitting") {
+          check(prepared && !captured, "Submission requires one prior prepared intent");
+          captured = record;
+        } else {
+          check(captured && record.txHash === captured.txHash, "Checkpoint lacks its durable submission hash");
+          if (record.state === "uncertain") check(!receiptConfirmed && !verified, "Uncertain state cannot follow receipt confirmation");
+          else if (record.state === "receipt_confirmed") {
+            check(!receiptConfirmed && !verified, "Duplicate or out-of-order receipt confirmation");
+            receiptConfirmed = record;
+          } else if (record.state === "verified") {
+            check(receiptConfirmed && !verified, "Verification requires one prior receipt confirmation");
+            verified = record;
+          } else check(false, "Invalid batch journal state");
+        }
       }
-      check(!confirmed && !history.some((r) => r.state === "uncertain"), "Missing durable submission record; reconcile first");
+      const finishBatch = async () => {
+        const inclusion = await authenticateReceipt(reader, plan, batch, captured);
+        if (receiptConfirmed) check(json(receiptConfirmed.receipt) === json(inclusion), "Receipt checkpoint differs from current authenticated inclusion");
+        else {
+          await append(journalPath, records, planSha256, { index: batch.index, state: "receipt_confirmed", txHash: captured.txHash, receipt: inclusion });
+        }
+        // This durable receipt checkpoint precedes every field read and verified save.
+        if (verified) check(json(verified.receipt) === json(inclusion), "Verified checkpoint differs from current authenticated inclusion");
+        const snapshot = await verifyReadback(reader, plan, batch, inclusion);
+        if (!verified) await append(journalPath, records, planSha256, { index: batch.index, state: "verified", txHash: captured.txHash, receipt: inclusion, snapshot });
+      };
+      if (captured) { await finishBatch(); continue; }
       const nonce = await reader.getTransactionCount({ address: account.address, blockTag: "latest" });
       const pending = await reader.getTransactionCount({ address: account.address, blockTag: "pending" });
       check(nonce === batch.nonce && pending === batch.nonce, "Account nonce changed; do not create a replacement");
@@ -297,15 +325,14 @@ export async function runImport({ account, chain, request, planPath, journalPath
         }
         throw new Error("Stopped before durable send admission; inspect journal before retrying", { cause: e });
       }
-      const verified = await authenticateReceipt(reader, plan, batch, captured);
-      await append(journalPath, records, planSha256, { index: batch.index, state: "confirmed", txHash: captured.txHash, verified });
+      await finishBatch();
     }
-    return { state: "complete", planSha256, confirmedBatches: plan.batches.length };
+    return { state: "complete", planSha256, confirmedBatches: plan.batches.length, verifiedBatches: plan.batches.length };
   });
 }
 ```
 
-`executeBatch` itself does not expose a pre-broadcast callback. This example supplies a transport wrapper and accepts local signing only, so its first network mutation is the guarded raw send. It refuses `eth_sendTransaction`, wallet signing RPCs, and unknown provider methods. Keep provider request deadlines bounded and retries disabled in the supplied adapter too. A receipt timeout returns a known hash; an exception while persisting a post-send checkpoint may propagate, but the earlier submitting record remains the restart source. No other batch is admitted after either failure.
+`executeBatch` itself does not expose a pre-broadcast callback. This example supplies a transport wrapper and accepts local signing only, so its first network mutation is the guarded raw send. It refuses `eth_sendTransaction`, wallet signing RPCs, and unknown provider methods. Keep provider request deadlines bounded and retries disabled in the supplied adapter too. A receipt timeout returns a known hash; an exception while persisting a post-send checkpoint may propagate, but the earlier `submitting` or `receipt_confirmed` record remains the restart source. Receipt confirmation proves authenticated inclusion of this batch, not matching fresh fields or completion of the whole job. No other batch is admitted until this batch is `verified`.
 
 The plan hash is a trusted input, not an authenticity claim made by an editable JSON file. The journal hash chain detects torn or inconsistent entries; it is not a substitute for filesystem access control or a trusted external job entry. Do not edit a plan, clear a journal, select a new nonce, or start a second job to escape an uncertain result. A nonce scan from the captured `startBlock` is a separate operator recovery path when adopting an older importer that never captured a hash. Authenticate the recovered sender, nonce, native address, input, receipt, and entity order before saving confirmation. A consumed nonce alone does not prove that your intended create succeeded.
 
