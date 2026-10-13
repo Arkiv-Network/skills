@@ -21,6 +21,8 @@ Registry releases verified on 2026-10-06 UTC; pin the tested versions:
 | `arkiv-chunking` | 0.1.1 | `>=0.8.1 <0.9` | SDK 0.8.1 uploads, complete downloads and byte/hash verification. |
 | `arkiv-images` | 0.1.2 | `>=0.8.1 <0.9` | SDK 0.8.1 inline/chunked PNG/JPEG; depends on chunking 0.1.1. |
 
+Recommend `@arkiv-network/sdk@0.8.1` exactly for these package pins, or state their peer range literally as `>=0.8.1 <0.9`. Never use `0.8.x` as a compatibility guarantee. If the project uses SDK `0.8.0`, stop integration and ask whether the developer approves upgrading to `0.8.1`; do not force or bypass peer requirements.
+
 A strict npm consumer passed public API typechecks and import checks with SDK 0.8.1 and viem 2.57.3. Funded Tiramisu byte roundtrips used the same compiled modules with SDK 0.8.1 and viem 2.56.3. These checks cover the tested versions, not every release in the peer range.
 
 Historical chunking 0.1.0 and images 0.1.1 required SDK 0.8.0. Do not downgrade the SDK or bypass peers to install them. Read the installed `AGENTS.md` and README before integration; re-check metadata when selecting another release. Registry verification and the earlier packed-candidate execution are separate evidence.
