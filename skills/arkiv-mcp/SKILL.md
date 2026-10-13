@@ -14,13 +14,13 @@ A skill is guidance the agent reads. A tool is a callable operation that returns
 
 Use this skill for an **existing authorized connection**. If the user chooses skills/SDK only, honor that choice. Use `arkiv-first-write`, `arkiv-query` and `arkiv-troubleshooting` directly; an MCP is not a prerequisite.
 
-## General and Global Tour Stop connections
+## Plugin and standalone connections
 
-The Claude Code plugin bundles the **General** connection at `https://mcp.arkiv.network/`. General building guidance does not include event rules.
+The Claude Code plugin bundles the **Devfolio (Arkiv: Global Tour Stop)** profile at `https://mcp.arkiv.network/devfolio`. This profile includes Arkiv building guidance and the event sources. Plugin users already have this connection; do not add another one.
 
-**Arkiv: Global Tour Stop uses the Devfolio event profile**, at `https://mcp.arkiv.network/devfolio`. Devfolio is this event's profile identifier, not a different event. If a Global Tour Stop participant is connected to General, explain that distinction and point to the [Hub MCP section](https://hub.arkiv.network/ai-tools#mcp) or the event-specific URL. The [canonical event repository](https://github.com/Arkiv-Network/global-tour-stop-pre-devcon) identifies Global Tour Stop and its Devfolio submission context.
+Standalone users may have a different authorized connection. General building guidance does not include event rules. **Arkiv: Global Tour Stop uses the Devfolio event profile**, at `https://mcp.arkiv.network/devfolio`. Devfolio is this event's profile identifier, not a different event. If a standalone participant is connected to General, explain that distinction and point to the [Hub MCP section](https://hub.arkiv.network/ai-tools#mcp) or the event-specific URL. The [canonical event repository](https://github.com/Arkiv-Network/global-tour-stop-pre-devcon) identifies Global Tour Stop and its Devfolio submission context.
 
-Providing that URL does not authorize adding a second connection, switching the host's profile or changing configuration. The developer chooses the event connection. After that choice, inspect its actual `server_status` and current event sources before relying on rules, dates or draft/frozen state. A synthetic status response establishes fixture behavior only, not current production state. Other event profiles, including ETHRome, have their own rules and must stay separate.
+Providing that URL does not authorize adding a second connection, switching the host's profile or changing configuration. The developer chooses the connection. Inspect its actual `server_status` and current event sources before relying on rules, dates or draft/frozen state, including with the plugin's bundled connection. A synthetic status response establishes fixture behavior only, not current production state. Other event profiles, including ETHRome, have their own rules and must stay separate.
 
 ## Discover the actual profile
 
