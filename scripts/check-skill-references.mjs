@@ -1,4 +1,5 @@
 import {readFile, readdir} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
@@ -83,7 +84,9 @@ export async function checkSkillReferences(root) {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
     if (process.argv.length > 2) throw new Error('Usage: node scripts/check-skill-references.mjs');
-    const result = await checkSkillReferences(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+    const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const root = existsSync(path.join(repository, 'skills')) ? repository : path.join(repository, 'plugins/arkiv');
+    const result = await checkSkillReferences(root);
     console.log(JSON.stringify(result, null, 2));
     if (!result.passed) process.exitCode = 1;
   } catch (error) {console.error(error.message); process.exitCode = 1;}
