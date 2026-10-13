@@ -5,7 +5,7 @@ license: MIT
 metadata:
   arkiv-sdk: ">=0.8.1 <0.9"
   network: tiramisu
-  verified: "2026-10-08"
+  verified: "2026-10-13"
 ---
 
 # Arkiv write safety
@@ -44,19 +44,29 @@ SDK 0.8.1 `executeBatch` returns created keys but no expiration deadlines. Decod
 | Known hash; receipt unavailable | Keep the hash and wait/reconcile. An RPC lookup error does not mean the transaction disappeared. |
 | Receipt successful; SDK event decoding/count failed | The batch applied. `EntityMutationError.txHash` preserves the hash. Recover identities from receipt logs and matching input order; never recreate automatically. |
 | Receipt reverted | Entity operations did not apply; gas may still have been spent. Inspect the reason, fix it, and retry only under the remaining authorization. |
-| Receipt successful; later read/checkpoint failed | Preserve confirmed keys/hash. Repair verification or the checkpoint before admitting another batch. |
+| Authenticated canonical receipt; later read/checkpoint failed | Preserve receipt-confirmed keys/hash separately from verified progress. Repair this batch's verification or checkpoint without resending; block the next batch. |
 
 RPC transport retries and submitting a new transaction are different actions. Do not convert a transport retry policy into application retries around `createEntity()` or `executeBatch()`. An application `row_id` helps reconciliation but is not protocol uniqueness or automatic idempotency.
 
-## Worked crash-safe importer
+## Durable batch progress
 
-Use [the resumable Node importer](references/resumable-import.md) for a complete create-only workflow. Its executable helper prepares and loads an immutable plan, coordinates processes on one host, captures signed bytes/hash before forwarding, and verifies the full transaction, canonical receipt, predicted key order, and fresh fields before checkpointing.
+Apply these rules before choosing an importer:
+
+- Save prepared/submitting intent durably **before** the wallet call. Freeze the current batch's ordered rows and intended fields; a successful estimate is not saved intent.
+- Preserve every known hash immediately. When local signing exposes raw bytes, authenticate and save those bytes/hash **before** forwarding them to the provider. If that save fails, do not forward the send.
+- Separate `receipt_confirmed` from `verified`. Authenticate the signed intent, provider transaction, canonical successful receipt and ordered keys/events, then durably save receipt-confirmed progress **before** field readback or a later checkpoint. An arbitrary successful receipt or event count does not authenticate the planned batch.
+- Read back only the current batch's rows and require their payload, typed attributes and metadata to match before saving `verified` or admitting the next batch. For 60 rows split into three batches of 20, verify each batch's 20 rows; the whole job completes after all three are verified.
+- Stop on uncertain sends, readback failures and save failures. Preserve partial progress: the prior `submitting` or `receipt_confirmed` entry remains the recovery source. Restart with the original plan/hash/files, authenticate the known transaction and repair verification without resending it.
+
+## Worked resumable importer
+
+Use [the resumable Node importer](references/resumable-import.md) for a complete create-only workflow. Its executable helper prepares and loads an immutable plan, coordinates processes on one host, captures signed bytes/hash before forwarding, checkpoints authenticated receipt confirmation, then verifies this batch's fresh fields before checkpointing verified progress.
 
 1. Prepare one plan under exclusive signer custody. Freeze row order, salts, absolute expirations, account/chain/genesis, batch numbers, transaction nonces, SDK calldata, gas, fees, and spend cap. Retain the returned plan hash in a trusted job entry.
-2. Fsync the plan and journal before admission. Each raw send authenticates the local signature and exact frozen intent, then fsyncs signed bytes and their hash **before** the provider request. If this save fails, the wrapper does not forward the send.
+2. Fsync the plan and journal before admission, and save `prepared` intent before entering the wallet call. Each raw send authenticates the local signature and exact frozen intent, then fsyncs `submitting` signed bytes and their hash **before** the provider request. If this save fails, the wrapper does not forward the send.
 3. Stop after any uncertain send, receipt/verification failure, or checkpoint failure. The pre-send journal survives receipt-wait crashes and lost responses even when `EntityMutationError.txHash` is absent.
-4. Restart with the original plan hash and files. Load durable state, authenticate every captured hash before continuing, and skip verified batches. Do not infer batch numbers from the current result-array length or restart the original rows.
-5. Confirm only after matching sender, nonce, native address, input, fee fields, receipt block/provenance, event order, predicted keys, and typed entity readback. Event count alone cannot authenticate a hash. A failed post-send save leaves the earlier submitting entry available for recovery.
+4. Restart with the original plan hash and files. Load durable state, authenticate every captured hash before continuing, repair incomplete verification, and skip resubmission of verified batches. This conservative helper also rechecks their fresh fields. Do not infer batch numbers from the current result-array length or restart the original rows.
+5. Save `receipt_confirmed` after matching sender, nonce, native address, input, fee fields, canonical receipt block/provenance, event order and predicted keys. Then read this batch's entities and save `verified` only after matching fields. A failed receipt save leaves `submitting` available; a failed readback or verified save leaves `receipt_confirmed` available. The helper writes journal version 2 and fails closed on older journals; retain them and reconcile with the original importer rather than renaming their combined `confirmed` state.
 
 The helper refuses automatic rebroadcast. An operator may consider resending the **same signed bytes** only after explicit reconciliation; signing new bytes while the previous nonce can still land risks replacement or duplicate application work. Expired or changed entities cause this conservative example to stop, never recreate.
 
@@ -66,7 +76,7 @@ For older uninstrumented jobs, use the saved start block and pinned signer/nonce
 
 ## Verification and sources
 
-The helper's local regressions exercise SDK 0.8.1 serialization/receipt decoding, a lost raw-send response, a real process exit and restart with original files, cross-process admission, failed fsync/checkpoints, plan and hash mismatches, typed readback, expired plans, and changed genesis. Controlled-provider tests establish these paths; they do not certify real provider limits, funded transactions, distributed custody, or machine power-loss durability.
+The helper's local regressions exercise SDK 0.8.1 serialization/receipt decoding, a lost raw-send response, a real process exit and restart with original files, cross-process admission, failed fsync/checkpoints, plan and hash mismatches, typed readback, expired plans, and changed genesis. Focused journal-version-2 regressions cover receipt confirmation before reads, failed readback and verified saves, batch-local verification, and recovery without resubmission. Controlled-provider tests establish these paths; they do not certify real provider limits, funded transactions, distributed custody, or machine power-loss durability.
 
 - [SDK 0.8.1 native encoding, send and receipt handling](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/utils/arkivTransactions.ts).
 - [SDK 0.8.1 executeBatch result](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/wallet/executeBatch.ts), [TxParams](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/types/txParams.ts), and [entity-key prediction](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/public/predictEntityKeys.ts).
