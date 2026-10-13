@@ -5,7 +5,7 @@ license: MIT
 metadata:
   arkiv-sdk: ">=0.8.1 <0.9"
   network: "tiramisu"
-  verified: "2026-10-08"
+  verified: "2026-10-13"
 ---
 
 # Arkiv MCP
@@ -13,6 +13,14 @@ metadata:
 A skill is guidance the agent reads. A tool is a callable operation that returns data. The reviewed Arkiv gateway supplies knowledge and, in selected profiles, narrow public-evidence checks; it does not sign or submit chain transactions. Knowledge/model requests also send their arguments to the service. Optional feedback requires separate sharing consent.
 
 Use this skill for an **existing authorized connection**. If the user chooses skills/SDK only, honor that choice. Use `arkiv-first-write`, `arkiv-query` and `arkiv-troubleshooting` directly; an MCP is not a prerequisite.
+
+## General and Global Tour Stop connections
+
+The Claude Code plugin bundles the **General** connection at `https://mcp.arkiv.network/`. General building guidance does not include event rules.
+
+**Arkiv: Global Tour Stop uses the Devfolio event profile**, at `https://mcp.arkiv.network/devfolio`. Devfolio is this event's profile identifier, not a different event. If a Global Tour Stop participant is connected to General, explain that distinction and point to the [Hub MCP section](https://hub.arkiv.network/ai-tools#mcp) or the event-specific URL. The [canonical event repository](https://github.com/Arkiv-Network/global-tour-stop-pre-devcon) identifies Global Tour Stop and its Devfolio submission context.
+
+Providing that URL does not authorize adding a second connection, switching the host's profile or changing configuration. The developer chooses the event connection. After that choice, inspect its actual `server_status` and current event sources before relying on rules, dates or draft/frozen state. A synthetic status response establishes fixture behavior only, not current production state. Other event profiles, including ETHRome, have their own rules and must stay separate.
 
 ## Discover the actual profile
 
@@ -65,4 +73,4 @@ Request: “My post is missing; this profile has no `verify_entity`.” Load `ar
 
 Request: “The event check passes; submit my app.” A text check is insufficient evidence. Read the actual event submission procedure and authorization scope; inspect the app and required evidence locally. A preparation prompt or optional feedback acknowledgment is not an application submission.
 
-Sources: [Arkiv gateway](https://mcp.arkiv.network/), [official SDK](https://www.npmjs.com/package/@arkiv-network/sdk/v/0.8.1), [Arkiv documentation](https://docs.arkiv.network). Service-source review on 2026-10-05 and retained audit captures on 2026-10-07 are historical: root and `/ethrome` reported release `1.1.7` / config `2026-10-05.2`; `/devfolio` reported `1.1.10` / config `2026-10-07.2` / content `d47bd82dbbb4167a`. The 2026-10-08 verification date covers this documentation and protocol-source review, not a fresh service call. Discover the connected profile again before relying on those observations.
+Sources: [Arkiv gateway](https://mcp.arkiv.network/), [official SDK](https://www.npmjs.com/package/@arkiv-network/sdk/v/0.8.1), [Arkiv documentation](https://docs.arkiv.network). Service-source review on 2026-10-05 and retained audit captures on 2026-10-07 are historical: root and `/ethrome` reported release `1.1.7` / config `2026-10-05.2`; `/devfolio` reported `1.1.10` / config `2026-10-07.2` / content `d47bd82dbbb4167a`. The 2026-10-13 documentation review verifies the General/Global Tour Stop distinction against the released profile registry and canonical event repository. It includes no fresh service call. Discover the connected profile again before relying on dated observations.

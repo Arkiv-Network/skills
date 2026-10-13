@@ -48,4 +48,4 @@ Each skill declares its checked SDK range, network, date and MIT license in fron
 
 For the combined Claude Code plugin, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/claude-plugin). It imports a fixed canonical revision and bundles the existing MCP connection and project rules. Read its installation and verification scope before use.
 
-Contributors and agents should read [AGENTS.md](AGENTS.md). Recent safety guidance covers complete atomic batch validation, separately authorized removal after readonly corrections, transfer provenance and conservative recovery of checkpoints without authenticated hash lineage.
+Contributors and agents should read [AGENTS.md](AGENTS.md). Recent guidance covers complete atomic batch validation, separately authorized removal after readonly corrections, transfer provenance, conservative checkpoint recovery and the distinction between the General connection and Global Tour Stop's Devfolio profile.
