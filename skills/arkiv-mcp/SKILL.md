@@ -16,7 +16,7 @@ Use this skill for an **existing authorized connection**. If the user chooses sk
 
 ## Plugin and standalone connections
 
-The Claude Code plugin bundles the **Devfolio (Arkiv: Global Tour Stop)** profile at `https://mcp.arkiv.network/devfolio`. This profile includes Arkiv building guidance and the event sources. Plugin users already have this connection; do not add another one.
+The Arkiv plugin bundles the **Devfolio (Arkiv: Global Tour Stop)** profile at `https://mcp.arkiv.network/devfolio` in supported clients. This profile includes Arkiv building guidance and the event sources. Plugin users already have this connection; do not add another one. Check the client-specific installation guide; installing a plugin does not authorize SDK installation, wallet access, signing, feedback or transactions.
 
 Standalone users may have a different authorized connection. General building guidance does not include event rules. **Arkiv: Global Tour Stop uses the Devfolio event profile**, at `https://mcp.arkiv.network/devfolio`. Devfolio is this event's profile identifier, not a different event. If a standalone participant is connected to General, explain that distinction and point to the [Hub MCP section](https://hub.arkiv.network/ai-tools#mcp) or the event-specific URL. The [canonical event repository](https://github.com/Arkiv-Network/global-tour-stop-pre-devcon) identifies Global Tour Stop and its Devfolio submission context.
 
