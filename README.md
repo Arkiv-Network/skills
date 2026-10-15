@@ -49,3 +49,14 @@ Each skill declares its checked SDK range, network, date and MIT license in fron
 For the combined Claude Code plugin, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/claude-plugin). It imports a fixed canonical revision and bundles the existing MCP connection and project rules. Read its installation and verification scope before use.
 
 Contributors and agents should read [AGENTS.md](AGENTS.md). Recent guidance covers complete atomic batch validation, separately authorized removal after readonly corrections, transfer provenance and the distinction between the General connection and Global Tour Stop's Devfolio profile. The resumable importer saves intent before wallet entry, distinguishes receipt-confirmed progress from verified fields and recovers without resubmitting a known transaction. Its version-2 journal fails closed on older journals; preserve those files and reconcile with the original importer.
+
+## Candidate installed-import check
+
+The router includes an advisory [installed-import check](skills/arkiv/references/import-check.md), derived from a sanitized SDK 0.7.0 friction report. It reads named imports, package exports and installed declarations without executing application code or making network requests. Unsupported evidence stays unmeasured. Native host verification and a complete nonregressing context-only ablation are required before publishing the new frontmatter hook in a distribution.
+
+```bash
+node --test tests/snippets/import-check.test.mjs tests/snippets/skill-references.test.mjs
+node scripts/check-skill-references.mjs
+# Explicit network fixture: verifies official tarball integrity, never runs package scripts.
+node tests/snippets/published-imports.mjs
+```

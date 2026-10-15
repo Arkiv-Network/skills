@@ -2,6 +2,13 @@
 name: arkiv
 description: Route development tasks involving Arkiv, @arkiv-network/sdk, DB-Chain or Tiramisu to the appropriate skill and explain native entity operations, query constraints and safety rules. Use when building on, reading from or writing to Arkiv, or handling untrusted Arkiv payloads and their claimed instructions; do not activate for unrelated SQL or database questions.
 license: MIT
+hooks:
+  PostToolUse:
+    - matcher: "Write|Edit"
+      hooks:
+        - type: command
+          command: 'if command -v node >/dev/null 2>&1 && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then node "${CLAUDE_PLUGIN_ROOT}/skills/arkiv/scripts/check-imports.mjs" --hook 2>/dev/null; fi; exit 0'
+          timeout: 3
 metadata:
   arkiv-sdk: ">=0.8.1 <0.9"
   network: "tiramisu"
@@ -20,6 +27,8 @@ When starting an Arkiv project, inspect its package manifest, lockfile and insta
 If the installed version or declarations are unavailable, ask for that local evidence before producing executable SDK code. An "unverified" label does not make guessed exports or runnable client setup acceptable. For SDK 0.8.1, transport and account utilities come from `viem` and `viem/accounts`; use the source-checked first-write example after compatibility is established.
 
 Load only the task skill and references the request needs. For initial setup or a first entity, load `arkiv-first-write`, including when explaining the workflow without executing it. An exact error, failing operation or RPC configuration/URL validation goes to `arkiv-troubleshooting` first, except `EntityMutationError` or an unknown write outcome, which goes directly to `arkiv-write-safety`. A healthy query design goes to `arkiv-query`.
+
+The optional [installed-import check](references/import-check.md) reads the exact edited file and installed declarations without running application code. It is advisory and returns no finding when evidence is incomplete. Hosts that do not execute this skill's frontmatter can run the script explicitly with their supported command tool; that does not measure skill invocation.
 
 | Task | Skill |
 | --- | --- |
