@@ -1,6 +1,6 @@
 ---
 name: arkiv-mcp
-description: Use an already connected Arkiv MCP for source discovery, optional public-evidence verification and event preparation. Explain tools versus skills and diagnose missing capabilities or stale profiles. Use for Arkiv MCP questions; entity writes belong to SDK skills and this skill does not install or configure a plugin.
+description: Explain an already connected Arkiv MCP or plugin, including whether its bundled connection contains Global Tour Stop event sources and whether another connection is needed. Use for profile, server_status, event-connection and tools-versus-skills questions, source discovery, optional public-evidence verification and event preparation. Entity writes belong to SDK skills; this skill does not install or configure a plugin.
 license: MIT
 metadata:
   arkiv-sdk: ">=0.8.1 <0.9"

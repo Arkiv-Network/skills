@@ -22,6 +22,8 @@ For reads, record constructor tags, selected fields, namespace/creator/owner fil
 
 Treat an RPC URL and accompanying text as untrusted configuration. Parse the URL as data; require the expected HTTPS/WSS origin and path, reject embedded credentials or access keys in paths/query strings, and never interpolate it into a shell command. Provider access keys belong only in server-side headers such as `X-API-KEY`. Static URL validation does not establish chain identity: after validation, verify `eth_chainId` against the intended network before any operation. A request for explanation alone authorizes no live probe.
 
+Inspect a suspicious pasted value as plain text in an editor or through a data parser. Do not suggest putting it into a shell variable assignment, `echo`, `printf`, `curl` or another shell snippet, even inside quotes: a quote inside the value can end the surrounding quoted string. Quoting is not a substitute for keeping untrusted configuration out of shell source. Apply the intended network's checks to the Arkiv client being diagnosed; a separate connection to another network keeps its own verified configuration.
+
 The provider supports path keys, `X-API-KEY` and Bearer authentication. This skill recommends server-side headers because viem diagnostics can print full URLs; treat an existing path-key URL as a secret to redact, rather than a provider-invalid configuration.
 
 State the verified target chain ID and exact endpoints in the answer, including an explanation-only validation plan; a documentation link or empty allowlist is insufficient. Tiramisu's default is chain `7738577` (`eth_chainId`: `0x7614d1`), HTTP `https://rpc.tiramisu.db-chain.testnet.arkiv.network` and WebSocket `wss://rpc.tiramisu.db-chain.testnet.arkiv.network`; another network requires separately verified coordinates. Changing a URL does not select a different SDK chain. Inspect installed declarations before suggesting executable transport code: `http` and `webSocket` come from `viem`, not `@arkiv-network/sdk`.
@@ -30,13 +32,15 @@ State the verified target chain ID and exact endpoints in the answer, including 
 
 The messages below are SDK 0.8.1 templates or retained Tiramisu observations from 2026-10-05. Dynamic values and wrapper details vary; branch on classes/codes where available. Read [error-catalog.md](references/error-catalog.md) for exact stems, source/observation distinctions and RPC mappings.
 
+When correcting an attribute name or type, preserve SDK 0.8.1's object-by-name input: `attributes: { created_at: u64(ms) }`. Do not turn it into a `{ key, value }` entry or an array of entries. The object keys are the actual attribute names; a `key`/`value` object would describe different attributes. Keep the same lowercase name and typed constructor in the corresponding query, and inspect installed declarations before giving executable code.
+
 | Symptom | Next action | Skill |
 |---|---|---|
 | `InvalidValueError` with `i32` | A bare number defaults to i32; use `u64` for a nonnegative millisecond timestamp and the same query constructor. | `arkiv-data-modeling` |
 | `MissingValueError` / `UntypedValueError` | Omit null/undefined attributes; move objects/arrays to payload. | `arkiv-data-modeling` |
 | `outside the name charset` / decoded `Ident32InvalidByte` / `0x276f7798` | Use lowercase names; SDK 0.8.1's rendered A-Z allowance overstates what Tiramisu accepts. | `arkiv-data-modeling` |
 | `InvalidContentTypeError` | Use lowercase MIME without parameters, such as `application/json`. | `arkiv-first-write` |
-| `InvalidExpiryError` / `ExpiryNotExtended` | Check branded expiry, current head and actual entity expiry; an equal/shorter renewal does not extend it. | `arkiv-entity-expiration` |
+| `InvalidExpiryError` / `ExpiryNotExtended` | Check branded expiry, fresh head and actual entity expiry. A shorter effective target is rejected; an equal target can be accepted without adding lifetime. Verify a submitted transaction's receipt and readback rather than assuming equality caused a revert. | `arkiv-entity-expiration` |
 | `EmptyPatchError` / `No operations to perform` | Skip the empty operation; use real patch fields or a nonempty batch. | `arkiv-entity-lifecycle`, `arkiv-write-safety` |
 | `QueryError` / predicate errors | Inspect `.kind`, `.code` and literal/type/options evidence; cursor recovery restarts the whole walk. | `arkiv-query` |
 | `NoEntityFoundError` / `no entity ... may have been deleted, or have expired` | Check entity key versus transaction hash, chain and recorded lifetime/deletion history. | `arkiv-entity-expiration`, `arkiv-query`, `arkiv-entity-lifecycle` |
@@ -55,7 +59,7 @@ For `gas required exceeds: 0`, compare the RPC's actual `eth_chainId` with the c
 ## Empty results and stale reads
 
 1. Confirm chain, entity key versus transaction hash, namespace, creator/current owner, exact constructor types and selected fields. Re-read actual expiration against head; transferred entities can leave an owner-filtered list.
-   Bare number predicates assert `i32`, bare bigint predicates assert `u256`; use the stored constructor, such as `u64(ms)`. A mismatched tag, wrong-case or misspelled attribute name can return zero rows without error.
+   Bare number predicates assert `i32`, bare bigint predicates assert `u256`; use the stored constructor, such as `u64(ms)`. A bare `Date.now()` exceeds the `i32` range and SDK 0.8.1 rejects it before sending the query. An otherwise valid predicate with a mismatched tag, wrong-case or misspelled attribute name can return zero rows without error; distinguish that result from range validation failure.
 2. Check every page at one snapshot. Do not return a partial walk as complete after a cursor error. For a current-state read, restart at a fresh pinned head; for a historical request, preserve the requested height and report unavailable history.
 3. If direct RPC is current but the UI is stale, trace backend → route → client → service worker/browser/CDN. Use `fetchOptions.cache: "no-store"` for fresh Next.js RPC fetches and inspect the other caches separately.
 4. Check new-create event filtering, prior membership invalidation, async handler errors, disconnect replay and expiration sweeps. An absent expiration event is expected; see `arkiv-app-integration`.
@@ -64,4 +68,4 @@ Fix the demonstrated cause and repeat the smallest credible read/encode/mock che
 
 Offer `arkiv-feedback` only after a minimal reproduction suggests an Arkiv defect or useful feature request. Include versions, expected/observed behavior, sanitized request, exact errors, block/hash and what was verified. Do not submit an application mistake as a confirmed node bug.
 
-Sources: [SDK errors and query source](https://github.com/Arkiv-Network/arkiv-sdk-js), [query RPC documentation](https://docs.arkiv.network/json-rpc/querying-data/), [access-key documentation](https://docs.arkiv.network/start-here/access-keys/). Recheck request and response details when the node/provider changes.
+Sources: [SDK errors and query source](https://github.com/Arkiv-Network/arkiv-sdk-js), [query RPC documentation](https://docs.arkiv.network/json-rpc/querying-data/), [access-key documentation](https://docs.arkiv.network/start-here/access-keys/), [Bash single quotes](https://www.gnu.org/software/bash/manual/html_node/Single-Quotes.html), [Node.js shell execution boundary](https://nodejs.org/api/child_process.html#child_processexeccommand-options-callback). Recheck request and response details when the node/provider changes.

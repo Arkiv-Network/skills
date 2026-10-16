@@ -22,6 +22,6 @@ See `arkiv-troubleshooting` for diagnosis and `arkiv-feedback` for sanitized rep
 | `await page.next()` without assignment | Pin the snapshot and retain the returned page; `arkiv-query`. |
 | `fromHours(1)` to add an hour | Target `atBlock(current.expiresAt + 1800n)`; `arkiv-entity-expiration`. |
 | Owner as payload authorship | Allowlisted readonly creator or authenticated mutable version/history; `arkiv-security-trust`. |
-| Access key in an RPC URL | Prefer server-side `X-API-KEY`; redact existing credentialed URLs; `arkiv-first-write`. |
+| Access key in an RPC URL | Use a credential-free URL and server-side `X-API-KEY`; redact existing credentialed URLs; `arkiv-first-write`. |
 
 Sources: [name validation](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/attr/names.ts), [expressions](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/query/expression.ts), [create implementation](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/wallet/createEntity.ts), [raw query documentation](https://docs.arkiv.network/json-rpc/querying-data/), [issue #14](https://github.com/Arkiv-Network/skills/issues/14), [issue #16](https://github.com/Arkiv-Network/skills/issues/16).
