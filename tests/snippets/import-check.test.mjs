@@ -44,3 +44,61 @@ test('a compound variable declaration cannot establish a missing name',async t=>
  await f.put('node_modules/@arkiv-network/sdk/chains.d.ts','export declare const braga: unknown, tiramisu: unknown;');
  assert.equal((await checkFile(path.join(f.dir,'app.ts'),f.dir)).measured,false);
 });
+
+test('unsupported root export shapes cannot establish a missing subpath',async t=>{
+ const f=await fixture(t);await f.put('app.ts',"import { createPublicClient } from '@arkiv-network/sdk';");
+ for(const exports of [{types:'./index.d.ts',import:'./index.js'},['./index.js'],{'node':{types:'./index.d.ts'},default:'./index.js'}]){
+  await f.put('node_modules/@arkiv-network/sdk/package.json',{name:'@arkiv-network/sdk',exports});
+  assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:false,diagnostics:[]});
+ }
+});
+
+test('unresolved export conditions cannot establish a missing name',async t=>{
+ const f=await fixture(t);await f.put('app.ts',cases[0][1]);
+ await f.put('node_modules/@arkiv-network/sdk/node.d.ts','export declare const tiramisu: unknown;');
+ await f.put('node_modules/@arkiv-network/sdk/package.json',{name:'@arkiv-network/sdk',exports:{'./chains':{node:{types:'./node.d.ts'},default:'./chains.js'}}});
+ assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:false,diagnostics:[]});
+});
+
+test('the published Bun condition is inspected as data rather than ignored',async t=>{
+ const f=await fixture(t);await f.put('app.ts',cases[0][1]);
+ await f.put('node_modules/@arkiv-network/sdk/package.json',{name:'@arkiv-network/sdk',exports:{'./chains':{bun:'./source.ts',import:'./chains.js'}}});
+ assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:false,diagnostics:[]});
+ await f.put('node_modules/@arkiv-network/sdk/source.ts','throw Error("must never execute"); export const tiramisu = {};');
+ assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:true,diagnostics:[]});
+ await f.put('node_modules/@arkiv-network/sdk/source.ts','throw Error("must never execute"); export const braga = {};');
+ const result=await checkFile(path.join(f.dir,'app.ts'),f.dir);
+ assert.equal(result.measured,true);assert.equal(result.diagnostics.length,1);
+});
+
+test('an explicit types target does not hide a supported runtime condition',async t=>{
+ const f=await fixture(t);await f.put('app.ts',cases[0][1]);
+ await f.put('node_modules/@arkiv-network/sdk/package.json',{name:'@arkiv-network/sdk',exports:{'./chains':{types:'./chains.d.ts',bun:'./source.ts',import:'./chains.js'}}});
+ await f.put('node_modules/@arkiv-network/sdk/source.ts','throw Error("must never execute"); export const tiramisu = {};');
+ assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:true,diagnostics:[]});
+});
+
+test('a nested fallback array cannot be ignored when establishing a missing name',async t=>{
+ const f=await fixture(t);await f.put('app.ts',cases[0][1]);
+ await f.put('node_modules/@arkiv-network/sdk/alternative.d.ts','export declare const tiramisu: unknown;');
+ for(const fallback of [['./alternative.js'],'./native.node',42]){
+  await f.put('node_modules/@arkiv-network/sdk/package.json',{name:'@arkiv-network/sdk',exports:{'./chains':{types:'./chains.d.ts',default:fallback}}});
+  assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:false,diagnostics:[]});
+ }
+});
+
+test('namespace and ambient exports cannot be mistaken for package-level exports',async t=>{
+ const f=await fixture(t);await f.put('app.ts',cases[0][1]);
+ for(const declarations of [
+  'export declare namespace legacy { export const tiramisu: unknown; }',
+  'declare namespace legacy { export const tiramisu: unknown; } export { legacy };',
+  "declare module 'neighbor' { export const tiramisu: unknown; } export declare const braga: unknown;",
+ ]){
+  await f.put('node_modules/@arkiv-network/sdk/chains.d.ts',declarations);
+  assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:false,diagnostics:[]});
+ }
+ await f.put('node_modules/@arkiv-network/sdk/chains.d.ts','export declare const tiramisu: unknown;');
+ assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:true,diagnostics:[]});
+ await f.put('node_modules/@arkiv-network/sdk/chains.d.ts','export declare const braga: unknown;');
+ assert.deepEqual(await checkFile(path.join(f.dir,'app.ts'),f.dir),{measured:true,diagnostics:[{code:'ARKIV_IMPORT_NAME',subpath:'./chains',name:'tiramisu'}]});
+});

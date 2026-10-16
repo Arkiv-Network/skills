@@ -26,7 +26,7 @@ If no form was selected, ask whether this is a bug or feature request. Diagnose 
 
 ## 3. Collect fields
 
-Read [bug form](references/bug-form.md) or [feature form](references/feature-form.md). Fetch the current upstream YAML if available and compare labels, required fields and options; the references describe the checked snapshot. If network access is unavailable or prohibited, draft from that snapshot and explicitly state that current-form verification was not performed and remains required before submission. Keep Tiramisu available even if upstream's network dropdown has not caught up. Required fields need an answer. Use `_No response_` for every skipped optional field.
+Read [bug form](references/bug-form.md) or [feature form](references/feature-form.md). Fetch the current upstream YAML if available and compare labels, required fields and options; the references describe the checked snapshot. If network access is unavailable or prohibited, draft from that snapshot and explicitly state that current-form verification was not performed and remains required before submission. Keep Tiramisu available even if upstream's network dropdown has not caught up. Required fields need an answer. Use `_No response_` for every skipped optional field. Do not fill a skipped field with your own disclaimer, inferred details or verification notes. Preserve supplied optional answers after redaction. Identify hypothetical or unverified observations in the required problem description, and explain your own verification limits outside the issue body; neither is a reason to populate an omitted extra-context field.
 
 Keep the user's meaning and technical detail, with secrets removed. Ask for a transaction/entity explorer URL or minimal repro when useful, and record which skill/version taught a failing example if applicable. Translate public issue prose into English and show the translation in the draft before approval. Do not expose private logs or internal URLs. Never add credentials to a URL to reproduce an issue.
 
@@ -38,7 +38,7 @@ Use the form labels verbatim as headings. Bug titles start `[Bug]:`; ideas start
 
 ## 5. Confirm
 
-Ask whether to submit the exact shown draft to `Arkiv-Network/reported-issues`. Edits require presenting the revised draft. Approval to investigate or draft does not approve public submission. Do not claim any project-board automation will process it.
+For a draft-only request, end by stating that submitting this exact draft requires separate explicit approval, then stop. Saying that nothing was published does not explain the consent still needed. If the user wants to proceed, ask whether to submit the exact shown draft to `Arkiv-Network/reported-issues`. Edits require presenting the revised draft. Approval to investigate or draft does not approve public submission. Do not claim any project-board automation will process it.
 
 ## 6. Check submission tooling
 

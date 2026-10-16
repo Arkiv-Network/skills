@@ -16,6 +16,8 @@ Use `arkiv` for orientation. This skill produces one verified entity, not a prod
 
 Before producing executable SDK code, observe the project's installed SDK version and inspect its installed declarations. If either is unavailable, request that evidence or approval to obtain it before giving executable SDK code; an "unverified" label does not satisfy this gate. Recommend SDK `0.8.1` exactly or state the supported range literally as `>=0.8.1 <0.9`; never describe `0.8.x` as a compatibility guarantee. If the project uses SDK `0.8.0`, stop integration and ask for approval to upgrade, without forcing or bypassing peers. Report only files you actually inspected.
 
+For an explanation-only request, still identify the current API shapes: object-valued `attributes` and `expires` constructed with `ExpirationTime`, such as `ExpirationTime.fromDays(1)`. Distinguish that relative input from the entity's resulting absolute `expiresAt` block. Describe awaiting the create result, checking its receipt and reading the entity back. These explanations do not claim installed-declaration inspection or authorize execution.
+
 Inspect the existing package manager and installed SDK declarations. Explain a dependency installation before running it. For a new npm project:
 
 ```bash

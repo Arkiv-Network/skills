@@ -41,22 +41,35 @@ function imports(text){
  return found;
 }
 function typeTargets(value){
+ if(value===undefined||value===null)return [];
+ if(Array.isArray(value))throw Error('unmeasured');
  if(typeof value==='string'){
   if(/\.d\.(ts|mts|cts)$/.test(value))return [value];
+  // The published SDK also exposes a Bun TypeScript entrypoint. Read its
+  // export declarations as text; never execute it or ignore that branch.
+  if(/\.[cm]?ts$/.test(value))return [value];
   // TypeScript substitutes declaration extensions for explicit JS export targets.
   if(/\.mjs$/.test(value))return [value.slice(0,-4)+'.d.mts'];
   if(/\.cjs$/.test(value))return [value.slice(0,-4)+'.d.cts'];
   if(/\.js$/.test(value))return [value.slice(0,-3)+'.d.ts'];
-  return [];
+  throw Error('unmeasured');
  }
- if(!value||typeof value!=='object'||Array.isArray(value))return [];
- if(typeof value.types==='string')return [value.types];
- return [...new Set(['import','require','default'].flatMap(k=>typeTargets(value[k])))];
+ if(typeof value!=='object')throw Error('unmeasured');
+ // An uninspected condition can select a different declaration set. Do not
+ // infer absence from just the default branch when resolution is unknown.
+ if(Object.keys(value).some(k=>!['types','import','require','default','bun'].includes(k)))throw Error('unmeasured');
+ return [...new Set(['types','import','require','default','bun'].flatMap(k=>typeTargets(value[k])))];
 }
 async function exportsOf(root,entry,seen=new Set()){
  const real=await fs.realpath(path.resolve(root,entry));
  if(!real.startsWith(root+path.sep)||seen.size>=32||seen.has(real))throw Error('unmeasured');seen.add(real);
  const t=tokens(await read(real)),names=new Set();
+ // Namespace members and ambient module declarations have their own scope.
+ // This reader does not resolve those scopes or declaration merging.
+ if(t.some((token,i)=>token.kind==='name'&&(
+  (['namespace','module'].includes(token.value)&&['name','string'].includes(t[i+1]?.kind))||
+  (token.value==='global'&&t[i-1]?.value==='declare')
+ )))throw Error('unmeasured');
  for(let i=0;i<t.length;i++){
   if(t[i].kind!=='name'||t[i].value!=='export')continue;
   let j=i+1;if(t[j]?.value==='declare')j++;
@@ -95,13 +108,17 @@ export async function checkFile(file,cwd){
    try{const candidate=path.join(dir,'node_modules',...sdk.split('/'));pkg=JSON.parse(await read(path.join(candidate,'package.json')));root=await fs.realpath(candidate);break;}catch(e){if(e.code!=='ENOENT')throw e;}
    const parent=path.dirname(dir);if(parent===dir)break;dir=parent;
   }
-  if(!pkg||pkg.name!==sdk||!pkg.exports||typeof pkg.exports!=='object'||Object.keys(pkg.exports).some(k=>k.includes('*')))return result;
+  if(!pkg||pkg.name!==sdk||!pkg.exports||typeof pkg.exports!=='object'||Array.isArray(pkg.exports))return result;
+  // Conditional main exports and fallback arrays are valid package shapes, but
+  // this reader supports only explicit subpath maps. Their lack of a literal
+  // "." key is not evidence that the SDK root cannot be imported.
+  if(Object.keys(pkg.exports).some(k=>(k!=='.'&&!k.startsWith('./'))||k.includes('*')))return result;
   for(const item of requested){
    const subpath=item.spec===sdk?'.':'.'+item.spec.slice(sdk.length);
    if(!Object.hasOwn(pkg.exports,subpath)||pkg.exports[subpath]===null){result.diagnostics.push({code:'ARKIV_IMPORT_SUBPATH',subpath});continue;}
    const entries=typeTargets(pkg.exports[subpath]);if(!entries.length)throw Error('unmeasured');
    // A missing name is reported only when absent from every readable standard
-   // import/require declaration target. Missing targets leave it unmeasured.
+   // declaration/Bun source target. Missing targets leave it unmeasured.
    const names=new Set();for(const entry of entries)for(const name of await exportsOf(root,entry))names.add(name);
    for(const name of item.names)if(!names.has(name))result.diagnostics.push({code:'ARKIV_IMPORT_NAME',subpath,name});
   }
