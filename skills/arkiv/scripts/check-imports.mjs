@@ -36,7 +36,11 @@ function imports(text){
    if(t[j]?.value===',')j++;else if(t[j]?.value!=='}')throw Error('unmeasured');
   }
   if(t[j+1]?.value!=='from'||t[j+2]?.kind!=='string')continue;
-  const spec=t[j+2].value;if(spec===sdk||spec.startsWith(sdk+'/'))found.push({spec,names});i=j+2;
+  const spec=t[j+2].value;if(spec!==sdk&&!spec.startsWith(sdk+'/')){i=j+2;continue;}
+  // Diagnostics echo subpaths and names into the agent's context. Anything outside
+  // the plain package-subpath and identifier grammar stays unmeasured, never echoed.
+  if(spec.length>128||!(spec===sdk||/^@arkiv-network\/sdk(?:\/[a-z0-9][a-z0-9._-]*)+$/.test(spec))||names.some(n=>n.length>64))throw Error('unmeasured');
+  found.push({spec,names});i=j+2;
  }
  return found;
 }
@@ -60,9 +64,13 @@ function typeTargets(value){
  if(Object.keys(value).some(k=>!['types','import','require','default','bun'].includes(k)))throw Error('unmeasured');
  return [...new Set(['types','import','require','default','bun'].flatMap(k=>typeTargets(value[k])))];
 }
-async function exportsOf(root,entry,seen=new Set()){
+// One check reads each declaration file at most once: re-export diamonds reuse the
+// cached names, and the whole check stops at a fixed file count.
+async function exportsOf(root,entry,seen=new Set(),ctx={cache:new Map(),reads:0}){
  const real=await fs.realpath(path.resolve(root,entry));
- if(!real.startsWith(root+path.sep)||seen.size>=32||seen.has(real))throw Error('unmeasured');seen.add(real);
+ if(!real.startsWith(root+path.sep)||seen.size>=32||seen.has(real))throw Error('unmeasured');
+ if(ctx.cache.has(real))return ctx.cache.get(real);
+ if(++ctx.reads>128)throw Error('unmeasured');seen.add(real);
  const t=tokens(await read(real)),names=new Set();
  // Namespace members and ambient module declarations have their own scope.
  // This reader does not resolve those scopes or declaration merging.
@@ -84,7 +92,7 @@ async function exportsOf(root,entry,seen=new Set()){
   if(t[j]?.value==='*'){
    if(t[j+1]?.value!=='from'||t[j+2]?.kind!=='string'||!t[j+2].value.startsWith('.'))throw Error('unmeasured');
    const ref=t[j+2].value.replace(/\.js$/,'.d.ts');
-   for(const name of await exportsOf(root,path.relative(root,path.resolve(path.dirname(real),ref)),new Set(seen)))names.add(name);continue;
+   for(const name of await exportsOf(root,path.relative(root,path.resolve(path.dirname(real),ref)),new Set(seen),ctx))names.add(name);continue;
   }
   if(t[j]?.value!=='{')throw Error('unmeasured');j++;
   while(j<t.length&&t[j].value!=='}'){
@@ -94,7 +102,7 @@ async function exportsOf(root,entry,seen=new Set()){
    names.add(name);if(t[j]?.value===',')j++;else if(t[j]?.value!=='}')throw Error('unmeasured');
   }
  }
- return names;
+ ctx.cache.set(real,names);return names;
 }
 export async function checkFile(file,cwd){
  const result={measured:false,diagnostics:[]};
@@ -113,13 +121,14 @@ export async function checkFile(file,cwd){
   // this reader supports only explicit subpath maps. Their lack of a literal
   // "." key is not evidence that the SDK root cannot be imported.
   if(Object.keys(pkg.exports).some(k=>(k!=='.'&&!k.startsWith('./'))||k.includes('*')))return result;
+  const ctx={cache:new Map(),reads:0};
   for(const item of requested){
    const subpath=item.spec===sdk?'.':'.'+item.spec.slice(sdk.length);
    if(!Object.hasOwn(pkg.exports,subpath)||pkg.exports[subpath]===null){result.diagnostics.push({code:'ARKIV_IMPORT_SUBPATH',subpath});continue;}
    const entries=typeTargets(pkg.exports[subpath]);if(!entries.length)throw Error('unmeasured');
    // A missing name is reported only when absent from every readable standard
    // declaration/Bun source target. Missing targets leave it unmeasured.
-   const names=new Set();for(const entry of entries)for(const name of await exportsOf(root,entry))names.add(name);
+   const names=new Set();for(const entry of entries)for(const name of await exportsOf(root,entry,new Set(),ctx))names.add(name);
    for(const name of item.names)if(!names.has(name))result.diagnostics.push({code:'ARKIV_IMPORT_NAME',subpath,name});
   }
   result.measured=true;return result;
