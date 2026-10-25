@@ -21,7 +21,7 @@ Agent skills for working with [Arkiv](https://arkiv.network) — the Web3 databa
 | [`arkiv-social-graph`](skills/arkiv-social-graph/SKILL.md) | Models relationships and scopes arkiv-graph visualization. |
 | [`arkiv-indexing`](skills/arkiv-indexing/SKILL.md) | Builds Arkiv-to-app projections and explains the separate EVM-to-Arkiv sync package. |
 | [`arkiv-feedback`](skills/arkiv-feedback/SKILL.md) | Prepares sanitized bug/feature reports and submits only with authorization. |
-| [`arkiv-mcp`](skills/arkiv-mcp/SKILL.md) | Explains existing MCP profiles, read-only checks, consent-gated feedback and service privacy boundaries. |
+| [`arkiv-mcp`](skills/arkiv-mcp/SKILL.md) | Explains the plugin's General connection, separate event profiles, read-only checks, consent-gated feedback and service privacy boundaries. |
 | [`arkiv-best-practices`](skills/arkiv-best-practices/SKILL.md) | Deprecated compatibility entrypoint; start with arkiv. |
 
 The library guides cover published `arkiv-chunking@0.1.1`, `arkiv-images@0.1.2`, `arkiv-sync@0.3.0` and `create-arkiv-sync@0.3.0`, verified with SDK 0.8.1. Read the installed package's `AGENTS.md` and relevant skill for configuration, tested scope and recovery limits.
@@ -46,9 +46,9 @@ The guidance targets SDK `>=0.8.1 <0.9` and Tiramisu (chain ID 7738577). Before 
 
 Each skill declares its checked SDK range, network, date and MIT license in frontmatter. These declarations describe the documented scope and do not certify every provider, application or future release.
 
-For the combined Claude Code plugin, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/claude-plugin). It imports a fixed canonical revision and bundles the existing MCP connection and project rules. Read its installation and verification scope before use.
+For the combined Claude Code plugin, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/claude-plugin). It imports a fixed canonical revision and bundles the General MCP connection and project rules. Read its installation and verification scope before use.
 
-Contributors and agents should read [AGENTS.md](AGENTS.md). Recent guidance covers complete atomic batch validation, separately authorized removal after readonly corrections, transfer provenance and the distinction between the General connection and Global Tour Stop's Devfolio profile. The resumable importer saves intent before wallet entry, distinguishes receipt-confirmed progress from verified fields and recovers without resubmitting a known transaction. Its version-2 journal fails closed on older journals; preserve those files and reconcile with the original importer.
+Contributors and agents should read [AGENTS.md](AGENTS.md). Recent guidance covers complete atomic batch validation, separately authorized removal after readonly corrections, transfer provenance and, in [`arkiv-mcp`](skills/arkiv-mcp/SKILL.md), the plugin's General connection, with event profiles as separate URLs the human adds and the ended Devfolio profile kept frozen. The resumable importer saves intent before wallet entry, distinguishes receipt-confirmed progress from verified fields and recovers without resubmitting a known transaction. Its version-2 journal fails closed on older journals; preserve those files and reconcile with the original importer.
 
 ## Installed-import check
 
