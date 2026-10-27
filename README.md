@@ -46,7 +46,7 @@ The guidance targets SDK `>=0.8.1 <0.9` and Tiramisu (chain ID 7738577). Before 
 
 Each skill declares its checked SDK range, network, date and MIT license in frontmatter. These declarations describe the documented scope and do not certify every provider, application or future release.
 
-For the combined Claude Code plugin, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/claude-plugin). It imports a fixed canonical revision and bundles the General MCP connection and project rules. Read its installation and verification scope before use.
+For the combined plugin for Claude Code and Codex CLI, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/ai-plugin). It imports a fixed canonical revision and bundles the General MCP connection and project rules. Read its installation and verification scope before use.
 
 Contributors and agents should read [AGENTS.md](AGENTS.md). Recent guidance covers complete atomic batch validation, separately authorized removal after readonly corrections, transfer provenance and, in [`arkiv-mcp`](skills/arkiv-mcp/SKILL.md), the plugin's General connection, with event profiles as separate URLs the human adds and the ended Devfolio profile kept frozen. The resumable importer saves intent before wallet entry, distinguishes receipt-confirmed progress from verified fields and recovers without resubmitting a known transaction. Its version-2 journal fails closed on older journals; preserve those files and reconcile with the original importer.
 
