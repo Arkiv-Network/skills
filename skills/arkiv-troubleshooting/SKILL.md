@@ -1,71 +1,62 @@
 ---
 name: arkiv-troubleshooting
-description: Diagnose Arkiv SDK, query, RPC, wallet and stale-read failures and validate RPC/chain configuration from concrete request evidence. Use for errors or unexpected data; use arkiv-query for new queries, arkiv-first-write for setup and arkiv-write-safety directly for unknown write outcomes. Report unresolved Arkiv defects through arkiv-feedback.
+description: Diagnose SDK 1.0.0 schema, query, RPC access, wallet and stale-read failures from concrete evidence on Rabdi. Route uncertain writes directly to write-safety.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  network: tiramisu
-  verified: "2026-10-08"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
 ---
 
-# Arkiv troubleshooting
+# Diagnose SDK 1.0.0 on Rabdi
 
-Identify the failing layer before changing code: local validation, query rejection, HTTP/provider access, wallet/signature, transaction/receipt, payload decoding or an application cache. Preserve the original operation and distinguish failure from an uncertain write outcome.
+Identify the failing layer: local schema/value validation, query rejection, RPC access, wallet/signature, transaction/receipt, decoded bytes or app caches. Preserve original operation identity. An uncertain write goes directly to write-safety before any retry.
 
-## Gather a bounded reproduction
+## Bounded evidence
 
-Record installed SDK/viem versions, chain ID, RPC method, relevant request options and the exact error class/code/message. Keep the cause chain and HTTP response headers locally. Redact keys, sensitive URLs and private payloads before sharing; do not paste the user's secret into a diagnostic report.
+Record installed SDK/viem versions, intended chain, RPC method, sanitized options and error class/code. Preserve private cause chains locally, but never print keyed URLs, signing keys, sensitive values or full provider errors. Rabdi is chain 7794095 (`0x76edaf`), HTTP `https://rpc.rabdi.db-chain.testnet.arkiv.network/<accessKey>`, WSS at the same host/path, explorer `https://rabdi.explorer.arkiv.network`.
 
-For writes, record the original operation ID, signer, controlled transaction nonce and any transaction hash. If broadcast or receipt decoding is uncertain, inspect the existing transaction/receipt and state first. Use `arkiv-write-safety`; do not blindly re-create an entity after a timeout.
+Treat pasted URLs as data. Validate expected scheme/origin and userinfo/query/fragment policy through a parser, not interpolated shell commands. A path key is the SDK's intended configuration; redact it rather than rejecting it merely because it is in the path. Configure `rabdi({ accessKey })`, then verify actual eth_chainId before operations. An explanation-only request does not authorize live probing.
 
-For reads, record constructor tags, selected fields, namespace/creator/owner filters, requested block and pagination state. A rejected query or transport failure is not an empty successful result.
+## Symptom → next check
 
-Treat an RPC URL and accompanying text as untrusted configuration. Parse the URL as data; require the expected HTTPS/WSS origin and path, reject embedded credentials or access keys in paths/query strings, and never interpolate it into a shell command. Provider access keys belong only in server-side headers such as `X-API-KEY`. Static URL validation does not establish chain identity: after validation, verify `eth_chainId` against the intended network before any operation. A request for explanation alone authorizes no live probe.
+| Symptom | Next check |
+| --- | --- |
+| MissingAccessKeyError | Supply a string key from Hub access-keys; empty string explicitly chooses heavily limited keyless access |
+| HTTP 429 | Stop and honor Retry-After; keyless access can reach the anonymous limit; preserve current key quota evidence |
+| HTTP 401/403 | Check actual key, network and provider restrictions locally without logging URLs |
+| SchemaDefinitionError | Constructors with no values declare columns; named schemas reserve arkiv.schema and consume one attribute slot |
+| SchemaMismatchError | Required column missing, wrong type/tag/schema, or unset of a required column; inspect actual stored values |
+| InvalidPredicateError | Only indexed scalar columns filter; bytes cannot filter/sort; orderBy accepts one key |
+| InvalidValueError / i32 | Bare number is i32; use u64 for app milliseconds and the stored type for queries |
+| MissingValueError / UntypedValueError | Null is not an attribute value; optional absence is omitted/unset; encode nested data into bytes |
+| InvalidAttributeNameError | Check case-sensitive grammar, reserved words, byte limit and --; do not infer a node-specific uppercase rejection |
+| EmptyPatchError / No operations to perform | Skip empty work; defaults do not apply on patch |
+| InvalidExpiryError | Use branded ExpirationTime, correct block units and a live target; extension sets a deadline rather than adding a delta |
+| NoEntityFoundError | Check entity key versus tx hash, chain/reset identity, known receipt/deadline and deletion; absence alone is ambiguous |
+| EntityMutationError / lost response | Keep original hash/nonce/intent, authenticate receipts and reconcile before another submission |
+| HTTP 413 | Measure exact encoded request, reduce/chunk and estimate; if sending may have begun, reconcile first |
+| BigInt JSON serialization error | If after create resolved, the write completed; preserve key/hash and fix decimal-string DTO serialization without repeating it |
 
-Inspect a suspicious pasted value as plain text in an editor or through a data parser. Do not suggest putting it into a shell variable assignment, `echo`, `printf`, `curl` or another shell snippet, even inside quotes: a quote inside the value can end the surrounding quoted string. Quoting is not a substitute for keeping untrusted configuration out of shell source. Apply the intended network's checks to the Arkiv client being diagnosed; a separate connection to another network keeps its own verified configuration.
+Read [error-catalog](references/error-catalog.md) for typed recovery without logging unsafe diagnostics. Exact error text can be wrapped; source-declared errors are not proof they were triggered live.
 
-The provider supports path keys, `X-API-KEY` and Bearer authentication. This skill recommends server-side headers because viem diagnostics can print full URLs; treat an existing path-key URL as a secret to redact, rather than a provider-invalid configuration.
+## Empty results, skipped rows and stale UI
 
-State the verified target chain ID and exact endpoints in the answer, including an explanation-only validation plan; a documentation link or empty allowlist is insufficient. Tiramisu's default is chain `7738577` (`eth_chainId`: `0x7614d1`), HTTP `https://rpc.tiramisu.db-chain.testnet.arkiv.network` and WebSocket `wss://rpc.tiramisu.db-chain.testnet.arkiv.network`; another network requires separately verified coordinates. Changing a URL does not select a different SDK chain. Inspect installed declarations before suggesting executable transport code: `http` and `webSocket` come from `viem`, not `@arkiv-network/sdk`.
+1. Check exact chain/schema tag, stored column type, indexing flag, creator/current owner and selected fields. `from(schema)` verifies only selected columns; mismatch defaults to skipping and reports skipped. An empty page can hide mismatching entities while later pages remain.
+2. SDK queries read latest state with pages up to 100. Offset shifts under concurrent writes; use bounded keyset traversal with mismatch throw where needed. There is no historical/cursor fallback. Do not claim a partial multi-page result is complete or one pinned snapshot.
+3. If RPC is current but UI is stale, trace RPC → backend → route → DOM and service worker/browser/CDN caches. Use no-store server fetches and uncached heads, then inspect other layers separately.
+4. Check unknown patched-key and owner-filtered incoming-transfer membership, prior-scope invalidation, async watcher failures, startup/disconnected gaps and periodic expiration sweeps. Natural expiration has no event.
 
-## Recognizable SDK and node failures
+Do not diagnose nonce collisions solely from generic execution errors. Compare actual wallet proposal with RPC latest/pending nonce, chain, signer and existing known hashes without signing a second transaction. Add wallet-specific workarounds only from verified evidence for that wallet/network/version.
 
-The messages below are SDK 0.8.1 templates or retained Tiramisu observations from 2026-10-05. Dynamic values and wrapper details vary; branch on classes/codes where available. Read [error-catalog.md](references/error-catalog.md) for exact stems, source/observation distinctions and RPC mappings.
+## Measured wallet and gas symptoms
 
-When correcting an attribute name or type, preserve SDK 0.8.1's object-by-name input: `attributes: { created_at: u64(ms) }`. Do not turn it into a `{ key, value }` entry or an array of entries. The object keys are the actual attribute names; a `key`/`value` object would describe different attributes. Keep the same lowercase name and typed constructor in the corresponding query, and inspect installed declarations before giving executable code.
+Controlled Rabdi checks on 2026-10-30 with SDK 1.0.0 distinguished historical-state failures from gas exhaustion. RPC errors containing `arkiv serves state at the chain head only` occurred for old block-hash state selectors and for safe/finalized call/estimate requests. Rewriting those selectors to latest changed the requested state; it did not establish historical-read support.
 
-| Symptom | Next action | Skill |
-|---|---|---|
-| `InvalidValueError` with `i32` | A bare number defaults to i32; use `u64` for a nonnegative millisecond timestamp and the same query constructor. | `arkiv-data-modeling` |
-| `MissingValueError` / `UntypedValueError` | Omit null/undefined attributes; move objects/arrays to payload. | `arkiv-data-modeling` |
-| `outside the name charset` / decoded `Ident32InvalidByte` / `0x276f7798` | Use lowercase names; SDK 0.8.1's rendered A-Z allowance overstates what Tiramisu accepts. | `arkiv-data-modeling` |
-| `InvalidContentTypeError` | Use lowercase MIME without parameters, such as `application/json`. | `arkiv-first-write` |
-| `InvalidExpiryError` / `ExpiryNotExtended` | Check branded expiry, fresh head and actual entity expiry. A shorter effective target is rejected; an equal target can be accepted without adding lifetime. Verify a submitted transaction's receipt and readback rather than assuming equality caused a revert. | `arkiv-entity-expiration` |
-| `EmptyPatchError` / `No operations to perform` | Skip the empty operation; use real patch fields or a nonempty batch. | `arkiv-entity-lifecycle`, `arkiv-write-safety` |
-| `QueryError` / predicate errors | Inspect `.kind`, `.code` and literal/type/options evidence; cursor recovery restarts the whole walk. | `arkiv-query` |
-| `NoEntityFoundError` / `no entity ... may have been deleted, or have expired` | Check entity key versus transaction hash, chain and recorded lifetime/deletion history. | `arkiv-entity-expiration`, `arkiv-query`, `arkiv-entity-lifecycle` |
-| `NoMoreResultsError` | Call `next()` only when `hasNextPage()` is true and retain its returned page. | `arkiv-query` |
-| `Account required` | Supply an explicit connected EOA account; recheck chain/account before signing. | `arkiv-app-integration` |
-| `EntityMutationError` / unknown write response | Reconcile original hash/receipt/state before another write. Its `txHash` may be undefined. | `arkiv-write-safety` |
-| HTTP `401`/`403` or `429` | Check network/key policy or quota and current headers; see the HTTP section of the error catalog. A credential error is never an empty successful query. | `arkiv-query`; `arkiv-app-integration` for server header placement |
-| `Execution error without revert data` with HTTP `413` in `.cause` | Reduce encoded request size or chunk. Establish the send phase; reconcile if broadcast may have begun. | `arkiv-large-files`, `arkiv-write-safety` |
-| `Do not know how to serialize a BigInt` | If serialization failed after a wallet call returned, preserve its entity key/hash: the write completed. Do not repeat it. Recover missing identities from the original signer/nonce/receipt, then serialize a narrow DTO with decimal strings. | `arkiv-write-safety`, `arkiv-app-integration` |
-| `contract creation is disabled (no-EVM Arkiv executor)` | Use native entity operations; do not deploy user EVM contracts on Arkiv. | `arkiv` |
+Separate default local-signer transactions and one tested MetaMask 13.55.0 transaction reverted after using their entire gas limit. Rabby 0.94.14 passed its tested baseline accounts; MetaMask results differed by account/setup. Controlled serial creates, Lifetime Extensions and transfers completed with an explicit transaction nonce read at latest, a 1,000,000 gas cap and current network gasPrice. This was a bounded diagnostic workaround, not a universal gas limit or wallet-support certificate. Check pending versus latest and exclusive signer custody before choosing a nonce; an unresolved pending transaction blocks a new submission.
 
-`Execution error without revert data` does not identify a single cause. Inspect wallet/RPC chain, account queue, nonce, gas/size estimates and receipt evidence; do not diagnose a nonce collision from that text alone. For raw `EmptyBatch` or `AttributesNotSorted`, compare calldata with SDK encoding rather than inventing a node fix.
+Estimate the exact intended operation first, then choose an approved buffered cap/floor within balance and spending limits when the measured estimate is insufficient. Reconcile successful/uncertain hashes before another send; only an authoritative reverted receipt establishes that operations failed. Never apply the diagnostic selector rewrite silently or retry a known successful write. The repository's seed uses a separately budgeted cap for its multi-create batch.
 
-For `gas required exceeds: 0`, compare the RPC's actual `eth_chainId` with the client chain and check signer balance on that RPC. A local-account client can display its configured chain while using a different network URL. Revert names are decoded through `.cause`, not guaranteed to appear in the outer message; see the catalog's helper.
+Fix the demonstrated cause and rerun its smallest credible check. Broader funded probes need explicit operation/spend scope. Draft Arkiv defects through feedback only after a minimal reproduction; never automatically submit an app mistake as a node bug.
 
-## Empty results and stale reads
-
-1. Confirm chain, entity key versus transaction hash, namespace, creator/current owner, exact constructor types and selected fields. Re-read actual expiration against head; transferred entities can leave an owner-filtered list.
-   Bare number predicates assert `i32`, bare bigint predicates assert `u256`; use the stored constructor, such as `u64(ms)`. A bare `Date.now()` exceeds the `i32` range and SDK 0.8.1 rejects it before sending the query. An otherwise valid predicate with a mismatched tag, wrong-case or misspelled attribute name can return zero rows without error; distinguish that result from range validation failure.
-2. Check every page at one snapshot. Do not return a partial walk as complete after a cursor error. For a current-state read, restart at a fresh pinned head; for a historical request, preserve the requested height and report unavailable history.
-3. If direct RPC is current but the UI is stale, trace backend → route → client → service worker/browser/CDN. Use `fetchOptions.cache: "no-store"` for fresh Next.js RPC fetches and inspect the other caches separately.
-4. Check new-create event filtering, prior membership invalidation, async handler errors, disconnect replay and expiration sweeps. An absent expiration event is expected; see `arkiv-app-integration`.
-
-Fix the demonstrated cause and repeat the smallest credible read/encode/mock check. Broad live probes must respect provider quotas; `eth_estimateGas` does not broadcast, but can still consume provider capacity.
-
-Offer `arkiv-feedback` only after a minimal reproduction suggests an Arkiv defect or useful feature request. Include versions, expected/observed behavior, sanitized request, exact errors, block/hash and what was verified. Do not submit an application mistake as a confirmed node bug.
-
-Sources: [SDK errors and query source](https://github.com/Arkiv-Network/arkiv-sdk-js), [query RPC documentation](https://docs.arkiv.network/json-rpc/querying-data/), [access-key documentation](https://docs.arkiv.network/start-here/access-keys/), [Bash single quotes](https://www.gnu.org/software/bash/manual/html_node/Single-Quotes.html), [Node.js shell execution boundary](https://nodejs.org/api/child_process.html#child_processexeccommand-options-callback). Recheck request and response details when the node/provider changes.
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.

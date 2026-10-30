@@ -1,19 +1,19 @@
 ---
 name: arkiv-best-practices
-description: Deprecated compatibility entrypoint for older Arkiv skill installations. For new Arkiv work, load the arkiv router directly; this stub only redirects to current SDK and Tiramisu guidance.
+description: Deprecated compatibility entrypoint. Load the arkiv router for SDK 1.0.0 and Rabdi; this stub only redirects to the current catalog.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  network: tiramisu
-  verified: "2026-10-08"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
   deprecated: "true"
   replaced-by: "arkiv"
 ---
 
 # Deprecated Arkiv entrypoint
 
-Use [arkiv](../arkiv/SKILL.md) for current guidance and its focused skill index.
+Use the [arkiv router](../arkiv/SKILL.md) for SDK 1.0.0 on Rabdi and the focused task catalog. Install the current router alongside this compatibility entrypoint. Its [capability boundaries](../arkiv/references/known-issues.md) describe the checked APIs and limitations.
 
-For older examples, use the router's [legacy-pattern corrections](../arkiv/references/known-issues.md#coming-from-older-skills).
+If the router is unavailable locally, read the [current canonical router](https://github.com/Arkiv-Network/skills/blob/main/skills/arkiv/SKILL.md) and verify its metadata against the installed SDK before code generation. A source link does not establish the installed or MCP/plugin-bundled revision.
 
-If arkiv is not installed, read the [pinned router in the source repository](https://github.com/Arkiv-Network/skills/blob/d1c03ea20226a181dc56441e984277082d2839db/skills/arkiv/SKILL.md). Install the complete focused catalog before replacing the legacy entrypoint.
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.

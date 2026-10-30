@@ -1,11 +1,11 @@
 ---
 name: arkiv-write-safety
-description: Submit and reconcile Arkiv writes with @arkiv-network/sdk. Use for bulk imports, executeBatch, account writer queues, transaction versus entity nonces, TxParams, preflight funding, transport errors, EntityMutationError.txHash, receipt decoding failures, and durable progress across multiple transactions. Use arkiv-entity-lifecycle for mutation permissions and arkiv-entity-expiration for renewal targets.
+description: Submit and reconcile Arkiv writes using bounded batches, exclusive signer queues and durable intent, signed bytes, receipts and verified progress. Use for bulk imports, nonce conflicts and uncertain outcomes.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  network: tiramisu
-  verified: "2026-10-13"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
 ---
 
 # Arkiv write safety
@@ -14,13 +14,13 @@ One authorized account writer submits bounded batches and preserves every known 
 
 ## Choose and prepare the write
 
-- Validate stable row IDs, payloads and duplicate IDs before any wallet call. Freeze input order and intended fields so receipt keys and readback can be matched to the prepared rows.
+- Validate stable row IDs, typed column values and duplicate IDs before any wallet call. Freeze input order and intended fields so receipt keys and readback can be matched to the prepared rows.
 - For importing 5,000 rows, use multiple `executeBatch({ creates })` transactions with durable per-batch progress. Choose batch sizes from encoded size, gas estimates, provider limits, and an approved spend budget; there is no verified universal 1,000-operation cap.
 - One native batch is atomic. The SDK applies creates, patches, deletes, extensions, then ownership changes; property order in the input object does not reorder them. Multiple batches are separate transactions and can leave partial progress.
 - Use `arkiv-entity-lifecycle` for permissions and relationship ordering, `arkiv-entity-expiration` for renewal calculations, and `arkiv-security-trust` for signer custody.
 - Check configured network, connected account, current permissions, deadline, and GLM balance before submission. Compare an unsigned estimate and fee cap, with a margin, against both balance and approved remaining spend. Estimates spend no GLM, but the provider can still reject balance or fee fields. They do not authorize a funded send.
-- Use lowercase MIME types such as `application/json`. The SDK sorts attribute cells by their encoded names; raw ABI callers must do so themselves. An empty batch throws `Error("No operations to perform")`; an empty patch throws `EmptyPatchError`. Skip empty work.
-- Keep payload limits separate from total encoded transaction limits: ABI framing, attributes, and every operation add bytes. Do not present a payload limit as the transaction limit.
+- Represent media type as an application column when needed; binary/JSON data lives in named bytes columns. The SDK sorts attribute cells by their encoded names; raw ABI callers must do so themselves. An empty batch throws `Error("No operations to perform")`; an empty patch throws `EmptyPatchError`. Skip empty work.
+- Keep bytes-column data limits separate from total encoded transaction limits: ABI framing, attributes, and every operation add bytes. Do not present a bytes-column data limit as the transaction limit.
 
 ## Nonces, fees, and predictions
 
@@ -28,11 +28,11 @@ Serialize all writes for an account. `Promise.all` over wallet writes can collid
 
 The transaction nonce orders Ethereum-compatible transactions. The **entity-minting nonce** is a separate counter per creator and advances for each create. Pass the creating signer's address as `owner` in `reader.predictEntityKeys({ owner, count })` or `reader.predictEntityKeys({ owner, salts })`; with `salts`, their length determines the count. This counter is not `getTransactionCount()` and does not follow later ownership transfers. Hold exclusive access to every create between prediction and submission, use exactly the predicted salts, and verify receipt keys. An intervening create can invalidate relationships even if transaction nonce allocation was correct.
 
-Pass `TxParams` as the write method's second argument: `{ gas, nonce, gasPrice }` for legacy fees, or `{ gas, nonce, maxFeePerGas, maxPriorityFeePerGas }` for EIP-1559. Fee styles are mutually exclusive. Omitted fields use wallet estimation; explicit values are the caller's responsibility. Never reuse one fixed transaction nonce across a multi-batch import.
+Pass `TxParams` last: fourth after `createEntity(schema, values, options)` or `patchEntity(schema, key, changes)`, second for `executeBatch(batch)` and descriptor-based lifecycle methods: `{ gas, nonce, gasPrice }` for legacy fees, or `{ gas, nonce, maxFeePerGas, maxPriorityFeePerGas }` for EIP-1559. Fee styles are mutually exclusive. Omitted fields use wallet estimation; explicit values are the caller's responsibility. Never reuse one fixed transaction nonce across a multi-batch import.
 
 An explicit `gas` skips automatic gas estimation and can turn a permission/expiry error into a paid revert. Leave it unset for ordinary writes, or run an exact unsigned estimate immediately before using the frozen gas cap. See [rendered funding/permission errors](../arkiv-troubleshooting/references/error-catalog.md); neither their message nor a missing hash proves the send phase.
 
-SDK 0.8.1 `executeBatch` returns created keys but no expiration deadlines. Decode each canonical `EntityCreated` log's `entityKey`/`expiresAt`, or read the entity at the chosen snapshot. The durable importer below validates those event fields against its frozen plan; do not infer expiries from the batch result.
+SDK 1.0.0 `executeBatch` returns created keys but no expiration deadlines. Decode each canonical `EntityCreated` log's `entityKey`/`expiresAt`, or read current entity state and retain its observation block. The durable importer below validates those event fields against its frozen plan; do not infer expiries from the batch result.
 
 ## Reconcile before another submission
 
@@ -55,7 +55,7 @@ Apply these rules before choosing an importer:
 - Save prepared/submitting intent durably **before** the wallet call. Freeze the current batch's ordered rows and intended fields; a successful estimate is not saved intent.
 - Preserve every known hash immediately. When local signing exposes raw bytes, authenticate and save those bytes/hash **before** forwarding them to the provider. If that save fails, do not forward the send.
 - Separate `receipt_confirmed` from `verified`. Authenticate the signed intent, provider transaction, canonical successful receipt and ordered keys/events, then durably save receipt-confirmed progress **before** field readback or a later checkpoint. An arbitrary successful receipt or event count does not authenticate the planned batch.
-- Read back only the current batch's rows and require their payload, typed attributes and metadata to match before saving `verified` or admitting the next batch. For 60 rows split into three batches of 20, verify each batch's 20 rows; the whole job completes after all three are verified.
+- Read back only the current batch's rows at their individually observed current query blocks and require their bytes-column data, typed attributes and metadata to match before saving `verified` or admitting the next batch. For 60 rows split into three batches of 20, verify each batch's 20 rows; the whole job completes after all three are verified.
 - Stop on uncertain sends, readback failures and save failures. Preserve partial progress: the prior `submitting` or `receipt_confirmed` entry remains the recovery source. Restart with the original plan/hash/files, authenticate the known transaction and repair verification without resending it.
 
 ## Worked resumable importer
@@ -66,7 +66,7 @@ Use [the resumable Node importer](references/resumable-import.md) for a complete
 2. Fsync the plan and journal before admission, and save `prepared` intent before entering the wallet call. Each raw send authenticates the local signature and exact frozen intent, then fsyncs `submitting` signed bytes and their hash **before** the provider request. If this save fails, the wrapper does not forward the send.
 3. Stop after any uncertain send, receipt/verification failure, or checkpoint failure. The pre-send journal survives receipt-wait crashes and lost responses even when `EntityMutationError.txHash` is absent.
 4. Restart with the original plan hash and files. Load durable state, authenticate every captured hash before continuing, repair incomplete verification, and skip resubmission of verified batches. This conservative helper also rechecks their fresh fields. Do not infer batch numbers from the current result-array length or restart the original rows.
-5. Save `receipt_confirmed` after matching sender, nonce, native address, input, fee fields, canonical receipt block/provenance, event order and predicted keys. Then read this batch's entities and save `verified` only after matching fields. A failed receipt save leaves `submitting` available; a failed readback or verified save leaves `receipt_confirmed` available. The helper writes journal version 2 and fails closed on older journals; retain them and reconcile with the original importer rather than renaming their combined `confirmed` state.
+5. Save `receipt_confirmed` after matching sender, nonce, native address, input, fee fields, canonical receipt block/provenance, event order and predicted keys. Then read this batch's entities and save `verified` only after matching fields. A failed receipt save leaves `submitting` available; a failed readback or verified save leaves `receipt_confirmed` available. The helper writes journal version 3 and fails closed on older journals; retain them and reconcile with the original importer rather than renaming their combined `confirmed` state.
 
 The helper refuses automatic rebroadcast. An operator may consider resending the **same signed bytes** only after explicit reconciliation; signing new bytes while the previous nonce can still land risks replacement or duplicate application work. Expired or changed entities cause this conservative example to stop, never recreate.
 
@@ -76,8 +76,14 @@ For older uninstrumented jobs, use the saved start block and pinned signer/nonce
 
 ## Verification and sources
 
-The helper's local regressions exercise SDK 0.8.1 serialization/receipt decoding, a lost raw-send response, a real process exit and restart with original files, cross-process admission, failed fsync/checkpoints, plan and hash mismatches, typed readback, expired plans, and changed genesis. Focused journal-version-2 regressions cover receipt confirmation before reads, failed readback and verified saves, batch-local verification, and recovery without resubmission. Controlled-provider tests establish these paths; they do not certify real provider limits, funded transactions, distributed custody, or machine power-loss durability.
+The repository's controlled regressions exercise SDK 1.0.0 encoding/receipt decoding, a lost raw-send response, failed durable appends/checkpoints, authenticated input/receipt/key order, typed readback and refusal of incompatible journals. Journal-version-3 cases require receipt confirmation before reads, batch-local verification, and recovery without resubmission. These checks do not certify real provider limits, distributed custody, cross-process crashes or machine power-loss durability. The separate authorized Rabdi smoke supplies actual network write/readback evidence.
 
-- [SDK 0.8.1 native encoding, send and receipt handling](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/utils/arkivTransactions.ts).
-- [SDK 0.8.1 executeBatch result](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/wallet/executeBatch.ts), [TxParams](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/types/txParams.ts), and [entity-key prediction](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/public/predictEntityKeys.ts).
+- [SDK 1.0.0 native encoding, send and receipt handling](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/arkivTransactions.ts).
+- [SDK 1.0.0 executeBatch result](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/wallet/executeBatch.ts), [TxParams](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/types/txParams.ts), and [entity-key prediction](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/predictEntityKeys.ts).
 - [Native mutations, events, and reverts](https://docs.arkiv.network/json-rpc/mutating-entities/).
+
+## SDK 1.0.0 schema inputs
+
+Each batch create is `{ schema, values, expiration, flags?, salt? }`; each patch is `{ schema, entityKey, set?, unset? }`. Use typed constructors/defineSchema from the schema subpath and explicit per-column indexing. Only indexed scalars filter; bytes columns are never indexed. Current readback uses `$key`, `$owner`, `$creator`, `$expiresAt`, `$attributes` and `$attributeSchema`, without historical block options. The importer freezes schema/indexing choices in plan version 2, writes journal version 3 and refuses incompatible earlier files.
+
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.

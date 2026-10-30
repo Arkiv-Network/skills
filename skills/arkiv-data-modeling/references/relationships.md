@@ -1,83 +1,37 @@
-# Same-batch entity references
+# Atomic relationships
 
-Use this only when parent and child must be created atomically and every creator using the signing account shares an exclusive queue. An in-process mutex does not coordinate another server or a user's wallet. If that coordination cannot be guaranteed, create the parent first and reference its returned key in a later transaction.
+Hold exclusive custody of every create from the signer between prediction and receipt reconciliation. An in-process mutex cannot coordinate another server, wallet app or tab. Otherwise create the parent first and use its confirmed key later.
 
-The key depends on chain ID, native system address, creator, **entity nonce** and salt. This entity nonce is separate from the account's transaction nonce. Each create consumes one entity nonce in the batch's create-array order. The SDK constructs operations in create, patch, delete, extend, transfer order.
-
-Inside the exclusive queue:
-
-1. Keep all prior uncertain/in-flight creations reconciled before prediction.
-2. Use `predictEntityKeys({ owner: creator, count: 2 })`, which reads the creator's entity nonce and returns a key/salt pair for each create in order.
-3. Reuse both returned salts in the fixed creates array. Use `key(parent.key)` on the child.
-4. Submit the batch through the same authorized creator. Validate the returned create count and every key in order before publishing references.
-5. If the nonce/prediction is stale or the result is uncertain, stop and reconcile receipt/state. Do not retry the same stale relationship blindly.
+`predictEntityKeys({ owner, count })` reads the creator's entity nonce, separate from the transaction nonce. Reuse every returned salt in create order. Validate the complete ordered result before publishing references; a post-confirmation mismatch requires repair, not resubmission.
 
 ```typescript
-import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
-import { key, str } from '@arkiv-network/sdk/attr';
-import { tiramisu } from '@arkiv-network/sdk/chains';
+import { createPublicClient, createWalletClient, ExpirationTime, type Expiry } from '@arkiv-network/sdk';
+import { defineSchema, str, key } from '@arkiv-network/sdk/schema';
 import type { Address } from 'viem';
-
-type Public = ReturnType<typeof createPublicClient>;
-type Wallet = ReturnType<typeof createWalletClient>;
-
-// The caller holds the exclusive creator queue through receipt reconciliation.
-export async function createAtomicListingAndTag(
-  publicClient: Public,
-  wallet: Wallet,
-  creator: Address,
-  listing_id: string,
-  tag: string,
-) {
-  if (wallet.account?.address.toLowerCase() !== creator.toLowerCase()) {
-    throw new Error('The queued creator must match the explicit wallet account');
-  }
-  if (wallet.chain?.id !== tiramisu.id || publicClient.chain?.id !== tiramisu.id) {
-    throw new Error('Both clients must use Tiramisu');
-  }
-  const [parent, child] = await publicClient.predictEntityKeys({ owner: creator, count: 2 });
-  const result = await wallet.executeBatch({
-    creates: [
-      {
-        salt: parent.salt,
-        payload: new TextEncoder().encode(JSON.stringify({ listing_id })),
-        contentType: 'application/json',
-        attributes: {
-          project: str('example_marketplace'),
-          entity_type: str('listing'),
-          listing_id: str(listing_id),
-        },
-        expires: ExpirationTime.fromDays(30),
-      },
-      {
-        salt: child.salt,
-        payload: new Uint8Array(),
-        contentType: 'application/octet-stream',
-        attributes: {
-          project: str('example_marketplace'),
-          entity_type: str('listing_tag'),
-          listing_key: key(parent.key),
-          listing_id: str(listing_id),
-          tag: str(tag),
-        },
-        expires: ExpirationTime.fromDays(30),
-      },
-    ],
-  });
-  if (result.createdEntities.length !== 2 ||
-      result.createdEntities[0] !== parent.key || result.createdEntities[1] !== child.key ||
-      result.patchedEntities.length !== 0 || result.deletedEntities.length !== 0 ||
-      result.extendedEntities.length !== 0 || result.ownershipChanges.length !== 0) {
-    throw new Error(`Reference prediction mismatch after ${result.txHash}; reconcile the receipt before any retry`);
+const Parent = defineSchema('example_parent', { app_id: str().indexed() });
+const Child = defineSchema('example_child', { app_id: str().indexed(), parent_key: key().indexed() });
+export async function createRelated(reader: ReturnType<typeof createPublicClient>,
+  wallet: ReturnType<typeof createWalletClient>, creator: Address, appId: string,
+  expiration: Expiry = ExpirationTime.fromDays(1)) {
+  if (wallet.account?.address.toLowerCase() !== creator.toLowerCase() ||
+      wallet.chain?.id !== 7794095 || reader.chain?.id !== 7794095) throw new Error('Wrong signer or chain');
+  const predictions = await reader.predictEntityKeys({ owner: creator, count: 2 });
+  const parent = predictions[0], child = predictions[1];
+  if (!parent || !child) throw new Error('Incomplete predictions');
+  const result = await wallet.executeBatch({ creates: [
+    { schema: Parent, values: { app_id: appId }, salt: parent.salt, expiration },
+    { schema: Child, values: { app_id: appId, parent_key: key(parent.key) }, salt: child.salt, expiration },
+  ] });
+  if (result.createdEntities.length !== 2 || result.createdEntities[0] !== parent.key || result.createdEntities[1] !== child.key ||
+    result.patchedEntities.length || result.deletedEntities.length || result.extendedEntities.length || result.ownershipChanges.length) {
+    throw Object.assign(new Error('Confirmed batch prediction mismatch; reconcile before retrying'), result);
   }
   return result;
 }
 ```
 
-A mismatch check runs **after** a successful transaction. It cannot roll back the batch or repair a child that already points at the wrong target. Exclusive creator coordination is the prevention; the check detects a violated contract. Preserve the confirmed transaction hash and actual keys for reconciliation. The non-create result arrays reflect the submitted SDK operation lists; their absence is not an independent on-chain proof. Application IDs and a repair policy remain useful for remapping.
+Only the creating wallet's creates consume that entity nonce. Incoming transfers do not. Random predicted salts are the default; `NO_SALT` makes a key predictable but does not remove nonce dependence. A key reference does not enforce target existence, foreign keys or cascade behavior.
 
-Neither `key()` validation nor key prediction checks that a target exists. Parent deletion, expiration or replacement can leave a valid dangling reference. A transaction receipt is not a promise about future retention or the application's reorganization policy.
+Equal relative lifetimes in one batch share inclusion; later child transactions resolve relative life later. To prevent a later child outliving a parent, use the parent's observed `$expiresAt` with `ExpirationTime.atBlock(...)` and no relative floor, check remaining-life margin and verify the result. Batch results carry keys rather than deadlines; read the successful receipt and current entities.
 
-The identical relative lifetimes in this atomic batch resolve against the same inclusion block. For a child created in a later transaction, use `ExpirationTime.atBlock(parent.expiresAt)` without an `atLeast` floor when it must not outlive the parent. Obtain a batch-created parent's deadline with `getEntity`; `executeBatch` returns keys, not per-entity deadlines. Check a fresh head and an application-defined remaining-block margin before submitting children, and verify their actual deadlines after confirmation.
-
-SDK 0.8.1 sources: [prediction](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/entity/key.ts), [entity nonce](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/public/getEntityNonce.ts), [batch result](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/wallet/executeBatch.ts), [operation construction](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/utils/arkivTransactions.ts). Checked 2026-10-05; exact example verified with deterministic real-SDK fixtures, without a funded live write.
+Source: [SDK 1.0.0 prediction](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/predictEntityKeys.ts), [batch](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/wallet/executeBatch.ts).
