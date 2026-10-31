@@ -7,25 +7,53 @@ import { createWalletClient } from '@arkiv-network/sdk';
 import { rabdi } from '@arkiv-network/sdk/chains';
 import { custom, isAddress, type EIP1193Provider } from 'viem';
 
-export async function connectArkivWallet(provider: EIP1193Provider, userAccessKey: string) {
-  const chain = rabdi({ accessKey: userAccessKey });
-  const addresses = await provider.request({ method: 'eth_requestAccounts' });
-  const account = addresses[0];
-  if (!account || !isAddress(account)) throw new Error('Connect a valid account');
-  try {
-    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x76edaf' }] });
-  } catch (error) {
-    if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== 4902) throw error;
-    await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x76edaf',
-      chainName: 'Rabdi', nativeCurrency: chain.nativeCurrency,
-      rpcUrls: [chain.rpcUrls.default.http[0]], blockExplorerUrls: [chain.blockExplorers.default.url] }] });
-    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x76edaf' }] });
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
   }
-  const actualChain = await provider.request({ method: 'eth_chainId' });
-  if (BigInt(actualChain) !== 7794095n) throw new Error('Wallet is not on Rabdi');
-  const current = await provider.request({ method: 'eth_accounts' });
-  if (current[0]?.toLowerCase() !== account.toLowerCase()) throw new Error('Account changed during connection');
-  return createWalletClient({ chain, account, transport: custom(provider) });
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
+
+export async function connectArkivWallet(provider: EIP1193Provider, userAccessKey: string) {
+  try {
+    const chain = rabdi({ accessKey: userAccessKey });
+    const addresses = await provider.request({ method: 'eth_requestAccounts' });
+    const account = addresses[0];
+    if (!account || !isAddress(account)) throw safeError('Connect a valid account');
+    try {
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x76edaf' }] });
+    } catch (error) {
+      if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== 4902) throw error;
+      await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x76edaf',
+        chainName: 'Rabdi', nativeCurrency: chain.nativeCurrency,
+        rpcUrls: [chain.rpcUrls.default.http[0]], blockExplorerUrls: [chain.blockExplorers.default.url] }] });
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x76edaf' }] });
+    }
+    const actualChain = await provider.request({ method: 'eth_chainId' });
+    if (BigInt(actualChain) !== 7794095n) throw safeError('Wallet is not on Rabdi');
+    const current = await provider.request({ method: 'eth_accounts' });
+    if (current[0]?.toLowerCase() !== account.toLowerCase()) throw safeError('Account changed during connection');
+    return await createWalletClient({ chain, account, transport: custom(provider) });
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 ```
 

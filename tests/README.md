@@ -6,12 +6,15 @@ This repository has no root dependency installation or application build. Use an
 export ARKIV_SNIPPET_WORKSPACE=/absolute/sdk-workspace
 export ARKIV_IMPORT_TEST_SCRATCH=/absolute/owned-scratch
 node scripts/check-skill-references.mjs
+node scripts/check-vocabulary.mjs
 node tests/check-snippets.mjs
 node --experimental-vm-modules --test tests/snippets/*.test.mjs
 node tests/snippets/published-imports.mjs
 ```
 
 `check-snippets` compiles every TypeScript skill/reference fence with strict and noUncheckedIndexedAccess, syntax-checks JavaScript, and writes a source/line/hash manifest inside the SDK workspace. It does not execute writes. The deterministic importer suite evaluates the exact published JavaScript fence with real SDK 1.0.0 encoding, synthetic transport/receipts and in-memory ephemeral test keys. Network fetches are forbidden in that suite. Preserve failing evidence; do not substitute deterministic results for live/provider/wallet behavior.
+
+The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance requires `arkiv-encryption` 1.1.0 or newer; verify its named bytes exports before consuming it.
 
 If only the SDK needs upgrading, `node tests/prepare-sdk.mjs <viem-workspace> <typescript-workspace> <node-types-workspace>` verifies the official 1.0.0 tarball and prepares `.checks`, reusing existing peers without installing or executing package scripts. It creates symlinks to those existing peers; their lifecycle remains the contributor's responsibility.
 
@@ -31,3 +34,5 @@ The live runner also includes `tests/live/lifetime.test.mjs`: an explicitly auth
 Updated importer gas policy does not authorize recreating an old seed. A completed v1 seed may reconcile with the exact previously verified helper, whose source hash is checked, with signing/broadcast explicitly blocked. An unfinished or unrecognized prior revision stops for reconciliation. New seed plans use the current importer and measured per-batch gas floor. Source/line regression tests reject permanent-expiration recommendations and exercise copied first-write/lifecycle/extension transaction fields and receipt handling.
 
 All RPC errors are sanitized; the access key is in the URL path. The smoke counts arkiv_query calls for the supplied key. Ordinary calls do not consume query-cost units under the current provider policy. Tests never use or fund from another lane's signer.
+
+The vocabulary guard covers all authored UTF-8 text and resource names, including root documentation, scripts, tests, SQL and generated source maps. Every JSON key and string is inspected recursively, including map names, sources, file, sourcesContent, sourceRoot and indexed sections. Invalid source-map encoding fails closed. Existing exact dated-history exceptions are retained; dependencies and framework build outputs are inventoried separately.

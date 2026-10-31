@@ -18,7 +18,7 @@ async function syntax(directory) {
 }
 try {
   for (const directory of ['skills', 'scripts', 'tests']) await syntax(directory);
-  for (const argv of [['scripts/check-skill-references.mjs'], ['tests/check-snippets.mjs'],
+  for (const argv of [['scripts/check-vocabulary.mjs'], ['scripts/check-skill-references.mjs'], ['tests/check-snippets.mjs'],
     ['--experimental-vm-modules', '--test', ...tests], ['tests/snippets/published-imports.mjs']]) {
     const result = spawnSync(process.execPath, argv, { env: environment, stdio: 'inherit' });
     if (result.status !== 0) process.exitCode = result.status ?? 1;

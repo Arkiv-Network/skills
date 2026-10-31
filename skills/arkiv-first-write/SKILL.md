@@ -32,16 +32,44 @@ import { rabdi } from '@arkiv-network/sdk/chains';
 import { http, type LocalAccount } from 'viem';
 import { getGasPrice } from 'viem/actions';
 
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
+  }
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
+
 export const Notes = defineSchema('example_first_note', {
   seed_id: str().indexed(), created_at: u64(), body: bytes(),
   media_type: str().default('application/json'),
 });
 export function clients(account: LocalAccount, accessKey: string) {
-  const chain = rabdi({ accessKey });
-  const transport = http(undefined, { retryCount: 0, timeout: 10000,
-    fetchOptions: { cache: 'no-store', redirect: 'error' } });
-  return { reader: createPublicClient({ chain, transport, cacheTime: 0 }),
-    wallet: createWalletClient({ account, chain, transport, cacheTime: 0 }) };
+  try {
+    const chain = rabdi({ accessKey });
+    const transport = http(undefined, { retryCount: 0, timeout: 10000,
+      fetchOptions: { cache: 'no-store', redirect: 'error' } });
+    return { reader: createPublicClient({ chain, transport, cacheTime: 0 }),
+      wallet: createWalletClient({ account, chain, transport, cacheTime: 0 }) };
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 export function firstNoteParameters(expiration: Expiry = ExpirationTime.fromDays(1)) {
   return { schema: Notes, values: { seed_id: 'welcome_v1', created_at: u64(Date.now()),
@@ -53,53 +81,61 @@ type Wallet = ReturnType<typeof createWalletClient>;
 type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
 export async function rabdiTxParams(reader: Clients['reader'], address: LocalAccount['address'],
   approvedMaximumCost: bigint, estimate: bigint, operations = 1): Promise<TxParams> {
-  if (estimate <= 0n || !Number.isSafeInteger(operations) || operations < 1) throw new Error('Valid unsigned estimate and operation count required');
-  const floor = 1000000n + 400000n * BigInt(operations - 1);
-  const gas = floor > 2n * estimate ? floor : 2n * estimate;
-  const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
-  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Reconcile pending nonce first');
-  const gasPrice = await getGasPrice(reader);
-  if (gas * gasPrice > approvedMaximumCost || gas * gasPrice > await reader.getBalance({ address })) throw new Error('Gas cap exceeds budget/balance');
-  return { nonce: latest, gas, gasPrice };
+  try {
+    if (estimate <= 0n || !Number.isSafeInteger(operations) || operations < 1) throw safeError('Valid unsigned estimate and operation count required');
+    const floor = 1000000n + 400000n * BigInt(operations - 1);
+    const gas = floor > 2n * estimate ? floor : 2n * estimate;
+    const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
+    if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw safeError('Reconcile pending nonce first');
+    const gasPrice = await getGasPrice(reader);
+    if (gas * gasPrice > approvedMaximumCost || gas * gasPrice > await reader.getBalance({ address })) throw safeError('Gas cap exceeds budget/balance');
+    return await { nonce: latest, gas, gasPrice };
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 export async function ensureFirstNote({ reader, wallet }: Clients,
   recordIntent: (txParams: TxParams) => Promise<void>, expiration: Expiry, approvedMaximumCost: bigint,
   estimateLatest: EstimateLatest) {
-  if (await reader.getChainId() !== 7794095 || wallet.chain?.id !== 7794095) throw new Error('Wrong chain');
-  const prior = await reader.select({ $key: true, $creator: true, $creationFlags: true, body: true, media_type: true })
-    .from(Notes, { onMismatch: 'throw' }).createdBy(wallet.account.address)
-    .where(eq('seed_id', 'welcome_v1')).limit(2).fetch();
-  if (prior.entities.length > 1) throw new Error('Duplicate seed; reconcile');
-  const expected = new TextEncoder().encode(JSON.stringify({ text: 'Hello, Arkiv' }));
-  const existing = prior.entities[0];
-  if (existing) {
-    const expectedHex = '0x' + Array.from(expected, b => b.toString(16).padStart(2, '0')).join('');
-    if (!existing.$creationFlags.readonly || existing.$creationFlags.permissionlessExtension ||
-      existing.media_type.value !== 'application/json' || existing.body.value !== expectedHex) throw new Error('Seed differs; reconcile');
-    return { entityKey: existing.$key, reused: true as const };
-  }
-  // Precondition: exclusive writer, sufficient funding, successful unsigned estimate,
-  // and no unresolved earlier seed attempt in the durable operation registry.
-  const input = { ...firstNoteParameters(expiration), salt: 1n };
-  const options = { expiration: input.expiration, flags: input.flags, salt: input.salt };
-  const estimate = await estimateLatest(unsigned => unsigned.createEntity(input.schema, input.values, options));
-  const txParams = await rabdiTxParams(reader, wallet.account.address, approvedMaximumCost, estimate);
-  await recordIntent(txParams);
-  const result = await wallet.createEntity(input.schema, input.values,
-    options, txParams);
-  // Persist returned hash/key immediately in the caller's durable writer.
   try {
-    const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
-    const entity = await reader.getEntity(result.entityKey, Notes);
-    if (receipt.status !== 'success' || !entity.$creationFlags.readonly ||
-      entity.$creator.toLowerCase() !== wallet.account.address.toLowerCase() ||
-      entity.$expiresAt !== result.expiresAt || entity.created_at.value !== input.values.created_at.value ||
-      entity.body.value !== '0x' + Array.from(expected, b => b.toString(16).padStart(2, '0')).join('')) {
-      throw new Error('Readback mismatch');
+    if (await reader.getChainId() !== 7794095 || wallet.chain?.id !== 7794095) throw safeError('Wrong chain');
+    const prior = await reader.select({ $key: true, $creator: true, $creationFlags: true, body: true, media_type: true })
+      .from(Notes, { onMismatch: 'throw' }).createdBy(wallet.account.address)
+      .where(eq('seed_id', 'welcome_v1')).limit(2).fetch();
+    if (prior.entities.length > 1) throw safeError('Duplicate seed; reconcile');
+    const expected = new TextEncoder().encode(JSON.stringify({ text: 'Hello, Arkiv' }));
+    const existing = prior.entities[0];
+    if (existing) {
+      const expectedHex = '0x' + Array.from(expected, b => b.toString(16).padStart(2, '0')).join('');
+      if (!existing.$creationFlags.readonly || existing.$creationFlags.permissionlessExtension ||
+        existing.media_type.value !== 'application/json' || existing.body.value !== expectedHex) throw safeError('Seed differs; reconcile');
+      return await { entityKey: existing.$key, reused: true as const };
     }
-    return { ...result, reused: false as const };
-  } catch (cause) {
-    throw Object.assign(new Error('Confirmed write needs reconciliation; do not resend', { cause }), result);
+    // Precondition: exclusive writer, sufficient funding, successful unsigned estimate,
+    // and no unresolved earlier seed attempt in the durable operation registry.
+    const input = { ...firstNoteParameters(expiration), salt: 1n };
+    const options = { expiration: input.expiration, flags: input.flags, salt: input.salt };
+    const estimate = await estimateLatest(unsigned => unsigned.createEntity(input.schema, input.values, options));
+    const txParams = await rabdiTxParams(reader, wallet.account.address, approvedMaximumCost, estimate);
+    await recordIntent(txParams);
+    const result = await wallet.createEntity(input.schema, input.values,
+      options, txParams);
+    // Persist returned hash/key immediately in the caller's durable writer.
+    try {
+      const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
+      const entity = await reader.getEntity(result.entityKey, Notes);
+      if (receipt.status !== 'success' || !entity.$creationFlags.readonly ||
+        entity.$creator.toLowerCase() !== wallet.account.address.toLowerCase() ||
+        entity.$expiresAt !== result.expiresAt || entity.created_at.value !== input.values.created_at.value ||
+        entity.body.value !== '0x' + Array.from(expected, b => b.toString(16).padStart(2, '0')).join('')) {
+        throw safeError('Readback mismatch');
+      }
+      return await { ...result, reused: false as const };
+    } catch (cause) {
+      throw safeError('Confirmed write needs reconciliation; do not resend', { txHash: result.txHash, entityKey: result.entityKey, expiresAt: result.expiresAt });
+    }
+  } catch (error) {
+    throw sanitizedFailure(error);
   }
 }
 ```
@@ -130,4 +166,4 @@ Read [testing](references/testing.md) for deterministic and funded checks. Test 
 
 Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
 
-The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate only sanitized diagnostics with no raw or nested causes without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

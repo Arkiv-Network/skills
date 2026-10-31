@@ -1,3 +1,4 @@
+import {safeProviderError,safeProviderDiagnostic} from '../../scripts/safe-rpc-error.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -35,18 +36,8 @@ test('Rabdi real SDK seed, flat reads, filtered counts, ordering, optional value
     await fs.writeFile(path.join(process.env.ARKIV_EVIDENCE_DIR, 'live-summary.json'), JSON.stringify(summary, null, 2));
   }
   } catch (error) {
-    const causes = [];
-    let cause = error;
-    while (cause && typeof cause === 'object' && causes.length < 12) {
-      causes.push({ name: typeof cause.name === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(cause.name) ? cause.name : 'Unknown',
-        code: typeof cause.code === 'number' || cause.code === 'ERR_ASSERTION' ? cause.code : undefined,
-        status: typeof cause.status === 'number' ? cause.status : undefined,
-        txHash: typeof cause.txHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(cause.txHash) ? cause.txHash : undefined,
-        assertion: cause.code === 'ERR_ASSERTION' ? cause.message : undefined,
-        frames: typeof cause.stack === 'string' ? cause.stack.split('\n').filter(line => /^\s+at /.test(line) && /(?:scripts\/seed-rabdi|tests\/live\/live.test)\.mjs:\d+/.test(line)) : undefined });
-      cause = cause.cause;
-    }
-    if (process.env.ARKIV_EVIDENCE_DIR) await fs.writeFile(path.join(process.env.ARKIV_EVIDENCE_DIR, 'live-failure.json'), JSON.stringify({ causes, metrics }, null, 2));
-    throw new Error('Live Rabdi check failed; sanitized cause classes: ' + causes.map(c => c.name).join(' → '));
+    const failure = { ...safeProviderDiagnostic(error, 'live'), metrics };
+    if (process.env.ARKIV_EVIDENCE_DIR) await fs.writeFile(path.join(process.env.ARKIV_EVIDENCE_DIR, 'live-failure.json'), JSON.stringify(failure, null, 2));
+    throw safeProviderError(error, 'live');
   }
 });

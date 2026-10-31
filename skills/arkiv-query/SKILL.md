@@ -21,44 +21,80 @@ import { defineSchema, str, bytes, u64, u256, key } from '@arkiv-network/sdk/sch
 import { asc, gt, gte } from '@arkiv-network/sdk/query';
 import { http, type Address, type Hex } from 'viem';
 
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
+  }
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
+
 export const Listings = defineSchema('example_listings', {
   listing_id: str().indexed(), price_minor: u256().indexed(),
   created_at: u64().indexed(), title: str(), details: bytes(),
 });
 export function queryClient(accessKey: string) {
-  return createPublicClient({ chain: rabdi({ accessKey }), cacheTime: 0,
-    transport: http(undefined, { timeout: 8000, retryCount: 0,
-      fetchOptions: { cache: 'no-store', redirect: 'error' } }) });
+  try {
+    return createPublicClient({ chain: rabdi({ accessKey }), cacheTime: 0,
+      transport: http(undefined, { timeout: 8000, retryCount: 0,
+        fetchOptions: { cache: 'no-store', redirect: 'error' } }) });
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 type Reader = ReturnType<typeof queryClient>;
 
 export async function cheapestPage(client: Reader, creator: Address) {
-  const page = await client.select({ $key: true, title: true, price_minor: true })
-    .from(Listings).createdBy(creator).where(gte('price_minor', u256(0n)))
-    .orderBy(asc('price_minor')).withCount().limit(20).offset(0).fetch();
-  return { entities: page.entities, block: page.blockNumber, count: page.count, skipped: page.skipped };
+  try {
+    const page = await client.select({ $key: true, title: true, price_minor: true })
+      .from(Listings).createdBy(creator).where(gte('price_minor', u256(0n)))
+      .orderBy(asc('price_minor')).withCount().limit(20).offset(0).fetch();
+    return await { entities: page.entities, block: page.blockNumber, count: page.count, skipped: page.skipped };
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 
 // Bounded traversal of current observations, not an atomic snapshot.
 export async function fetchAllListings(client: Reader, creator: Address, maxPages = 50) {
-  if (!Number.isSafeInteger(maxPages) || maxPages < 1) throw new Error('Invalid page budget');
-  const entities = [];
-  const blocks: bigint[] = [];
-  let last: Hex | undefined;
-  for (let index = 0; index < maxPages; index++) {
-    const builder = client.select({ $key: true, title: true, price_minor: true })
-      .from(Listings, { onMismatch: 'throw' }).createdBy(creator)
-      .orderBy(asc('$key')).limit(100);
-    if (last) builder.where(gt('$key', key(last)));
-    const page = await builder.fetch();
-    blocks.push(page.blockNumber);
-    entities.push(...page.entities);
-    if (page.entities.length < 100) return { entities, observedBlocks: blocks };
-    const next = page.entities.at(-1)?.$key;
-    if (!next || (last && next.toLowerCase() <= last.toLowerCase())) throw new Error('Keyset did not advance');
-    last = next;
+  try {
+    if (!Number.isSafeInteger(maxPages) || maxPages < 1) throw safeError('Invalid page budget');
+    const entities = [];
+    const blocks: bigint[] = [];
+    let last: Hex | undefined;
+    for (let index = 0; index < maxPages; index++) {
+      const builder = client.select({ $key: true, title: true, price_minor: true })
+        .from(Listings, { onMismatch: 'throw' }).createdBy(creator)
+        .orderBy(asc('$key')).limit(100);
+      if (last) builder.where(gt('$key', key(last)));
+      const page = await builder.fetch();
+      blocks.push(page.blockNumber);
+      entities.push(...page.entities);
+      if (page.entities.length < 100) return await { entities, observedBlocks: blocks };
+      const next = page.entities.at(-1)?.$key;
+      if (!next || (last && next.toLowerCase() <= last.toLowerCase())) throw safeError('Keyset did not advance');
+      last = next;
+    }
+    throw safeError('Page budget exhausted; discard incomplete traversal');
+  } catch (error) {
+    throw sanitizedFailure(error);
   }
-  throw new Error('Page budget exhausted; discard incomplete traversal');
 }
 ```
 

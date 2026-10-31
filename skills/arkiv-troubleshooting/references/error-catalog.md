@@ -1,6 +1,6 @@
 # Source-declared SDK 1.0.0 errors
 
-This catalog describes inspected source, not a claim that every error was reproduced on a live node. Preserve actual method/status/cause locally and sanitize diagnostics before sharing. Outer viem or EntityMutationError text can hide the original cause.
+This catalog describes inspected source, not a claim that every error was reproduced on a live node. Use fixed allowlisted diagnostics and validated local transaction identifiers. Never expose or persist raw provider errors or nested causes: the RPC URL path contains a credential. Outer viem or EntityMutationError objects can include that URL in multiple fields.
 
 | Class | Correction |
 | --- | --- |

@@ -4,7 +4,7 @@ Explicit transaction nonce, gas and fees are required for funded Rabdi writes. T
 
 Copy the JavaScript block to `resumable-import.mjs` in your application. It uses public SDK 1.0.0 APIs and Node built-ins. Supply a local account from your existing signer custody and a provider `request({ method, params })` configured without automatic retries. Neither entrypoint reads keys, creates an HTTP transport, or runs on import.
 
-Call `prepareImport(options)` once, retain its `planSha256` in a trusted job record, then call `runImport({ ...options, planSha256 })`. On restart, call **only** `runImport` with that original hash and the original files. Preparation requires `rows`, `jobId`, `batchSize`, `fees`, `gasCeiling`, and `maxTotalCost`. Each row is `{ id, schema, values, salt: bigint, expiresAt: bigint, flags? }`. Use `defineSchema` and typed constructors from `@arkiv-network/sdk/schema`; only explicitly indexed columns can be filtered, and bytes columns cannot be indexed. The plan preserves each schema's tag, column types, indexing, optional/default choices and normalized typed values. All expiry targets are absolute; the SDK may reject a deadline that is no longer live. Fees are `{ gasPrice: bigint }` or `{ maxFeePerGas: bigint, maxPriorityFeePerGas: bigint }`. Common options are `account`, `chain`, `request`, `planPath`, and `journalPath`; their parent directories must already exist.
+Call `prepareImport(options)` once, retain its `planSha256` in a trusted job record, then call `runImport({ ...options, planSha256 })`. On restart, call **only** `runImport` with that original hash and the original files. Preparation requires `rows`, `jobId`, `batchSize`, `fees`, `gasCeiling`, and `maxTotalCost`. Each row is `{ id, schema, values, salt: bigint, expiresAt: bigint, flags? }`. Use `defineSchema` and typed constructors from `@arkiv-network/sdk/schema`; only explicitly indexed columns can be filtered, and bytes columns cannot be indexed. The plan preserves each schema's tag, column types, indexing, optional/default choices and normalized typed values. All expiry targets are absolute; the SDK may reject a deadline that is no longer live. New plans require `fees: { gasPrice: bigint }` obtained from `eth_gasPrice`; preparation checks the current network value. Existing signed fee intent is reconciled exactly as stored, without rewriting or resending it. An unsigned legacy fee plan cannot admit a new send. Common options are `account`, `chain`, `request`, `planPath`, and `journalPath`; their parent directories must already exist.
 
 All writers sharing this signer must use this coordinator on the same host, or you must retain exclusive signer custody. The loopback listener is a mutex, not an HTTP service: it closes incoming sockets and the OS releases it on process exit. A port collision refuses admission. This does not coordinate signers on different machines or wallet applications that bypass it. The plan captures the account, chain ID and genesis hash, port, starting transaction nonce, predicted entity keys, ordered rows, exact SDK calldata, gas, fees, and total spend cap.
 
@@ -29,6 +29,20 @@ import {
   keccak256, parseAbi, parseTransaction, recoverTransactionAddress,
 } from "viem";
 
+// Only errors made here have trusted fixed messages; external causes are dropped.
+const safeErrors = new WeakMap();
+function safeError(message) {
+  const result = new Error(message);
+  safeErrors.set(result, message);
+  return result;
+}
+function sanitizedFailure(error) {
+  const message = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  return safeError(message ?? 'Provider operation failed; reconcile durable intent before retrying');
+}
+
+
+
 const NATIVE = "0x4400000000000000000000000000000000000044";
 const EXECUTE = parseAbi(["function execute((uint8 operation, bytes operationData)[] ops)"]);
 const READS = new Set([
@@ -39,8 +53,8 @@ const READS = new Set([
 const digest = (s) => createHash("sha256").update(s).digest("hex");
 const json = (x) => JSON.stringify(x, (_, v) => typeof v === "bigint" ? v.toString() : v);
 const sameAddress = (a, b) => typeof a === "string" && typeof b === "string" && a.toLowerCase() === b.toLowerCase();
-const check = (ok, why) => { if (!ok) throw new Error(why); };
-const errorName = (e) => e instanceof Error ? e.name : "UnknownError";
+const check = (ok, why) => { if (!ok) throw safeError(why); };
+const errorName = (_error) => "ProviderError";
 const scalar = { addr, bool, bytes, dec, i32, key, str, u64, u256 };
 const bigintTypes = new Set(["u64", "u256"]);
 const typed = (v) => {
@@ -137,7 +151,7 @@ async function append(path, entries, planSha256, event) {
 const feesFrom = (f) => Object.fromEntries(Object.entries(f).map(([n, v]) => [n, BigInt(v)]));
 async function sdkCalldata(account, chain, read, creates, nonce, gas, fees) {
   let captured;
-  const unsignedAccount = { ...account, signTransaction: async (r) => { captured = r; throw new Error("Unsigned SDK capture complete"); } };
+  const unsignedAccount = { ...account, signTransaction: async (r) => { captured = r; throw safeError("Unsigned SDK capture complete"); } };
   const wallet = createWalletClient({ account: unsignedAccount, chain, transport: custom({ request: read }, { retryCount: 0 }) });
   try { await wallet.executeBatch({ creates }, { nonce, gas, ...fees }); }
   catch (e) { if (!captured) throw e; }
@@ -146,53 +160,58 @@ async function sdkCalldata(account, chain, read, creates, nonce, gas, fees) {
 }
 
 export async function prepareImport(options) {
-  const { account, chain, request, rows, jobId, batchSize, planPath, journalPath, gasCeiling, maxTotalCost, fees } = options;
-  return withCustody(account, chain, async (custodyPort) => {
-    check(typeof jobId === "string" && jobId.length > 0, "Job ID required");
-    check(Number.isSafeInteger(batchSize) && batchSize > 0 && Array.isArray(rows) && rows.length > 0, "Nonempty rows and positive batch size required");
-    check(typeof gasCeiling === "bigint" && gasCeiling > 0n && typeof maxTotalCost === "bigint" && maxTotalCost > 0n, "Approved gas and spend caps required");
-    check(options.minimumGas === undefined, "Legacy minimumGas override refused; gas is computed from the exact unsigned estimate");
-    const frozen = rows.map(freezeRow);
-    check(new Set(frozen.map((r) => r.id)).size === frozen.length, "Duplicate row IDs");
-    const names = Object.keys(fees ?? {}).sort().join(",");
-    check(names === "gasPrice" || names === "maxFeePerGas,maxPriorityFeePerGas", "Choose one fee style");
-    check(Object.values(fees).every((v) => typeof v === "bigint" && v >= 0n), "Invalid fees");
-    const feeCap = fees.gasPrice ?? fees.maxFeePerGas;
-    check(feeCap > 0n && (fees.maxPriorityFeePerGas ?? 0n) <= feeCap, "Invalid fee cap");
-    const { reader, read } = clients(account, chain, request);
-    check(await reader.getChainId() === chain.id, "Provider chain mismatch");
-    const genesis = await reader.getBlock({ blockNumber: 0n });
-    check(/^0x[0-9a-fA-F]{64}$/.test(genesis.hash), "Missing genesis identity");
-    const latest = await reader.getTransactionCount({ address: account.address, blockTag: "latest" });
-    const pending = await reader.getTransactionCount({ address: account.address, blockTag: "pending" });
-    check(latest === pending, "Resolve existing pending transactions first");
-    const startBlock = await reader.getBlockNumber({ cacheTime: 0 });
-    const predicted = await reader.predictEntityKeys({ owner: account.address, salts: frozen.map((r) => BigInt(r.salt)) });
-    frozen.forEach((r, i) => { r.expectedKey = predicted[i].key; });
-    const batches = [];
-    let totalCap = 0n;
-    for (let start = 0; start < frozen.length; start += batchSize) {
-      const index = batches.length, slice = frozen.slice(start, start + batchSize), nonce = latest + index;
-      check(Number.isSafeInteger(nonce), "Nonce exceeds safe integer range");
-      const creates = slice.map(hydrate);
-      const input = await sdkCalldata(account, chain, read, creates, nonce, gasCeiling, fees);
-      const estimate = await reader.estimateGas({ account: account.address, to: NATIVE, data: input, blockTag: "latest", ...fees });
-      const padded = estimate * 2n;
-      const rabdiFloor = chain.id === 7794095 ? 1000000n + 400000n * BigInt(slice.length - 1) : 0n;
-      const gas = padded > rabdiFloor ? padded : rabdiFloor;
-      check(gas <= gasCeiling, "Estimated gas exceeds approved ceiling");
-      totalCap += gas * feeCap;
-      batches.push({ index, nonce, gas: gas.toString(), input, rows: slice });
-    }
-    check(totalCap <= maxTotalCost && await reader.getBalance({ address: account.address }) >= totalCap, "Insufficient balance or approved budget");
-    const plan = { schema: 2, jobId, chainId: chain.id, genesisHash: genesis.hash, account: account.address.toLowerCase(), custodyPort,
-      startBlock: startBlock.toString(), firstNonce: latest, fees: JSON.parse(json(fees)), maxTotalCost: maxTotalCost.toString(), batches };
-    const text = `${json(plan)}\n`, planSha256 = digest(text);
-    await createFile(planPath, text);
-    const header = { planSha256, previous: "", state: "initialized", journalVersion: 3 };
-    await createFile(journalPath, `${json({ ...header, hash: digest(json(header)) })}\n`);
-    return { planSha256, batches: batches.length, maximumCost: totalCap.toString() };
-  });
+  try {
+    const { account, chain, request, rows, jobId, batchSize, planPath, journalPath, gasCeiling, maxTotalCost, fees } = options;
+    return await withCustody(account, chain, async (custodyPort) => {
+      check(typeof jobId === "string" && jobId.length > 0, "Job ID required");
+      check(Number.isSafeInteger(batchSize) && batchSize > 0 && Array.isArray(rows) && rows.length > 0, "Nonempty rows and positive batch size required");
+      check(typeof gasCeiling === "bigint" && gasCeiling > 0n && typeof maxTotalCost === "bigint" && maxTotalCost > 0n, "Approved gas and spend caps required");
+      check(options.minimumGas === undefined, "Legacy minimumGas override refused; gas is computed from the exact unsigned estimate");
+      const frozen = rows.map(freezeRow);
+      check(new Set(frozen.map((r) => r.id)).size === frozen.length, "Duplicate row IDs");
+      const names = Object.keys(fees ?? {}).sort().join(",");
+      check(names === "gasPrice", "New writes require gasPrice from eth_gasPrice");
+      check(Object.values(fees).every((v) => typeof v === "bigint" && v >= 0n), "Invalid fees");
+      const feeCap = fees.gasPrice ?? fees.maxFeePerGas;
+      check(feeCap > 0n && (fees.maxPriorityFeePerGas ?? 0n) <= feeCap, "Invalid fee cap");
+      const { reader, read } = clients(account, chain, request);
+      check(await reader.getChainId() === chain.id, "Provider chain mismatch");
+      check(fees.gasPrice === BigInt(await read({ method: "eth_gasPrice" })), "Prepare with the current eth_gasPrice");
+      const genesis = await reader.getBlock({ blockNumber: 0n });
+      check(/^0x[0-9a-fA-F]{64}$/.test(genesis.hash), "Missing genesis identity");
+      const latest = await reader.getTransactionCount({ address: account.address, blockTag: "latest" });
+      const pending = await reader.getTransactionCount({ address: account.address, blockTag: "pending" });
+      check(latest === pending, "Resolve existing pending transactions first");
+      const startBlock = await reader.getBlockNumber({ cacheTime: 0 });
+      const predicted = await reader.predictEntityKeys({ owner: account.address, salts: frozen.map((r) => BigInt(r.salt)) });
+      frozen.forEach((r, i) => { r.expectedKey = predicted[i].key; });
+      const batches = [];
+      let totalCap = 0n;
+      for (let start = 0; start < frozen.length; start += batchSize) {
+        const index = batches.length, slice = frozen.slice(start, start + batchSize), nonce = latest + index;
+        check(Number.isSafeInteger(nonce), "Nonce exceeds safe integer range");
+        const creates = slice.map(hydrate);
+        const input = await sdkCalldata(account, chain, read, creates, nonce, gasCeiling, fees);
+        const estimate = await reader.estimateGas({ account: account.address, to: NATIVE, data: input, blockTag: "latest", ...fees });
+        const padded = estimate * 2n;
+        const rabdiFloor = chain.id === 7794095 ? 1000000n + 400000n * BigInt(slice.length - 1) : 0n;
+        const gas = padded > rabdiFloor ? padded : rabdiFloor;
+        check(gas <= gasCeiling, "Estimated gas exceeds approved ceiling");
+        totalCap += gas * feeCap;
+        batches.push({ index, nonce, gas: gas.toString(), input, rows: slice });
+      }
+      check(totalCap <= maxTotalCost && await reader.getBalance({ address: account.address }) >= totalCap, "Insufficient balance or approved budget");
+      const plan = { schema: 2, jobId, chainId: chain.id, genesisHash: genesis.hash, account: account.address.toLowerCase(), custodyPort,
+        startBlock: startBlock.toString(), firstNonce: latest, fees: JSON.parse(json(fees)), maxTotalCost: maxTotalCost.toString(), batches };
+      const text = `${json(plan)}\n`, planSha256 = digest(text);
+      await createFile(planPath, text);
+      const header = { planSha256, previous: "", state: "initialized", journalVersion: 3 };
+      await createFile(journalPath, `${json({ ...header, hash: digest(json(header)) })}\n`);
+      return { planSha256, batches: batches.length, maximumCost: totalCap.toString() };
+    });
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 
 async function authenticateRaw(raw, plan, batch) {
@@ -278,87 +297,93 @@ async function verifyReadback(reader, plan, batch, inclusion) {
 }
 
 export async function runImport({ account, chain, request, planPath, journalPath, planSha256 }) {
-  return withCustody(account, chain, async (custodyPort) => {
-    const text = await readFile(planPath, "utf8");
-    check(digest(text) === planSha256, "Plan tampered or wrong trusted job hash");
-    const plan = JSON.parse(text), entries = await loadJournal(journalPath, planSha256);
-    check(plan.schema === 2 && plan.chainId === chain.id && sameAddress(plan.account, account.address)
-      && plan.custodyPort === custodyPort && Array.isArray(plan.batches), "Plan account/chain/custody mismatch");
-    const { reader, read } = clients(account, chain, request);
-    check(await reader.getChainId() === plan.chainId, "Provider chain mismatch");
-    check((await reader.getBlock({ blockNumber: 0n })).hash === plan.genesisHash, "Chain genesis changed; this plan belongs to another network epoch");
-    for (const batch of plan.batches) {
-      check(batch.index === plan.batches.indexOf(batch) && batch.nonce === plan.firstNonce + batch.index, "Unstable batch numbering");
-      const history = entries.filter((r) => r.index === batch.index);
-      let prepared = false, captured, receiptConfirmed, verified;
-      for (const record of history) {
-        check(record.state !== "confirmed", "Legacy confirmed state is incompatible; retain original files and reconcile with the original importer");
-        if (record.state === "prepared") {
-          check(!captured, "Prepared intent cannot follow submission");
-          prepared = true;
-        } else if (record.state === "submitting") {
-          check(prepared && !captured, "Submission requires one prior prepared intent");
-          captured = record;
-        } else {
-          check(captured && record.txHash === captured.txHash, "Checkpoint lacks its durable submission hash");
-          if (record.state === "uncertain") check(!receiptConfirmed && !verified, "Uncertain state cannot follow receipt confirmation");
-          else if (record.state === "receipt_confirmed") {
-            check(!receiptConfirmed && !verified, "Duplicate or out-of-order receipt confirmation");
-            receiptConfirmed = record;
-          } else if (record.state === "verified") {
-            check(receiptConfirmed && !verified, "Verification requires one prior receipt confirmation");
-            verified = record;
-          } else check(false, "Invalid batch journal state");
+  try {
+    return await withCustody(account, chain, async (custodyPort) => {
+      const text = await readFile(planPath, "utf8");
+      check(digest(text) === planSha256, "Plan tampered or wrong trusted job hash");
+      const plan = JSON.parse(text), entries = await loadJournal(journalPath, planSha256);
+      check(plan.schema === 2 && plan.chainId === chain.id && sameAddress(plan.account, account.address)
+        && plan.custodyPort === custodyPort && Array.isArray(plan.batches), "Plan account/chain/custody mismatch");
+      const { reader, read } = clients(account, chain, request);
+      check(await reader.getChainId() === plan.chainId, "Provider chain mismatch");
+      check((await reader.getBlock({ blockNumber: 0n })).hash === plan.genesisHash, "Chain genesis changed; this plan belongs to another network epoch");
+      for (const batch of plan.batches) {
+        check(batch.index === plan.batches.indexOf(batch) && batch.nonce === plan.firstNonce + batch.index, "Unstable batch numbering");
+        const history = entries.filter((r) => r.index === batch.index);
+        let prepared = false, captured, receiptConfirmed, verified;
+        for (const record of history) {
+          check(record.state !== "confirmed", "Legacy confirmed state is incompatible; retain original files and reconcile with the original importer");
+          if (record.state === "prepared") {
+            check(!captured, "Prepared intent cannot follow submission");
+            prepared = true;
+          } else if (record.state === "submitting") {
+            check(prepared && !captured, "Submission requires one prior prepared intent");
+            captured = record;
+          } else {
+            check(captured && record.txHash === captured.txHash, "Checkpoint lacks its durable submission hash");
+            if (record.state === "uncertain") check(!receiptConfirmed && !verified, "Uncertain state cannot follow receipt confirmation");
+            else if (record.state === "receipt_confirmed") {
+              check(!receiptConfirmed && !verified, "Duplicate or out-of-order receipt confirmation");
+              receiptConfirmed = record;
+            } else if (record.state === "verified") {
+              check(receiptConfirmed && !verified, "Verification requires one prior receipt confirmation");
+              verified = record;
+            } else check(false, "Invalid batch journal state");
+          }
         }
+        const finishBatch = async () => {
+          const inclusion = await authenticateReceipt(reader, plan, batch, captured);
+          if (receiptConfirmed) check(json(receiptConfirmed.receipt) === json(inclusion), "Receipt checkpoint differs from current authenticated inclusion");
+          else {
+            await append(journalPath, entries, planSha256, { index: batch.index, state: "receipt_confirmed", txHash: captured.txHash, receipt: inclusion });
+          }
+          // This durable receipt checkpoint precedes every field read and verified save.
+          if (verified) check(json(verified.receipt) === json(inclusion), "Verified checkpoint differs from current authenticated inclusion");
+          const observedBlocks = await verifyReadback(reader, plan, batch, inclusion);
+          if (!verified) await append(journalPath, entries, planSha256, { index: batch.index, state: "verified", txHash: captured.txHash, receipt: inclusion, observedBlocks });
+        };
+        if (captured) { await finishBatch(); continue; }
+        check(Object.keys(plan.fees).join(",") === "gasPrice", "Legacy fee intent permits signed reconciliation only; no new send");
+        check(BigInt(plan.fees.gasPrice) === BigInt(await read({ method: "eth_gasPrice" })), "Network gasPrice changed; retain intent and reconcile before any new plan");
+        const nonce = await reader.getTransactionCount({ address: account.address, blockTag: "latest" });
+        const pending = await reader.getTransactionCount({ address: account.address, blockTag: "pending" });
+        check(nonce === batch.nonce && pending === batch.nonce, "Account nonce changed; do not create a replacement");
+        const fees = feesFrom(plan.fees), gas = BigInt(batch.gas);
+        check(await reader.getBalance({ address: account.address }) >= gas * (fees.gasPrice ?? fees.maxFeePerGas), "Insufficient balance before submission");
+        const creates = batch.rows.map(hydrate);
+        check(await sdkCalldata(account, chain, read, creates, batch.nonce, gas, fees) === batch.input, "Current SDK encoding differs from frozen plan");
+        check(await reader.estimateGas({ account: account.address, to: NATIVE, data: batch.input, ...fees }) <= gas, "Current estimate exceeds frozen gas");
+        await append(journalPath, entries, planSha256, { index: batch.index, state: "prepared" });
+        const guarded = async (r) => {
+          if (r.method !== "eth_sendRawTransaction") return read(r);
+          check(!captured && r.params?.length === 1, "Duplicate send or malformed submission refused");
+          const raw = r.params[0], txHash = await authenticateRaw(raw, plan, batch);
+          const record = { index: batch.index, state: "submitting", nonce: batch.nonce, txHash, raw };
+          await append(journalPath, entries, planSha256, record);
+          captured = record; // This assignment occurs only after the durable save.
+          const acknowledged = await request(r);
+          check(acknowledged === txHash, "Provider acknowledged another hash");
+          return txHash;
+        };
+        const wallet = createWalletClient({ account, chain, transport: custom({ request: guarded }, { retryCount: 0 }) });
+        try {
+          const result = await wallet.executeBatch({ creates }, { nonce: batch.nonce, gas, ...fees });
+          check(captured && result.txHash === captured.txHash && json(result.createdEntities) === json(batch.rows.map((r) => r.expectedKey)), "SDK result differs from planned key order");
+        } catch (e) {
+          // Phase evidence decides recovery, not instanceof or the SDK's message.
+          if (captured) {
+            await append(journalPath, entries, planSha256, { index: batch.index, state: "uncertain", txHash: captured.txHash, errorName: errorName(e) });
+            return { state: "needs_reconciliation", index: batch.index, txHash: captured.txHash };
+          }
+          throw safeError("Stopped before durable send admission; inspect journal before retrying");
+        }
+        await finishBatch();
       }
-      const finishBatch = async () => {
-        const inclusion = await authenticateReceipt(reader, plan, batch, captured);
-        if (receiptConfirmed) check(json(receiptConfirmed.receipt) === json(inclusion), "Receipt checkpoint differs from current authenticated inclusion");
-        else {
-          await append(journalPath, entries, planSha256, { index: batch.index, state: "receipt_confirmed", txHash: captured.txHash, receipt: inclusion });
-        }
-        // This durable receipt checkpoint precedes every field read and verified save.
-        if (verified) check(json(verified.receipt) === json(inclusion), "Verified checkpoint differs from current authenticated inclusion");
-        const observedBlocks = await verifyReadback(reader, plan, batch, inclusion);
-        if (!verified) await append(journalPath, entries, planSha256, { index: batch.index, state: "verified", txHash: captured.txHash, receipt: inclusion, observedBlocks });
-      };
-      if (captured) { await finishBatch(); continue; }
-      const nonce = await reader.getTransactionCount({ address: account.address, blockTag: "latest" });
-      const pending = await reader.getTransactionCount({ address: account.address, blockTag: "pending" });
-      check(nonce === batch.nonce && pending === batch.nonce, "Account nonce changed; do not create a replacement");
-      const fees = feesFrom(plan.fees), gas = BigInt(batch.gas);
-      check(await reader.getBalance({ address: account.address }) >= gas * (fees.gasPrice ?? fees.maxFeePerGas), "Insufficient balance before submission");
-      const creates = batch.rows.map(hydrate);
-      check(await sdkCalldata(account, chain, read, creates, batch.nonce, gas, fees) === batch.input, "Current SDK encoding differs from frozen plan");
-      check(await reader.estimateGas({ account: account.address, to: NATIVE, data: batch.input, ...fees }) <= gas, "Current estimate exceeds frozen gas");
-      await append(journalPath, entries, planSha256, { index: batch.index, state: "prepared" });
-      const guarded = async (r) => {
-        if (r.method !== "eth_sendRawTransaction") return read(r);
-        check(!captured && r.params?.length === 1, "Duplicate send or malformed submission refused");
-        const raw = r.params[0], txHash = await authenticateRaw(raw, plan, batch);
-        const record = { index: batch.index, state: "submitting", nonce: batch.nonce, txHash, raw };
-        await append(journalPath, entries, planSha256, record);
-        captured = record; // This assignment occurs only after the durable save.
-        const acknowledged = await request(r);
-        check(acknowledged === txHash, "Provider acknowledged another hash");
-        return txHash;
-      };
-      const wallet = createWalletClient({ account, chain, transport: custom({ request: guarded }, { retryCount: 0 }) });
-      try {
-        const result = await wallet.executeBatch({ creates }, { nonce: batch.nonce, gas, ...fees });
-        check(captured && result.txHash === captured.txHash && json(result.createdEntities) === json(batch.rows.map((r) => r.expectedKey)), "SDK result differs from planned key order");
-      } catch (e) {
-        // Phase evidence decides recovery, not instanceof or the SDK's message.
-        if (captured) {
-          await append(journalPath, entries, planSha256, { index: batch.index, state: "uncertain", txHash: captured.txHash, errorName: errorName(e) });
-          return { state: "needs_reconciliation", index: batch.index, txHash: captured.txHash };
-        }
-        throw new Error("Stopped before durable send admission; inspect journal before retrying", { cause: e });
-      }
-      await finishBatch();
-    }
-    return { state: "complete", planSha256, confirmedBatches: plan.batches.length, verifiedBatches: plan.batches.length };
-  });
+      return { state: "complete", planSha256, confirmedBatches: plan.batches.length, verifiedBatches: plan.batches.length };
+    });
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 ```
 
