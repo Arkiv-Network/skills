@@ -23,7 +23,7 @@ Arkiv is the Web3 database. Its DB-Chain stores wallet-owned Arkiv entities as n
 
 Read the application's manifest, lockfile and installed SDK declarations before producing executable SDK code, including for an explanation-only request. Report the observed version and missing evidence. If declarations are unavailable or outside `>=1.0.0 <2`, obtain them or propose an authorized upgrade; do not guess exports or bypass peers. The examples are checked with 1.0.0, not every future release in the range.
 
-Use `defineSchema` and constructors from `@arkiv-network/sdk/schema`. `createEntity(schema, values, { expiration })` writes through that schema. Only columns declared `.indexed()` can be filtered; `bytes()` columns are stored and selectable but cannot be indexed, filtered or sorted. A named schema adds an indexed `arkiv.schema` tag; it does not authenticate the publisher.
+Use `defineSchema` and constructors from `@arkiv-network/sdk/schema`. `createEntity(schema, values, { expiration }, txParams)` writes through that schema. Rabdi's recommended default is explicit latest nonce, gas and network gasPrice; use first-write's gas/budget policy and check receipt status. Only columns declared `.indexed()` can be filtered; `bytes()` columns are stored and selectable but cannot be indexed, filtered or sorted. A named schema adds an indexed `arkiv.schema` tag; it does not authenticate the publisher.
 
 Read the selected recipe before answering with its guidance. A routing answer or recipe read grants no permission to execute writes. If the recipe cannot be loaded, report that limitation. The advisory [installed-import check](references/import-check.md) reads declarations without executing application code; unsupported evidence stays unmeasured.
 

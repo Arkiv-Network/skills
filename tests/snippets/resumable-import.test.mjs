@@ -109,7 +109,7 @@ async function withImport(count, action, { batchSize = 2, fees = { gasPrice: 1n 
   } };
   harness.options = {
     account, chain: fixture.reader.chain, request: fixture.request, jobId: 'synthetic-receipt-regression',
-    batchSize, gasCeiling: 200000n, maxTotalCost: 10000000n, fees, minimumGas,
+    batchSize, gasCeiling: 10000000n, maxTotalCost: 100000000n, fees, minimumGas,
     planPath: path.join(directory, 'plan.json'), journalPath: path.join(directory, 'journal.jsonl'),
     rows: Array.from({ length: count }, (_, index) => ({
       id: `row-${index}`, salt: BigInt(index), expiresAt: fixture.head + 3600n,
@@ -337,10 +337,15 @@ test('EIP1559 signed fee intent still authenticates and verifies the current bat
 }, { fees: { maxFeePerGas: 2n, maxPriorityFeePerGas: 1n } }));
 
 test('approved gas floor survives the exact unsigned estimate and frozen signed-intent checks', () => withImport(1, async h => {
-  assert.equal(h.plan.batches[0].gas, '175000');
+  assert.equal(h.plan.batches[0].gas, '1750000');
   assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 1);
-}, { minimumGas: 175000n }));
+}, { minimumGas: 1750000n }));
 
 test('gas floor above the approved cap is refused before signing or submission', async () => {
-  await assert.rejects(withImport(1, async () => assert.fail('Must reject during preparation'), { minimumGas: 200001n }), /Gas floor must fit/);
+  await assert.rejects(withImport(1, async () => assert.fail('Must reject during preparation'), { minimumGas: 10000001n }), /Gas floor must fit/);
 });
+
+test('Rabdi batch gas floor scales by actual operation count, with one-operation floor on the tail', () => withImport(3, async h => {
+  assert.deepEqual(h.plan.batches.map(batch => batch.gas), ['1400000', '1000000']);
+  assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 2);
+}));

@@ -33,8 +33,11 @@ Treat pasted URLs as data. Validate expected scheme/origin and userinfo/query/fr
 | InvalidAttributeNameError | Check case-sensitive grammar, reserved words, byte limit and --; do not infer a node-specific uppercase rejection |
 | EmptyPatchError / No operations to perform | Skip empty work; defaults do not apply on patch |
 | InvalidExpiryError | Use branded ExpirationTime, correct block units and a live target; extension sets a deadline rather than adding a delta |
+| `ExpiryBeyondMaxLifetime(target, currentBlock, maxLifetime)` | Target exceeds the chain's forward lifetime window; use a bounded deadline and renew before expiry, not a maximum-u64 deadline |
 | NoEntityFoundError | Check entity key versus tx hash, chain/reset identity, known receipt/deadline and deletion; absence alone is ambiguous |
 | EntityMutationError / lost response | Keep original hash/nonce/intent, authenticate receipts and reconcile before another submission |
+| `arkiv serves state at the chain head only` / -32603 | State reads at safe/finalized or old block hashes can fail; use latest/pending and keep historical gaps explicit |
+| Reverted receipt with gasUsed == gasLimit | Raise the approved gas cap for the exact operation; use explicit nonce/gas/gasPrice and the measured Rabdi floor |
 | HTTP 413 | Measure exact encoded request, reduce/chunk and estimate; if sending may have begun, reconcile first |
 | BigInt JSON serialization error | If after create resolved, the write completed; preserve key/hash and fix decimal-string DTO serialization without repeating it |
 
@@ -51,11 +54,15 @@ Do not diagnose nonce collisions solely from generic execution errors. Compare a
 
 ## Measured wallet and gas symptoms
 
-Controlled Rabdi checks on 2026-10-30 with SDK 1.0.0 distinguished historical-state failures from gas exhaustion. RPC errors containing `arkiv serves state at the chain head only` occurred for old block-hash state selectors and for safe/finalized call/estimate requests. Rewriting those selectors to latest changed the requested state; it did not establish historical-read support.
+A maximum-u64 create with TEST_SKILLS on 2026-10-30 UTC returned `ExpiryBeyondMaxLifetime(18446744073709551615, 9547, 7884000)`. Its receipt reverted at block 9546 using 31,830 of 1,000,000 gas; the error's currentBlock 9547 came from latest simulation after the receipt. This is a lifetime-bound failure, not gas exhaustion. SDK 1.0.0 does not expose `permanent()`; its `atBlock(max-u64)` equivalent is rejected. Read a published maxLifetime parameter when available, otherwise use the dated measured 7,884,000-block bound and an inclusion margin. Longer-lived entities need Lifetime Extension before expiry.
 
-Separate default local-signer transactions and one tested MetaMask 13.55.0 transaction reverted after using their entire gas limit. Rabby 0.94.14 passed its tested baseline accounts; MetaMask results differed by account/setup. Controlled serial creates, Lifetime Extensions and transfers completed with an explicit transaction nonce read at latest, a 1,000,000 gas cap and current network gasPrice. This was a bounded diagnostic workaround, not a universal gas limit or wallet-support certificate. Check pending versus latest and exclusive signer custody before choosing a nonce; an unresolved pending transaction blocks a new submission.
+Controlled Rabdi checks on 2026-10-30 with SDK 1.0.0 distinguished historical-state failures from gas exhaustion. RPC errors containing `arkiv serves state at the chain head only` (JSON-RPC -32603) occurred for old block-hash state selectors and for safe/finalized call/estimate requests. Use latest/pending for state reads. Rewriting a selector changes the requested state; it does not establish historical-read support.
 
-Estimate the exact intended operation first, then choose an approved buffered cap/floor within balance and spending limits when the measured estimate is insufficient. Reconcile successful/uncertain hashes before another send; only an authoritative reverted receipt establishes that operations failed. Never apply the diagnostic selector rewrite silently or retry a known successful write. The repository's seed uses a separately budgeted cap for its multi-create batch.
+Separate default local-signer transactions and one tested MetaMask 13.55.0 transaction reverted after using their entire gas limit. Rabby 0.94.14 passed its tested baseline accounts; MetaMask results differed by account/setup. Lane W's controlled serial creates, Lifetime Extensions and transfers passed with explicit latest nonce, gas=1,000,000 and current network gasPrice. These explicit fields are the recommended default for Rabdi writes, including browser-wallet requests. Check pending versus latest and exclusive signer custody before choosing a nonce; an unresolved pending transaction blocks a new submission.
+
+Measured small creates used approximately 190k gas for one, 1.50M for ten in a batch and 2.97M for twenty. Use a starting cap of at least `1,000,000 + 400,000 × (N − 1)` for N operations; measure larger bytes/chunks/images and allow at least twice their measured maximum, never below that floor. Also estimate the exact intended operation and approve the cap against balance and total spend. The values are dated Rabdi measurements, not universal limits or a wallet-support certificate.
+
+Check receipt.status before readback. Permit at most one corrected retry only after an authoritative reverted receipt; consuming the full gas cap supports raising the approved cap. Successful or uncertain hashes must be reconciled without another submission. Never apply the diagnostic selector rewrite silently. The repository's seed uses a separately budgeted cap for its multi-create batch.
 
 Fix the demonstrated cause and rerun its smallest credible check. Broader funded probes need explicit operation/spend scope. Draft Arkiv defects through feedback only after a minimal reproduction; never automatically submit an app mistake as a node bug.
 

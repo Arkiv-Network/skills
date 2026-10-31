@@ -28,7 +28,7 @@ Serialize all writes for an account. `Promise.all` over wallet writes can collid
 
 The transaction nonce orders Ethereum-compatible transactions. The **entity-minting nonce** is a separate counter per creator and advances for each create. Pass the creating signer's address as `owner` in `reader.predictEntityKeys({ owner, count })` or `reader.predictEntityKeys({ owner, salts })`; with `salts`, their length determines the count. This counter is not `getTransactionCount()` and does not follow later ownership transfers. Hold exclusive access to every create between prediction and submission, use exactly the predicted salts, and verify receipt keys. An intervening create can invalidate relationships even if transaction nonce allocation was correct.
 
-Pass `TxParams` last: fourth after `createEntity(schema, values, options)` or `patchEntity(schema, key, changes)`, second for `executeBatch(batch)` and descriptor-based lifecycle methods: `{ gas, nonce, gasPrice }` for legacy fees, or `{ gas, nonce, maxFeePerGas, maxPriorityFeePerGas }` for EIP-1559. Fee styles are mutually exclusive. Omitted fields use wallet estimation; explicit values are the caller's responsibility. Never reuse one fixed transaction nonce across a multi-batch import.
+Pass `TxParams` last: fourth after `createEntity(schema, values, options)` or `patchEntity(schema, key, changes)`, second for `executeBatch(batch)` and descriptor-based lifecycle methods. The recommended Rabdi default is `{ nonce: latest, gas, gasPrice }` with current network gasPrice. Use at least 1,000,000 gas for one operation and add 400,000 per extra batch operation; raise it for the exact estimate and at least twice measured maximum gas for large bytes. Check latest/pending under exclusive signer custody and approve balance/total spend before signing. Refresh nonce/fees for every new transaction; never reuse one nonce across batches. SDK EIP-1559 fields are an alternative fee style, not fields to mix with gasPrice.
 
 An explicit `gas` skips automatic gas estimation and can turn a permission/expiry error into a paid revert. Leave it unset for ordinary writes, or run an exact unsigned estimate immediately before using the frozen gas cap. See [rendered funding/permission errors](../arkiv-troubleshooting/references/error-catalog.md); neither their message nor a missing hash proves the send phase.
 
@@ -47,6 +47,8 @@ SDK 1.0.0 `executeBatch` returns created keys but no expiration deadlines. Decod
 | Authenticated canonical receipt; later read/checkpoint failed | Preserve receipt-confirmed keys/hash separately from verified progress. Repair this batch's verification or checkpoint without resending; block the next batch. |
 
 RPC transport retries and submitting a new transaction are different actions. Do not convert a transport retry policy into application retries around `createEntity()` or `executeBatch()`. An application `row_id` helps reconciliation but is not protocol uniqueness or automatic idempotency.
+
+Check `receipt.status === 'success'`. A reverted receipt consuming the entire gas limit supports gas exhaustion; increase the approved cap for the corrected attempt. Permit at most one retry only after an authoritative reverted receipt, refreshing nonce/fees and budget. This durable importer stops on a revert for operator reconciliation and never retries automatically. Successful/uncertain writes must never be submitted again.
 
 ## Durable batch progress
 

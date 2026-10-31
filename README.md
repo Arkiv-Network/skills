@@ -44,6 +44,8 @@ Load `arkiv` for an Arkiv task, then the task skill it selects. Use `arkiv-first
 
 The guidance targets SDK `>=1.0.0 <2` and Rabdi (chain ID 7794095). Before using another version, inspect its installed declarations and current official documentation. Configure `rabdi({ accessKey })`; the SDK encodes the RPC key in its URL path. Keep operator keys server-side and redact keyed URLs from errors/logs; writes require an authorized signer and spending budget.
 
+Use explicit latest nonce, gas and network gasPrice for Rabdi writes, then check receipt status. The measured starting gas floor is 1,000,000 plus 400,000 per extra batch operation; large bytes need measurement and at least twice the measured maximum. Approve exact-operation cost/balance and reconcile uncertainty before any new attempt. See first-write and write-safety for the complete policy.
+
 Each skill declares its checked SDK range, network, date and MIT license in frontmatter. These declarations describe the documented scope and do not certify every provider, application or future release.
 
 For the combined plugin for Claude Code and Codex CLI, use the separate [Arkiv plugin repository](https://github.com/Arkiv-Network/ai-plugin). It imports a fixed canonical revision and bundles the General MCP connection and project rules. Read its installation and verification scope before use.
@@ -66,6 +68,8 @@ node tests/snippets/published-imports.mjs
 Use `defineSchema` and constructors from `@arkiv-network/sdk/schema`. Only columns marked `.indexed()` support predicates; `bytes()` stores binary/JSON data but cannot be indexed, filtered or sorted. Reads return flat `$key`, `$owner`, `$creator`, `$expiresAt` and selected column values. Use `$attributes` for all values or `$attributeSchema` for types/indexing without large values.
 
 Rabdi queries read current state, with one-key server ordering, pages up to 100, offsets/keyset traversal and filtered counts. Multi-page scans are not inherently one snapshot. See the query and backup skills before claiming complete or historical exports. Natural expiration emits no event; watchers need current-state reconciliation after gaps.
+
+Rabdi has a bounded lifetime window, measured on 2026-10-30 UTC as 7,884,000 blocks ahead of the current block. Maximum-u64 deadlines are rejected; longer retention needs Lifetime Extension before expiry. Use current published network parameters when exposed, otherwise the dated measured fallback and inclusion margin in the expiration skill. SDK 1.0.0 exposes no maxLifetime getter.
 
 Get free keys at [access keys](https://hub.arkiv.network/access-keys) and test funds at the [faucet](https://hub.arkiv.network/faucet). Missing keys raise MissingAccessKeyError; an explicitly empty key chooses heavily limited keyless access that can return HTTP 429. Current provider quota is 100,000,000 units per key, with each arkiv_query costing 10 and other methods zero. Keys do not fund or authorize writes.
 

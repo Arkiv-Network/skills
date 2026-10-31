@@ -35,4 +35,6 @@ Handle accountsChanged, chainChanged and disconnect by changing cache scope, cle
 
 Verify the intended wallet's unsigned request, nonce, selected RPC and approved transaction on Rabdi before claiming wallet-specific behavior. A local SDK signer test does not establish injected-wallet compatibility. Do not diagnose nonce problems from a generic RPC execution message alone.
 
+Include explicit gas and network gasPrice in the wallet request; do not leave Rabdi estimation to MetaMask. Under exclusive account custody, read the transaction nonce at latest and check pending before proposing. Use first-write's measured floor of 1,000,000 plus 400,000 per extra batch operation, exact-operation estimate and approved fee budget; large bytes need at least twice measured maximum gas. Verify receipt.status. At most one corrected retry after an authoritative revert; successful or uncertain writes require reconciliation. Keep state reads at latest/pending to avoid head-only errors.
+
 Source: [SDK chain](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/chains/rabdi.ts), [wallet client](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/clients/createWalletClient.ts).

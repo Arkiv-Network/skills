@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
+import { createPublicClient, createWalletClient, ExpirationTime, type TxParams } from '@arkiv-network/sdk';
 import { defineSchema, str, bytes, dec } from '@arkiv-network/sdk/schema';
 import { asc, eq } from '@arkiv-network/sdk/query';
 const Model = defineSchema('compile_contract', {
@@ -7,6 +7,9 @@ const Model = defineSchema('compile_contract', {
 declare const reader: ReturnType<typeof createPublicClient>;
 declare const wallet: ReturnType<typeof createWalletClient>;
 declare const entityKey: `0x${string}`;
+declare const txParams: TxParams;
+// @ts-expect-error SDK 1.0.0 exposes no permanent expiration helper.
+ExpirationTime.permanent();
 reader.select({ $key: true, body: true }).from(Model).where(eq('amount', dec('1.5'))).orderBy(asc('title'));
 // @ts-expect-error A stored unindexed column is not a filter.
 reader.select({ $key: true }).from(Model).where(eq('title', 'x'));
@@ -17,10 +20,10 @@ reader.select({ $key: true }).from(Model).where(eq('amount', 1));
 // @ts-expect-error A bytes column cannot be sorted.
 reader.select({ $key: true }).from(Model).orderBy(asc('body'));
 // @ts-expect-error Required values must be present.
-wallet.createEntity(Model, { app_id: 'x' }, { expiration: ExpirationTime.fromDays(1) });
+wallet.createEntity(Model, { app_id: 'x' }, { expiration: ExpirationTime.fromDays(1) }, txParams);
 // @ts-expect-error Only optional columns may be unset.
-wallet.patchEntity(Model, entityKey, { unset: ['app_id'] });
-wallet.patchEntity(Model, entityKey, { unset: ['note'] });
+wallet.patchEntity(Model, entityKey, { unset: ['app_id'] }, txParams);
+wallet.patchEntity(Model, entityKey, { unset: ['note'] }, txParams);
 async function narrowProjection() {
   const page = await reader.select({ $key: true, title: true }).from(Model).fetch();
   const row = page.entities[0];

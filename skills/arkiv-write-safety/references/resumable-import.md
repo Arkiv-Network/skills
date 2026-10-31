@@ -1,6 +1,6 @@
 # A resumable Node importer
 
-An optional `minimumGas` selects an explicitly approved gas floor when measured provider estimates are insufficient. It never bypasses estimation: the padded estimate and floor must both fit `gasCeiling`, balance and the frozen total spend cap. Do not copy a test cap into production without validating the exact operation.
+Explicit transaction nonce, gas and fees are the recommended Rabdi default. This importer uses at least `1,000,000 + 400,000 × (N − 1)` gas for N creates in each batch and twice the exact unsigned estimate when larger. An optional `minimumGas` raises that floor, including at least twice the measured maximum for large bytes. The estimate and all floors must fit `gasCeiling`, balance and the frozen total spend cap. These measured starting caps are not universal transaction limits.
 
 Copy the JavaScript block to `resumable-import.mjs` in your application. It uses public SDK 1.0.0 APIs and Node built-ins. Supply a local account from your existing signer custody and a provider `request({ method, params })` configured without automatic retries. Neither entrypoint reads keys, creates an HTTP transport, or runs on import.
 
@@ -177,8 +177,10 @@ export async function prepareImport(options) {
       const creates = slice.map(hydrate);
       const input = await sdkCalldata(account, chain, read, creates, nonce, gasCeiling, fees);
       const estimate = await reader.estimateGas({ account: account.address, to: NATIVE, data: input, ...fees });
-      const padded = (estimate * 125n + 99n) / 100n;
-      const gas = padded > minimumGas ? padded : minimumGas;
+      const padded = estimate * 2n;
+      const rabdiFloor = chain.id === 7794095 ? 1000000n + 400000n * BigInt(slice.length - 1) : 0n;
+      const floor = minimumGas > rabdiFloor ? minimumGas : rabdiFloor;
+      const gas = padded > floor ? padded : floor;
       check(gas <= gasCeiling, "Estimated gas exceeds approved ceiling");
       totalCap += gas * feeCap;
       batches.push({ index, nonce, gas: gas.toString(), input, rows: slice });

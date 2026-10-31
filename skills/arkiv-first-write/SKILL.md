@@ -30,6 +30,7 @@ import { defineSchema, str, bytes, u64 } from '@arkiv-network/sdk/schema';
 import { eq } from '@arkiv-network/sdk/query';
 import { rabdi } from '@arkiv-network/sdk/chains';
 import { http, type LocalAccount } from 'viem';
+import { getGasPrice } from 'viem/actions';
 
 export const Notes = defineSchema('example_first_note', {
   seed_id: str().indexed(), created_at: u64(), body: bytes(),
@@ -48,8 +49,18 @@ export function firstNoteParameters(expiration: Expiry = ExpirationTime.fromDays
     expiration, flags: { readonly: true, permissionlessExtension: false } };
 }
 type Clients = ReturnType<typeof clients>;
+export async function rabdiTxParams(reader: Clients['reader'], address: LocalAccount['address'],
+  approvedMaximumCost: bigint, gas = 1000000n): Promise<TxParams> {
+  if (gas < 1000000n) throw new Error('Rabdi single-operation gas floor is 1,000,000');
+  const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
+  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Reconcile pending nonce first');
+  const gasPrice = await getGasPrice(reader);
+  if (gas * gasPrice > approvedMaximumCost || gas * gasPrice > await reader.getBalance({ address })) throw new Error('Gas cap exceeds budget/balance');
+  return { nonce: latest, gas, gasPrice };
+}
 export async function ensureFirstNote({ reader, wallet }: Clients,
-  recordIntent: () => Promise<void>, expiration: Expiry, txParams: TxParams) {
+  recordIntent: (txParams: TxParams) => Promise<void>, expiration: Expiry, approvedMaximumCost: bigint,
+  approvedGas = 1000000n) {
   if (await reader.getChainId() !== 7794095 || wallet.chain?.id !== 7794095) throw new Error('Wrong chain');
   const prior = await reader.select({ $key: true, $creator: true, $creationFlags: true, body: true, media_type: true })
     .from(Notes, { onMismatch: 'throw' }).createdBy(wallet.account.address)
@@ -65,7 +76,8 @@ export async function ensureFirstNote({ reader, wallet }: Clients,
   }
   // Precondition: exclusive writer, sufficient funding, successful unsigned estimate,
   // and no unresolved earlier seed attempt in the durable operation registry.
-  await recordIntent();
+  const txParams = await rabdiTxParams(reader, wallet.account.address, approvedMaximumCost, approvedGas);
+  await recordIntent(txParams);
   const input = firstNoteParameters(expiration);
   const result = await wallet.createEntity(input.schema, input.values,
     { expiration: input.expiration, flags: input.flags }, txParams);
@@ -86,7 +98,9 @@ export async function ensureFirstNote({ reader, wallet }: Clients,
 }
 ```
 
-Supply `txParams` from the approved exact estimate, buffered gas cap, current fees and exclusive signer nonce allocation. Controlled Rabdi checks found some default gas estimates insufficient; see troubleshooting's measured workaround. A fixed example cap is not a universal transaction limit.
+Explicit `txParams` are the recommended Rabdi default: latest transaction nonce, `gas` and current network `gasPrice`, under exclusive signer custody. For one operation use at least 1,000,000 gas; for a batch of N operations use at least `1,000,000 + 400,000 × (N − 1)`. Also honor the exact unsigned estimate and approved fee/balance limits. Large bytes/chunk/image writes need measurements and at least twice the measured maximum gas, never below that floor. These are measured Rabdi starting caps, not universal limits; raise the approved cap when the exact operation needs more.
+
+Lane W's 2026-10-30 controls found default estimation gas-exhaustion reverts; explicit nonce/gas/fees passed its tested wallet/account cases. Check `receipt.status === 'success'` before readback. This helper makes no automatic retry. A caller may retry at most once only after an authoritative reverted receipt, correcting the demonstrated cause, refreshing nonce/fees and obtaining budget for the retry. Successful or uncertain writes always require reconciliation instead.
 
 Query-before-create prevents routine repeats under an exclusive writer; it is not atomic uniqueness. A missing result after an uncertain send does not authorize recreating. A reset or expired seed creates a new identity; update dependent references. Readonly still allows owner transfer, deletion and Lifetime Extension.
 
@@ -102,6 +116,7 @@ Offer this block for the consumer's AGENTS.md with consent, preserving its exist
 - Declare typed schemas; index filter columns explicitly. Store binary/JSON data in named bytes columns, which cannot be filtered.
 - Preserve constructor types; use u64 for app milliseconds and expiry-block predicates.
 - Configure rabdi({ accessKey }); redact keyed URLs. Operator access/signing keys stay server-side and out of chat/public bundles.
+- Pass explicit latest nonce, gas and gasPrice for Rabdi writes; check the receipt and use the measured gas floors from first-write.
 - Reconcile uncertain writes before another submission; load the arkiv router for Arkiv tasks.
 ```
 

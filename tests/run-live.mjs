@@ -15,7 +15,7 @@ const result = spawnSync(process.execPath, [secretsCli, 'run',
   '--env', 'ARKIV_ACCESS_KEY_A=arkiv-rabdi.env:ARKIV_ACCESS_KEY_A',
   '--env', 'TEST_SKILLS_ADDRESS=arkiv-rabdi-test-wallets.env:TEST_SKILLS_ADDRESS',
   '--env', 'TEST_SKILLS_PRIVATE_KEY=arkiv-rabdi-test-wallets.env:TEST_SKILLS_PRIVATE_KEY',
-  '--', process.execPath, '--experimental-vm-modules', '--test', 'tests/live/live.test.mjs'],
+  '--', process.execPath, '--experimental-vm-modules', '--test', '--test-concurrency=1', 'tests/live/lifetime.test.mjs', 'tests/live/live.test.mjs'],
   { stdio: 'inherit', env: { ...process.env, DEBUG: '', NODE_DEBUG: '', AGENT_SECRETS_DIR: path.join(os.homedir(), '.agent-secrets'),
     ARKIV_SNIPPET_WORKSPACE: path.resolve('.checks'), ARKIV_SEED_STATE_DIR: state, ARKIV_EVIDENCE_DIR: evidence } });
 if ((await fs.readdir(state)).length) {

@@ -33,7 +33,7 @@ test('actual SDK create encodes defaults, schema tag and indexed bit; bytes read
   });
   const created = await wallet.createEntity(Model, { app_id: 'synthetic', timestamp: sdk.u64(1700000000000n),
     body: new Uint8Array([0, 1, 255]) }, { expiration: sdk.ExpirationTime.fromBlocks(100), flags: { readonly: true } },
-    { gasPrice: 1n });
+    { nonce: 0, gas: 1000000n, gasPrice: 1n });
   assert.equal(fixture.sends.length, 1);
   const cells = fixture.sends[0].decodedOps[0].value.attributes;
   const byName = new Map(cells.map(cell => [new TextDecoder().decode(viem.hexToBytes(cell.name)).replace(/\0+$/, ''), cell]));

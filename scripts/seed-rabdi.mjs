@@ -24,14 +24,20 @@ export async function seedRabdi(metrics = { queries: 0, signatures: 0, broadcast
   const accounts = await import(pathToFileURL(path.join(workspace, 'node_modules/viem/_esm/accounts/index.js')));
   const signer = accounts.privateKeyToAccount(privateKey);
   assert.equal(signer.address.toLowerCase(), address.toLowerCase(), 'Dedicated signer address mismatch');
-  let signatures = 0, broadcasts = 0, queries = 0;
-  const account = { ...signer, signTransaction: async (...args) => { signatures++; metrics.signatures++; return signer.signTransaction(...args); } };
+  let signatures = 0, broadcasts = 0, queries = 0, reconciliationOnly = false;
+  const account = { ...signer, signTransaction: async (...args) => {
+    assert.ok(!reconciliationOnly, 'Legacy seed reconciliation cannot sign');
+    signatures++; metrics.signatures++; return signer.signTransaction(...args);
+  } };
   const chain = chains.rabdi({ accessKey });
   const rpc = viem.http(undefined, { timeout: 15000, retryCount: 0,
     fetchOptions: { cache: 'no-store', redirect: 'error' } })({ chain });
   const request = async input => {
     if (input.method === 'arkiv_query') { queries++; metrics.queries++; }
-    if (input.method.startsWith('eth_send')) { broadcasts++; metrics.broadcasts++; }
+    if (input.method.startsWith('eth_send')) {
+      assert.ok(!reconciliationOnly, 'Legacy seed reconciliation cannot broadcast');
+      broadcasts++; metrics.broadcasts++;
+    }
     return rpc.request(input);
   };
   const reader = sdk.createPublicClient({ chain, cacheTime: 0, transport: viem.custom({ request }, { retryCount: 0 }) });
@@ -62,7 +68,8 @@ export async function seedRabdi(metrics = { queries: 0, signatures: 0, broadcast
   const helperPath = path.join(runtime, `resumable-import-${sourceHash}.mjs`);
   try { await fs.writeFile(helperPath, source, { flag: 'wx' }); }
   catch (error) { if (error.code !== 'EEXIST' || await fs.readFile(helperPath, 'utf8') !== source) throw error; }
-  const helper = await import(pathToFileURL(helperPath));
+  let helper = await import(pathToFileURL(helperPath));
+  let replaySourceHash = sourceHash;
   const Seed = sdk.defineSchema('skills_rabdi_seed_v1', {
     app_id: sdk.str().indexed(), rank: sdk.u64().indexed(), price: sdk.dec().indexed(),
     active: sdk.bool().indexed().default(true), body: sdk.bytes(),
@@ -75,7 +82,21 @@ export async function seedRabdi(metrics = { queries: 0, signatures: 0, broadcast
   let planSha256;
   try {
     const trusted = JSON.parse(await fs.readFile(trustPath, 'utf8'));
-    assert.equal(trusted.sourceHash, sourceHash, 'Importer revision changed; retain/reconcile the original journal');
+    if (trusted.sourceHash !== sourceHash) {
+      // Only the exact already-verified v1 seed helper may reconcile completed old state.
+      // It cannot sign or forward; unfinished/different revisions still require explicit reconciliation.
+      assert.equal(trusted.sourceHash, '4be8fd1aa74b3157cb3500198a4af3032343d079a94a9cb0eafac69d1044e78e', 'Unrecognized importer revision; retain original journal');
+      const previousPlan = JSON.parse(await fs.readFile(planPath, 'utf8'));
+      const entries = (await fs.readFile(journalPath, 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.ok(previousPlan.batches.every(batch => entries.some(event => event.index === batch.index && event.state === 'verified')),
+        'Only completed old seed state can be reconciled with the prior helper');
+      const previousPath = path.join(runtime, `resumable-import-${trusted.sourceHash}.mjs`);
+      const previousSource = await fs.readFile(previousPath, 'utf8');
+      assert.equal(createHash('sha256').update(previousSource).digest('hex'), trusted.sourceHash, 'Prior helper integrity mismatch');
+      reconciliationOnly = true;
+      replaySourceHash = trusted.sourceHash;
+      helper = await import(pathToFileURL(previousPath));
+    }
     planSha256 = trusted.planSha256;
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
@@ -133,7 +154,7 @@ export async function seedRabdi(metrics = { queries: 0, signatures: 0, broadcast
   }
   assert.ok(feeWei <= BigInt(plan.maxTotalCost), 'Observed fees exceed the approved seed cap');
   const summary = { sdk: '1.0.0', chainId: chain.id, genesisHash: genesis.hash, signer: account.address,
-    state: result.state, sourceHash, planSha256, entityKeys: entities, transactionHashes: hashes,
+    state: result.state, sourceHash, replaySourceHash, reconciliationOnly, planSha256, entityKeys: entities, transactionHashes: hashes,
     observedBlock: page.blockNumber.toString(), signatures, broadcasts, queries, reused: signatures === 0,
     receipts, feeWei: feeWei.toString(), maximumApprovedCostWei: plan.maxTotalCost,
     bodyAndIndexingVerified: true, verifiedAt: new Date().toISOString() };

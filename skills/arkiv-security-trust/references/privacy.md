@@ -43,6 +43,8 @@ Access-gating services, wallet-based recovery and encrypted group sharing requir
 
 ## Retention and publication choice
 
+Rabdi does not offer an expiration-free option. The maximum lifetime measured on 2026-10-30 UTC is 7,884,000 blocks ahead of the current block; maximum-u64 deadlines revert with ExpiryBeyondMaxLifetime. Prefer a published network-parameter getter when available; SDK 1.0.0 has none, so keep the measured bound dated and revalidate after reset/upgrade. Longer-lived ciphertext requires Lifetime Extension before expiry. This live-availability bound does not limit copies already read or guarantee secure erasure.
+
 If a third party must not prolong live query access, do not enable `permissionlessExtension`. Readonly preserves attribute values but still permits eligible extension, transfer or deletion. Decide whether publishing even encrypted metadata is acceptable before writing it.
 
 Sources: [Arkiv mutation calldata](https://docs.arkiv.network/json-rpc/mutating-entities/), [encryption 0.1.0 guide](https://github.com/SantiagoDevRel/arkiv-encrypted-entities/blob/arkiv-encryption-v0.1.0/README.md), [SDK 1.0.0 creation flags](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/entity/flags.ts).

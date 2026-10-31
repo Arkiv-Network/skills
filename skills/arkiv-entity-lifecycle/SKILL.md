@@ -28,9 +28,10 @@ Both flags default false and are immutable. They apply to live entities. Readonl
 ## Exact write signatures
 
 ```typescript
-import { createWalletClient, createPublicClient, ExpirationTime, type Expiry } from '@arkiv-network/sdk';
+import { createWalletClient, createPublicClient, ExpirationTime, type Expiry, type TxParams } from '@arkiv-network/sdk';
 import { defineSchema, str, bytes, u64 } from '@arkiv-network/sdk/schema';
 import { isAddressEqual, zeroAddress, type Address, type Hex } from 'viem';
+import { getGasPrice } from 'viem/actions';
 
 export const Notes = defineSchema('example_notes', {
   status: str().indexed(), created_at: u64(), body: bytes(),
@@ -38,33 +39,51 @@ export const Notes = defineSchema('example_notes', {
 });
 type Wallet = ReturnType<typeof createWalletClient>;
 type Reader = ReturnType<typeof createPublicClient>;
-export function publish(wallet: Wallet, expiration: Expiry) {
-  return wallet.createEntity(Notes, { status: 'published', created_at: u64(Date.now()),
-    body: new TextEncoder().encode('Public example') }, { expiration, flags: { readonly: true } });
+async function txParams(reader: Reader, wallet: Wallet, gas = 1000000n): Promise<TxParams> {
+  if (gas < 1000000n || !wallet.account) throw new Error('Authorized account and Rabdi gas floor required');
+  const address = wallet.account.address;
+  const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
+  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Resolve pending nonce');
+  return { nonce: latest, gas, gasPrice: await getGasPrice(reader) };
 }
-export function patchDraft(wallet: Wallet, entityKey: Hex) {
-  return wallet.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] });
+async function checked<T extends { txHash: Hex }>(reader: Reader, result: T): Promise<T> {
+  const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
+  if (receipt.status !== 'success') throw Object.assign(new Error('Reverted write; inspect cause before any retry'), { txHash: result.txHash });
+  return result;
+}
+export async function publish(reader: Reader, wallet: Wallet, expiration: Expiry, gas = 1000000n) {
+  return checked(reader, await wallet.createEntity(Notes, { status: 'published', created_at: u64(Date.now()),
+    body: new TextEncoder().encode('Public example') }, { expiration, flags: { readonly: true } }, await txParams(reader, wallet, gas)));
+}
+export async function patchDraft(reader: Reader, wallet: Wallet, entityKey: Hex, gas = 1000000n) {
+  return checked(reader, await wallet.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] }, await txParams(reader, wallet, gas)));
 }
 export async function transferAndInspect(reader: Reader, wallet: Wallet, entityKey: Hex, newOwner: Address) {
   const before = await reader.getEntity(entityKey, Notes);
   if (isAddressEqual(newOwner, zeroAddress) || isAddressEqual(newOwner, before.$owner)) throw new Error('Choose another nonzero owner');
-  const transferred = await wallet.changeOwnership({ entityKey, newOwner });
+  const transferred = await checked(reader, await wallet.changeOwnership({ entityKey, newOwner }, await txParams(reader, wallet)));
   try {
     const after = await reader.getEntity(entityKey, Notes);
     return { ...transferred, ownerAtRead: after.$owner,
       creatorUnchanged: isAddressEqual(before.$creator, after.$creator) };
   } catch { return { ...transferred, status: 'confirmed_read_failed' as const }; }
 }
-export function extend(wallet: Wallet, entityKey: Hex, deadline: bigint) {
-  return wallet.extendEntity({ entityKey, expiration: ExpirationTime.atBlock(deadline) });
+export async function extend(reader: Reader, wallet: Wallet, entityKey: Hex, deadline: bigint, gas = 1000000n) {
+  return checked(reader, await wallet.extendEntity({ entityKey, expiration: ExpirationTime.atBlock(deadline) }, await txParams(reader, wallet, gas)));
 }
 // Only invoke when deletion of this exact entity is independently authorized.
-export function remove(wallet: Wallet, entityKey: Hex) { return wallet.deleteEntity({ entityKey }); }
+export async function remove(reader: Reader, wallet: Wallet, entityKey: Hex, gas = 1000000n) {
+  return checked(reader, await wallet.deleteEntity({ entityKey }, await txParams(reader, wallet, gas)));
+}
 ```
 
 `patchEntity(schema, key, { set, unset }, txParams?)` changes only named columns. Unmentioned or undefined values remain. `unset` accepts only optional columns; required ones must keep a value. Defaults apply to creates only. Patch cannot change identity, owner, flags or expiration and has no compare-and-set. Coordinate same-owner writers.
 
 Create uses `(schema, values, { expiration, flags?, salt? }, txParams?)`. Batches place `{ schema, values, expiration, flags?, salt? }` in `creates`, and `{ schema, entityKey, set?, unset? }` in `patches`. The SDK orders creates → patches → deletes → extensions → ownership changes. One batch is atomic regardless of object property order; multiple batches are independent. Deleting then extending the same key fails the whole native batch.
+
+For Rabdi, explicit nonce/gas/gasPrice is the recommended default for every operation. Before these helpers, authorize the exact mutation, estimate it unsigned and compare the chosen gas × current gasPrice with the approved spend and balance. Single-operation floor: 1,000,000; N-operation batch floor: `1,000,000 + 400,000 × (N − 1)`. Large bytes require at least twice the measured maximum gas as well. Fresh latest/pending nonce checks require exclusive signer custody; they do not reserve a nonce across processes.
+
+The helpers do not retry. At most one retry is allowed after a confirmed reverted receipt and a corrected cause; never retry successful or uncertain writes. A revert consuming the entire gas limit needs a larger approved cap. A successful receipt followed by failed decoding/readback is a reconciliation case, not a reverted write.
 
 ## Corrections and identity
 

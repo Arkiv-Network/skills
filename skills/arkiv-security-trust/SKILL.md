@@ -12,6 +12,8 @@ metadata:
 
 Treat all public entity attributes, bytes columns and transaction calldata as public, even when unindexed. Encryption protects selected contents; Entity Expiration and deletion cannot retract copies already read. Do not promise permanent archive availability or secure erasure.
 
+Rabdi has no expiration-free option: maximum-u64 deadlines are rejected. The maximum lifetime measured on 2026-10-30 UTC is 7,884,000 blocks from the current block, not an absolute chain height or a promise of 182.5 wall-clock days. Use a current published parameter getter when available, otherwise a dated measured network configuration; SDK 1.0.0 exposes no maxLifetime getter. Longer retention needs monitored, authorized Lifetime Extension before expiry, with gas funding and recovery planning. See entity-expiration for inclusion margins and bounds.
+
 ## Before publishing
 
 Identify private fields, indexed labels, wallet metadata and diagnostic logs. Keep signing/encryption keys in local custody, never in chat, URLs, browser bundles or public environment variables. Operator RPC keys stay server-side; SDK 1.0.0 embeds them in URL paths, so redact the entire transport diagnostic. A browser-wallet user configures their own RPC key. Access keys neither fund writes nor authenticate users.

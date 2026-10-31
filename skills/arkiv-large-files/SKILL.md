@@ -21,6 +21,7 @@ Until package compatibility is verified, design with native schema operations an
 ## Representation and recovery
 
 - One entity: use bytes columns when encoded size/gas fit. Store MIME in a separately validated public string column. Binary storage avoids base64 expansion.
+- Rabdi writes need explicit latest nonce, gas and network gasPrice. Measure large bytes/chunk/image operations and approve at least twice the measured maximum gas, never below 1,000,000 plus 400,000 per extra batch operation. Check successful receipts; retry at most once only after a confirmed revert and corrected cause.
 - Manifest/chunks: define format version, trusted creator/publisher, digest, total length, indexed manifest key and sequence, chunk bounds and completion state. Query all bounded pages; reject missing/duplicate indices, wrong lengths, corrupt bytes and incomplete completion state.
 - Hybrid pointer: use an approved public URI/CID with exact digest/length and media type. Reject embedded credentials and signed query tokens. Retrieval needs origin/redirect, response-size and content-validation policy; a URI allowlist alone is not server-fetch security.
 
