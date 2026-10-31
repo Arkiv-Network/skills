@@ -6,12 +6,15 @@ This repository has no root dependency installation or application build. Use an
 export ARKIV_SNIPPET_WORKSPACE=/absolute/sdk-workspace
 export ARKIV_IMPORT_TEST_SCRATCH=/absolute/owned-scratch
 node scripts/check-skill-references.mjs
+node scripts/check-vocabulary.mjs
 node tests/check-snippets.mjs
 node --experimental-vm-modules --test tests/snippets/*.test.mjs
 node tests/snippets/published-imports.mjs
 ```
 
 `check-snippets` compiles every TypeScript skill/reference fence with strict and noUncheckedIndexedAccess, syntax-checks JavaScript, and writes a source/line/hash manifest inside the SDK workspace. It does not execute writes. The deterministic importer suite evaluates the exact published JavaScript fence with real SDK 1.0.0 encoding, synthetic transport/receipts and in-memory ephemeral test keys. Network fetches are forbidden in that suite. Preserve failing evidence; do not substitute deterministic results for live/provider/wallet behavior.
+
+The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance requires `arkiv-encryption` 1.1.0 or newer; verify its named bytes exports before consuming it.
 
 If only the SDK needs upgrading, `node tests/prepare-sdk.mjs <viem-workspace> <typescript-workspace> <node-types-workspace>` verifies the official 1.0.0 tarball and prepares `.checks`, reusing existing peers without installing or executing package scripts. It creates symlinks to those existing peers; their lifecycle remains the contributor's responsibility.
 

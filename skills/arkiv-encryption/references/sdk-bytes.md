@@ -1,4 +1,4 @@
-# Ciphertext storage through SDK 1.0.0
+# Ciphertext bytes storage through SDK 1.0.0
 
 The caller supplies an authorized wallet, an independent privately backed-up encryption key and adapters bound to its installed encryption package. The adapters below are application seams, not claimed SDK exports. They let this example stay independent of a package version while the actual integration verifies encryption/decryption signatures.
 
