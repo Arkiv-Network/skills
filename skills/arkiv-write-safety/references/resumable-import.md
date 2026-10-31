@@ -1,6 +1,6 @@
 # A resumable Node importer
 
-Explicit transaction nonce, gas and fees are the recommended Rabdi default. This importer uses at least `1,000,000 + 400,000 × (N − 1)` gas for N creates in each batch and twice the exact unsigned estimate when larger. An optional `minimumGas` raises that floor, including at least twice the measured maximum for large bytes. The estimate and all floors must fit `gasCeiling`, balance and the frozen total spend cap. These measured starting caps are not universal transaction limits.
+Explicit transaction nonce, gas and fees are required for funded Rabdi writes. This importer preflights the exact batch unsigned at latest, stops on errors, then computes `gas = max(1,000,000 + 400,000 × (N − 1), 2 × estimate)` for N creates. This cap must fit `gasCeiling`, balance and the frozen total spend cap; otherwise stop before signing. The former minimumGas override is refused rather than silently changing this formula. Previously signed plans retain their original intent and must only be reconciled, never recalculated or resubmitted automatically.
 
 Copy the JavaScript block to `resumable-import.mjs` in your application. It uses public SDK 1.0.0 APIs and Node built-ins. Supply a local account from your existing signer custody and a provider `request({ method, params })` configured without automatic retries. Neither entrypoint reads keys, creates an HTTP transport, or runs on import.
 
@@ -146,12 +146,12 @@ async function sdkCalldata(account, chain, read, creates, nonce, gas, fees) {
 }
 
 export async function prepareImport(options) {
-  const { account, chain, request, rows, jobId, batchSize, planPath, journalPath, gasCeiling, maxTotalCost, fees, minimumGas = 0n } = options;
+  const { account, chain, request, rows, jobId, batchSize, planPath, journalPath, gasCeiling, maxTotalCost, fees } = options;
   return withCustody(account, chain, async (custodyPort) => {
     check(typeof jobId === "string" && jobId.length > 0, "Job ID required");
     check(Number.isSafeInteger(batchSize) && batchSize > 0 && Array.isArray(rows) && rows.length > 0, "Nonempty rows and positive batch size required");
     check(typeof gasCeiling === "bigint" && gasCeiling > 0n && typeof maxTotalCost === "bigint" && maxTotalCost > 0n, "Approved gas and spend caps required");
-    check(typeof minimumGas === "bigint" && minimumGas >= 0n && minimumGas <= gasCeiling, "Gas floor must fit the approved ceiling");
+    check(options.minimumGas === undefined, "Legacy minimumGas override refused; gas is computed from the exact unsigned estimate");
     const frozen = rows.map(freezeRow);
     check(new Set(frozen.map((r) => r.id)).size === frozen.length, "Duplicate row IDs");
     const names = Object.keys(fees ?? {}).sort().join(",");
@@ -176,11 +176,10 @@ export async function prepareImport(options) {
       check(Number.isSafeInteger(nonce), "Nonce exceeds safe integer range");
       const creates = slice.map(hydrate);
       const input = await sdkCalldata(account, chain, read, creates, nonce, gasCeiling, fees);
-      const estimate = await reader.estimateGas({ account: account.address, to: NATIVE, data: input, ...fees });
+      const estimate = await reader.estimateGas({ account: account.address, to: NATIVE, data: input, blockTag: "latest", ...fees });
       const padded = estimate * 2n;
       const rabdiFloor = chain.id === 7794095 ? 1000000n + 400000n * BigInt(slice.length - 1) : 0n;
-      const floor = minimumGas > rabdiFloor ? minimumGas : rabdiFloor;
-      const gas = padded > floor ? padded : floor;
+      const gas = padded > rabdiFloor ? padded : rabdiFloor;
       check(gas <= gasCeiling, "Estimated gas exceeds approved ceiling");
       totalCap += gas * feeCap;
       batches.push({ index, nonce, gas: gas.toString(), input, rows: slice });

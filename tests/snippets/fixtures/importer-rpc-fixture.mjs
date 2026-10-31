@@ -39,7 +39,7 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
     if (method === 'eth_getTransactionCount') return hex((params[1] === 'pending' ? fixture.pendingNonce : fixture.latestNonce) ?? fixture.sends.length);
     if (method === 'eth_gasPrice' || method === 'eth_maxPriorityFeePerGas') return '0x1';
     if (method === 'eth_fillTransaction') throw { code: -32601, message: 'Optional method unavailable in local fixture' };
-    if (method === 'eth_estimateGas') return '0x186a0';
+    if (method === 'eth_estimateGas') return hex(fixture.estimatedGas ?? 100000n);
     if (method === 'eth_getBlockByNumber') {
       const number = params[0] === 'latest' ? fixture.head : BigInt(params[0]);
       return {

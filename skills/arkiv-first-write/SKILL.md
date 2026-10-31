@@ -49,9 +49,13 @@ export function firstNoteParameters(expiration: Expiry = ExpirationTime.fromDays
     expiration, flags: { readonly: true, permissionlessExtension: false } };
 }
 type Clients = ReturnType<typeof clients>;
+type Wallet = ReturnType<typeof createWalletClient>;
+type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
 export async function rabdiTxParams(reader: Clients['reader'], address: LocalAccount['address'],
-  approvedMaximumCost: bigint, gas = 1000000n): Promise<TxParams> {
-  if (gas < 1000000n) throw new Error('Rabdi single-operation gas floor is 1,000,000');
+  approvedMaximumCost: bigint, estimate: bigint, operations = 1): Promise<TxParams> {
+  if (estimate <= 0n || !Number.isSafeInteger(operations) || operations < 1) throw new Error('Valid unsigned estimate and operation count required');
+  const floor = 1000000n + 400000n * BigInt(operations - 1);
+  const gas = floor > 2n * estimate ? floor : 2n * estimate;
   const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
   if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Reconcile pending nonce first');
   const gasPrice = await getGasPrice(reader);
@@ -60,7 +64,7 @@ export async function rabdiTxParams(reader: Clients['reader'], address: LocalAcc
 }
 export async function ensureFirstNote({ reader, wallet }: Clients,
   recordIntent: (txParams: TxParams) => Promise<void>, expiration: Expiry, approvedMaximumCost: bigint,
-  approvedGas = 1000000n) {
+  estimateLatest: EstimateLatest) {
   if (await reader.getChainId() !== 7794095 || wallet.chain?.id !== 7794095) throw new Error('Wrong chain');
   const prior = await reader.select({ $key: true, $creator: true, $creationFlags: true, body: true, media_type: true })
     .from(Notes, { onMismatch: 'throw' }).createdBy(wallet.account.address)
@@ -76,11 +80,13 @@ export async function ensureFirstNote({ reader, wallet }: Clients,
   }
   // Precondition: exclusive writer, sufficient funding, successful unsigned estimate,
   // and no unresolved earlier seed attempt in the durable operation registry.
-  const txParams = await rabdiTxParams(reader, wallet.account.address, approvedMaximumCost, approvedGas);
+  const input = { ...firstNoteParameters(expiration), salt: 1n };
+  const options = { expiration: input.expiration, flags: input.flags, salt: input.salt };
+  const estimate = await estimateLatest(unsigned => unsigned.createEntity(input.schema, input.values, options));
+  const txParams = await rabdiTxParams(reader, wallet.account.address, approvedMaximumCost, estimate);
   await recordIntent(txParams);
-  const input = firstNoteParameters(expiration);
   const result = await wallet.createEntity(input.schema, input.values,
-    { expiration: input.expiration, flags: input.flags }, txParams);
+    options, txParams);
   // Persist returned hash/key immediately in the caller's durable writer.
   try {
     const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
@@ -123,3 +129,5 @@ Offer this block for the consumer's AGENTS.md with consent, preserving its exist
 Read [testing](references/testing.md) for deterministic and funded checks. Test missing access keys, schema mismatch, invalid indexing, seed collision, reset identity, insufficient funding, wrong chain and confirmed-read failure. Each key has 100,000,000 quota units; each query costs 10, other calls zero under current policy. A rejected query is not an empty result.
 
 Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

@@ -1,6 +1,14 @@
 import { createPublicClient, createWalletClient, ExpirationTime, type TxParams } from '@arkiv-network/sdk';
 import { defineSchema, str, bytes, dec } from '@arkiv-network/sdk/schema';
 import { asc, eq } from '@arkiv-network/sdk/query';
+import type { LocalAccount } from 'viem';
+// This contract is copied beside compiled fences by check-snippets.mjs.
+import { ensureFirstNote } from './skills__arkiv-first-write__SKILL.md-0.js';
+import { estimateWrite } from './skills__arkiv-first-write__references__estimate.md-0.js';
+declare const localAccount: LocalAccount;
+declare const accessKey: string;
+const estimateLatest: Parameters<typeof ensureFirstNote>[4] = prepare => estimateWrite(localAccount, accessKey, prepare);
+void estimateLatest;
 const Model = defineSchema('compile_contract', {
   app_id: str().indexed(), amount: dec().indexed(), title: str(), body: bytes(), note: str().optional(),
 });

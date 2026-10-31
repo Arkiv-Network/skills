@@ -38,9 +38,11 @@ import type { Hex } from 'viem';
 import { getGasPrice } from 'viem/actions';
 type Reader = ReturnType<typeof createPublicClient>;
 type Wallet = ReturnType<typeof createWalletClient>;
+type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
 const HOUR = 1800n;
-async function params(reader: Reader, wallet: Wallet, gas = 1000000n): Promise<TxParams> {
-  if (!wallet.account || gas < 1000000n) throw new Error('Authorized account and gas floor required');
+async function params(reader: Reader, wallet: Wallet, estimate: bigint): Promise<TxParams> {
+  const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
+  if (!wallet.account || estimate <= 0n) throw new Error('Authorized account and gas floor required');
   const address = wallet.account.address;
   const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
   if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Resolve pending nonce');
@@ -51,20 +53,23 @@ async function confirmed<T extends { txHash: Hex }>(reader: Reader, result: T): 
   return result;
 }
 // maxLifetime comes from current network configuration: a published getter, or dated measured fallback.
-export async function addOneHour(reader: Reader, wallet: Wallet, entityKey: Hex, maxLifetime: bigint) {
+export async function addOneHour(reader: Reader, wallet: Wallet, entityKey: Hex, maxLifetime: bigint, estimateLatest: EstimateLatest) {
   const entity = await reader.getEntity(entityKey);
   const head = await reader.getBlockNumber({ cacheTime: 0 });
   const target = entity.$expiresAt + HOUR;
   if (entity.$expiresAt <= head || maxLifetime <= HOUR + 30n || target > head + maxLifetime - 30n) throw new Error('Deadline outside live renewal window');
-  return confirmed(reader, await wallet.extendEntity({ entityKey, expiration: ExpirationTime.atBlock(target) }, await params(reader, wallet)));
+  const operation = { entityKey, expiration: ExpirationTime.atBlock(target) };
+  const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
+  return confirmed(reader, await wallet.extendEntity(operation, await params(reader, wallet, estimate)));
 }
-export async function ensureOneHourRemains(reader: Reader, wallet: Wallet, entityKey: Hex, maxLifetime: bigint) {
+export async function ensureOneHourRemains(reader: Reader, wallet: Wallet, entityKey: Hex, maxLifetime: bigint, estimateLatest: EstimateLatest) {
   const entity = await reader.getEntity(entityKey);
   const head = await reader.getBlockNumber({ cacheTime: 0 });
   if (entity.$expiresAt <= head || maxLifetime <= HOUR + 30n) throw new Error('Invalid live renewal window');
   if (entity.$expiresAt >= head + HOUR) return { status: 'already_sufficient' as const, expiresAt: entity.$expiresAt };
-  const result = await confirmed(reader, await wallet.extendEntity({ entityKey,
-    expiration: ExpirationTime.atBlock(head + HOUR, { atLeast: ExpirationTime.fromHours(1) }) }, await params(reader, wallet)));
+  const operation = { entityKey, expiration: ExpirationTime.atBlock(head + HOUR, { atLeast: ExpirationTime.fromHours(1) }) };
+  const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
+  const result = await confirmed(reader, await wallet.extendEntity(operation, await params(reader, wallet, estimate)));
   return { status: 'extended' as const, ...result };
 }
 ```
@@ -86,3 +91,5 @@ A lifetime is neither a mutex nor an app authorization lease. A coordination pro
 Read write-safety for `EntityMutationError`, nonce uncertainty or readback failure after confirmation. No absent hash or unchanged nonce proves a send never occurred.
 
 Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

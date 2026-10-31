@@ -106,7 +106,7 @@ export async function seedRabdi(metrics = { queries: 0, signatures: 0, broadcast
     const head = await reader.getBlockNumber({ cacheTime: 0 });
     const gasPrice = await reader.getGasPrice();
     const options = { account, chain, request, planPath, journalPath, jobId: 'skills-rabdi-seed-v1',
-      batchSize: 4, gasCeiling: 3000000n, minimumGas: 3000000n,
+      batchSize: 4, gasCeiling: 3000000n,
       maxTotalCost: 10n ** 16n, fees: { gasPrice },
       rows: Array.from({ length: 4 }, (_, index) => ({ id: `sample-${index}`, schema: Seed,
         values: { app_id: `skills-example-${index}`, rank: sdk.u64(index), price: sdk.dec(`${index}.25`),

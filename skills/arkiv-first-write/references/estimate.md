@@ -7,11 +7,9 @@ import { createWalletClient } from '@arkiv-network/sdk';
 import { rabdi } from '@arkiv-network/sdk/chains';
 import { custom, http, MethodNotFoundRpcError, type LocalAccount } from 'viem';
 
-export async function estimateWrite(account: LocalAccount, accessKey: string,
+export async function estimateWithRequest(account: LocalAccount, chain: ReturnType<typeof rabdi>,
+  rpc: Parameters<typeof custom>[0],
   prepare: (wallet: ReturnType<typeof createWalletClient>) => Promise<unknown>): Promise<bigint> {
-  const chain = rabdi({ accessKey });
-  const rpc = http(undefined, { retryCount: 0, timeout: 10000,
-    fetchOptions: { cache: 'no-store', redirect: 'error' } })({ chain });
   if (BigInt(await rpc.request({ method: 'eth_chainId' }) as string) !== 7794095n) throw new Error('Wrong chain');
   const reads = new Set(['eth_chainId', 'eth_blockNumber', 'eth_getBlockByNumber',
     'eth_getTransactionCount', 'eth_gasPrice', 'eth_maxPriorityFeePerGas', 'eth_estimateGas']);
@@ -20,7 +18,8 @@ export async function estimateWrite(account: LocalAccount, accessKey: string,
   const transport = custom({ async request(args) {
     if (args.method === 'eth_fillTransaction') throw new MethodNotFoundRpcError(new Error('Use guarded estimate path'));
     if (!reads.has(args.method)) throw new Error('Unexpected or mutating RPC blocked');
-    const result = await rpc.request(args);
+    const result = await rpc.request(args.method === 'eth_estimateGas'
+      ? { method: 'eth_estimateGas', params: [args.params?.[0], 'latest'] } : args);
     if (args.method === 'eth_estimateGas') {
       if (typeof result !== 'string' || !/^0x[0-9a-f]+$/i.test(result)) throw new Error('Invalid estimate');
       gas = BigInt(result);
@@ -42,8 +41,15 @@ export async function estimateWrite(account: LocalAccount, accessKey: string,
   }
   throw new Error('Callback skipped estimation or swallowed the guard');
 }
+export function estimateWrite(account: LocalAccount, accessKey: string,
+  prepare: (wallet: ReturnType<typeof createWalletClient>) => Promise<unknown>) {
+  const chain = rabdi({ accessKey });
+  const rpc = http(undefined, { retryCount: 0, timeout: 10000,
+    fetchOptions: { cache: 'no-store', redirect: 'error' } })({ chain });
+  return estimateWithRequest(account, chain, rpc, prepare);
+}
 ```
 
-Invoke with `wallet => wallet.createEntity(Schema, values, options)` or `wallet => wallet.executeBatch(batch)` without a gas override. Gas units are not a fee quote. Recompute fees and compare budget/balance before a separately authorized write. Never remove fee fields to manufacture a passing estimate. A successful estimate proves only this exact unsigned request at its observed state.
+Bind an `estimateLatest` callback in the other examples to `prepare => estimateWrite(account, accessKey, prepare)`. Its wallet is unsigned-only: signing and forwarding are blocked, and eth_estimateGas is pinned to latest. Invoke it with the exact frozen schema/values/options or batch that will be submitted; reuse explicit salts. If estimation fails, stop and display the sanitized original cause. The separately authorized funded wallet always sends explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)` with nonce and current gasPrice. Gas units are not a fee quote. Recompute fees and compare budget/balance before a separately authorized write. Never remove fee fields to manufacture a passing estimate. A successful estimate proves only this exact unsigned request at its observed state.
 
 Source: [SDK transaction path](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/arkivTransactions.ts).

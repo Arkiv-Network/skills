@@ -26,15 +26,29 @@ function validateRetentionGuidance(markdown) {
   }
 }
 
+function validateGasGuidance(markdown) {
+  assert.doesNotMatch(markdown, /leave\s+(?:it|(?:the\s+)?(?:`?gas`?)(?:\s+field)?)\s+unset|(?:omit|skip)\s+(?:the\s+)?`?gas`?\s+(?:for|on)\s+(?:ordinary|Rabdi|funded)/i,
+    'Rabdi funded writes must never recommend unset gas; unsigned preflight runs separately');
+}
+
 test('every skill/reference rejects permanent Rabdi writes instead of recommending them', async () => {
   const walk = async directory => {
     for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
       const file = path.join(directory, entry.name);
       if (entry.isDirectory()) await walk(file);
-      else if (entry.name.endsWith('.md')) validateRetentionGuidance(await fs.readFile(file, 'utf8'));
+      else if (entry.name.endsWith('.md')) {
+        const text = await fs.readFile(file, 'utf8');
+        validateRetentionGuidance(text);
+        validateGasGuidance(text);
+      }
     }
   };
   await walk(root);
+});
+
+test('gas-guidance guard rejects the reviewed contradiction and equivalent ordinary-write advice', () => {
+  for (const text of ['Leave it unset for ordinary writes.', 'Leave gas unset on Rabdi.', 'Omit gas for Rabdi writes.']) assert.throws(() => validateGasGuidance(text));
+  validateGasGuidance('Run unsigned eth_estimateGas at latest first; stop on errors, otherwise send explicit gas=max(floor, 2*estimate).');
 });
 
 test('retention regression guard catches the original table recommendation and executable alternatives', () => {
@@ -59,11 +73,12 @@ test('first-write default uses latest nonce and explicit gas/price, refuses pend
   let pending = 7;
   const reader = { getTransactionCount: async ({ blockTag }) => blockTag === 'latest' ? 7 : pending,
     request: async ({ method }) => { assert.equal(method, 'eth_gasPrice'); return '0x2'; }, getBalance: async () => 10000000n };
-  assert.deepEqual(await module.rabdiTxParams(reader, address, 2000000n), { nonce: 7, gas: 1000000n, gasPrice: 2n });
-  await assert.rejects(module.rabdiTxParams(reader, address, 1999999n), /budget\/balance/);
-  await assert.rejects(module.rabdiTxParams(reader, address, 2000000n, 999999n), /gas floor/);
+  assert.deepEqual(await module.rabdiTxParams(reader, address, 2000000n, 100000n), { nonce: 7, gas: 1000000n, gasPrice: 2n });
+  assert.deepEqual(await module.rabdiTxParams(reader, address, 3200000n, 800000n), { nonce: 7, gas: 1600000n, gasPrice: 2n });
+  await assert.rejects(module.rabdiTxParams(reader, address, 1999999n, 100000n), /budget\/balance/);
+  await assert.rejects(module.rabdiTxParams(reader, address, 2000000n, 0n), /unsigned estimate/);
   pending++;
-  await assert.rejects(module.rabdiTxParams(reader, address, 2000000n), /pending nonce/);
+  await assert.rejects(module.rabdiTxParams(reader, address, 2000000n, 100000n), /pending nonce/);
 });
 
 test('lifecycle copied create sends explicit default gas/nonce/price and checks receipt without retry', async () => {
@@ -72,13 +87,25 @@ test('lifecycle copied create sends explicit default gas/nonce/price and checks 
   const fixture = makeFixture(account.address, { sdk, viem, chains, attr });
   const wallet = sdk.createWalletClient({ account, chain: fixture.reader.chain, cacheTime: 0,
     transport: viem.custom({ request: fixture.request }, { retryCount: 0 }) });
-  const result = await module.publish(fixture.reader, wallet, sdk.ExpirationTime.fromBlocks(100));
+  const estimator = await documentationModule('skills/arkiv-first-write/references/estimate.md');
+  let failPreflight = true;
+  const estimateLatest = prepare => estimator.estimateWithRequest(account, fixture.reader.chain, { request: async input => {
+    if (input.method === 'eth_estimateGas') {
+      assert.equal(input.params[1], 'latest');
+      if (failPreflight) throw new Error('Synthetic permission/expiry failure');
+    }
+    return fixture.request(input);
+  } }, prepare);
+  await assert.rejects(module.publish(fixture.reader, wallet, sdk.ExpirationTime.fromBlocks(100), 1n, estimateLatest), /Unsigned preparation\/estimate failed/);
+  assert.equal(fixture.sends.length, 0, 'A preflight error must prevent funded sends');
+  failPreflight = false;
+  const result = await module.publish(fixture.reader, wallet, sdk.ExpirationTime.fromBlocks(100), 1n, estimateLatest);
   const tx = fixture.transactions.get(result.txHash);
   assert.equal(BigInt(tx.gas), 1000000n);
   assert.equal(BigInt(tx.gasPrice), 1n);
   assert.equal(BigInt(tx.nonce), 0n);
   const failedReader = { ...fixture.reader, getTransactionReceipt: async () => ({ status: 'reverted' }) };
-  await assert.rejects(module.publish(failedReader, wallet, sdk.ExpirationTime.fromBlocks(100)), /Reverted write/);
+  await assert.rejects(module.publish(failedReader, wallet, sdk.ExpirationTime.fromBlocks(100), 2n, estimateLatest), /Reverted write/);
   assert.equal(fixture.sends.length, 2, 'One send per invocation; no automatic retry after failed receipt check');
 });
 
@@ -92,14 +119,15 @@ test('expiration helpers enforce the measured forward window and explicit extens
   const wallet = { account: { address: '0x' + '11'.repeat(20) }, extendEntity: async (operation, params) => {
     sends++; captured = { operation, params }; return { txHash, expiresAt: 1900n };
   } };
-  await assert.rejects(module.addOneHour(reader, wallet, entityKey, 7884000n), /renewal window/);
+  const estimateLatest = async () => 100000n;
+  await assert.rejects(module.addOneHour(reader, wallet, entityKey, 7884000n, estimateLatest), /renewal window/);
   assert.equal(sends, 0);
   expiresAt = 200n;
-  await module.ensureOneHourRemains(reader, wallet, entityKey, 7884000n);
+  await module.ensureOneHourRemains(reader, wallet, entityKey, 7884000n, estimateLatest);
   assert.deepEqual(captured.params, { nonce: 2, gas: 1000000n, gasPrice: 3n });
   assert.equal(captured.operation.expiration.minLifetime, 1800n);
   assert.equal(sends, 1);
   expiresAt = 99n;
-  await assert.rejects(module.ensureOneHourRemains(reader, wallet, entityKey, 7884000n), /renewal window/);
+  await assert.rejects(module.ensureOneHourRemains(reader, wallet, entityKey, 7884000n, estimateLatest), /renewal window/);
   assert.equal(sends, 1);
 });
