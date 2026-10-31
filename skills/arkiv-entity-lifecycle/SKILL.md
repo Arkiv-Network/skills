@@ -33,6 +33,30 @@ import { defineSchema, str, bytes, u64 } from '@arkiv-network/sdk/schema';
 import { isAddressEqual, zeroAddress, type Address, type Hex } from 'viem';
 import { getGasPrice } from 'viem/actions';
 
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
+  }
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
+
 export const Notes = defineSchema('example_notes', {
   status: str().indexed(), created_at: u64(), body: bytes(),
   draft_reason: str().optional(),
@@ -42,47 +66,67 @@ type Reader = ReturnType<typeof createPublicClient>;
 type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
 async function txParams(reader: Reader, wallet: Wallet, estimate: bigint): Promise<TxParams> {
   const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
-  if (estimate <= 0n || !wallet.account) throw new Error('Authorized account and Rabdi gas floor required');
+  if (estimate <= 0n || !wallet.account) throw safeError('Authorized account and Rabdi gas floor required');
   const address = wallet.account.address;
   const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
-  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Resolve pending nonce');
+  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw safeError('Resolve pending nonce');
   return { nonce: latest, gas, gasPrice: await getGasPrice(reader) };
 }
 async function checked<T extends { txHash: Hex }>(reader: Reader, result: T): Promise<T> {
   const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
-  if (receipt.status !== 'success') throw Object.assign(new Error('Reverted write; inspect cause before any retry'), { txHash: result.txHash });
+  if (receipt.status !== 'success') throw safeError('Reverted write; inspect cause before any retry', { txHash: result.txHash });
   return result;
 }
 export async function publish(reader: Reader, wallet: Wallet, expiration: Expiry, salt: bigint, estimateLatest: EstimateLatest) {
-  const values = { status: 'published', created_at: u64(Date.now()), body: new TextEncoder().encode('Public example') };
-  const options = { expiration, salt, flags: { readonly: true } };
-  const estimate = await estimateLatest(unsigned => unsigned.createEntity(Notes, values, options));
-  return checked(reader, await wallet.createEntity(Notes, values, options, await txParams(reader, wallet, estimate)));
+  try {
+    const values = { status: 'published', created_at: u64(Date.now()), body: new TextEncoder().encode('Public example') };
+    const options = { expiration, salt, flags: { readonly: true } };
+    const estimate = await estimateLatest(unsigned => unsigned.createEntity(Notes, values, options));
+    return await checked(reader, await wallet.createEntity(Notes, values, options, await txParams(reader, wallet, estimate)));
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 export async function patchDraft(reader: Reader, wallet: Wallet, entityKey: Hex, estimateLatest: EstimateLatest) {
-  const estimate = await estimateLatest(unsigned => unsigned.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] }));
-  return checked(reader, await wallet.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] }, await txParams(reader, wallet, estimate)));
+  try {
+    const estimate = await estimateLatest(unsigned => unsigned.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] }));
+    return await checked(reader, await wallet.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] }, await txParams(reader, wallet, estimate)));
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 export async function transferAndInspect(reader: Reader, wallet: Wallet, entityKey: Hex, newOwner: Address, estimateLatest: EstimateLatest) {
-  const before = await reader.getEntity(entityKey, Notes);
-  if (isAddressEqual(newOwner, zeroAddress) || isAddressEqual(newOwner, before.$owner)) throw new Error('Choose another nonzero owner');
-  const estimate = await estimateLatest(unsigned => unsigned.changeOwnership({ entityKey, newOwner }));
-  const transferred = await checked(reader, await wallet.changeOwnership({ entityKey, newOwner }, await txParams(reader, wallet, estimate)));
   try {
-    const after = await reader.getEntity(entityKey, Notes);
-    return { ...transferred, ownerAtRead: after.$owner,
-      creatorUnchanged: isAddressEqual(before.$creator, after.$creator) };
-  } catch { return { ...transferred, status: 'confirmed_read_failed' as const }; }
+    const before = await reader.getEntity(entityKey, Notes);
+    if (isAddressEqual(newOwner, zeroAddress) || isAddressEqual(newOwner, before.$owner)) throw safeError('Choose another nonzero owner');
+    const estimate = await estimateLatest(unsigned => unsigned.changeOwnership({ entityKey, newOwner }));
+    const transferred = await checked(reader, await wallet.changeOwnership({ entityKey, newOwner }, await txParams(reader, wallet, estimate)));
+    try {
+      const after = await reader.getEntity(entityKey, Notes);
+      return await { ...transferred, ownerAtRead: after.$owner,
+        creatorUnchanged: isAddressEqual(before.$creator, after.$creator) };
+    } catch { return await { ...transferred, status: 'confirmed_read_failed' as const }; }
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 export async function extend(reader: Reader, wallet: Wallet, entityKey: Hex, deadline: bigint, estimateLatest: EstimateLatest) {
-  const operation = { entityKey, expiration: ExpirationTime.atBlock(deadline) };
-  const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
-  return checked(reader, await wallet.extendEntity(operation, await txParams(reader, wallet, estimate)));
+  try {
+    const operation = { entityKey, expiration: ExpirationTime.atBlock(deadline) };
+    const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
+    return await checked(reader, await wallet.extendEntity(operation, await txParams(reader, wallet, estimate)));
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 // Only invoke when deletion of this exact entity is independently authorized.
 export async function remove(reader: Reader, wallet: Wallet, entityKey: Hex, estimateLatest: EstimateLatest) {
-  const estimate = await estimateLatest(unsigned => unsigned.deleteEntity({ entityKey }));
-  return checked(reader, await wallet.deleteEntity({ entityKey }, await txParams(reader, wallet, estimate)));
+  try {
+    const estimate = await estimateLatest(unsigned => unsigned.deleteEntity({ entityKey }));
+    return await checked(reader, await wallet.deleteEntity({ entityKey }, await txParams(reader, wallet, estimate)));
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 ```
 
@@ -106,4 +150,4 @@ Verify successful receipts and fresh selected fields after each operation. A lat
 
 Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
 
-The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate only sanitized diagnostics with no raw or nested causes without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

@@ -7,39 +7,71 @@ import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-n
 import { defineSchema, bytes, str } from '@arkiv-network/sdk/schema';
 import { hexToBytes, type Hex } from 'viem';
 import { getGasPrice } from 'viem/actions';
+
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
+  }
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
 export const EncryptedNotes = defineSchema('example_encrypted_notes', { body: bytes(), media_type: str() });
 type Wallet = ReturnType<typeof createWalletClient>;
 type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
 type Cipher = { encrypt(plain: Uint8Array): Promise<Uint8Array>; decrypt(envelope: Uint8Array): Promise<Uint8Array> };
 export async function writeEncryptedNote(reader: ReturnType<typeof createPublicClient>,
   wallet: ReturnType<typeof createWalletClient>, cipher: Cipher, text: string, salt: bigint, estimateLatest: EstimateLatest) {
-  if (text.length > 10000) throw new Error('Note exceeds app limit');
-  const envelope = await cipher.encrypt(new TextEncoder().encode(JSON.stringify({ text })));
-  const values = { body: envelope, media_type: 'application/vnd.arkiv.encrypted.v1' };
-  const options = { expiration: ExpirationTime.fromDays(1), salt, flags: { readonly: true } };
-  const estimate = await estimateLatest(unsigned => unsigned.createEntity(EncryptedNotes, values, options));
-  if (estimate <= 0n) throw new Error('Unsigned estimate required');
-  const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
-  if (!wallet.account) throw new Error('Authorized account and approved gas floor required');
-  const address = wallet.account.address;
-  const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
-  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Resolve pending nonce');
-  const gasPrice = await getGasPrice(reader);
-  const result = await wallet.createEntity(EncryptedNotes, values, options, { nonce: latest, gas, gasPrice });
-  if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw new Error('Reverted write; inspect before any retry');
-  return result;
+  try {
+    if (text.length > 10000) throw safeError('Note exceeds app limit');
+    const envelope = await cipher.encrypt(new TextEncoder().encode(JSON.stringify({ text })));
+    const values = { body: envelope, media_type: 'application/vnd.arkiv.encrypted.v1' };
+    const options = { expiration: ExpirationTime.fromDays(1), salt, flags: { readonly: true } };
+    const estimate = await estimateLatest(unsigned => unsigned.createEntity(EncryptedNotes, values, options));
+    if (estimate <= 0n) throw safeError('Unsigned estimate required');
+    const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
+    if (!wallet.account) throw safeError('Authorized account and approved gas floor required');
+    const address = wallet.account.address;
+    const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
+    if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw safeError('Resolve pending nonce');
+    const gasPrice = await getGasPrice(reader);
+    const result = await wallet.createEntity(EncryptedNotes, values, options, { nonce: latest, gas, gasPrice });
+    if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Reverted write; inspect before any retry');
+    return await result;
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 export async function readEncryptedNote(reader: ReturnType<typeof createPublicClient>,
   entityKey: Hex, cipher: Cipher, trustedCreator: Hex) {
-  const entity = await reader.getEntity(entityKey, EncryptedNotes);
-  if (entity.$creator.toLowerCase() !== trustedCreator.toLowerCase() || !entity.$creationFlags.readonly ||
-    entity.media_type.value !== 'application/vnd.arkiv.encrypted.v1') throw new Error('Untrusted encrypted publication');
-  const plain = await cipher.decrypt(hexToBytes(entity.body.value));
   try {
-    const raw: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plain));
-    if (!raw || typeof raw !== 'object' || !('text' in raw) || typeof raw.text !== 'string' || raw.text.length > 10000) throw new Error();
-    return { text: raw.text, arkivEntityKey: entity.$key };
-  } catch { throw new Error('Invalid decrypted note'); }
+    const entity = await reader.getEntity(entityKey, EncryptedNotes);
+    if (entity.$creator.toLowerCase() !== trustedCreator.toLowerCase() || !entity.$creationFlags.readonly ||
+      entity.media_type.value !== 'application/vnd.arkiv.encrypted.v1') throw safeError('Untrusted encrypted publication');
+    const plain = await cipher.decrypt(hexToBytes(entity.body.value));
+    try {
+      const raw: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plain));
+      if (!raw || typeof raw !== 'object' || !('text' in raw) || typeof raw.text !== 'string' || raw.text.length > 10000) throw safeError();
+      return await { text: raw.text, arkivEntityKey: entity.$key };
+    } catch { throw safeError('Invalid decrypted note'); }
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 ```
 
@@ -47,4 +79,4 @@ Validate session/operation authorization and durable write intent before calling
 
 Use the first-write gas/budget policy before invoking this helper: explicit latest nonce, gas and network gasPrice, exact unsigned estimate, approved cost/balance and exclusive signer custody. Larger encrypted bytes need at least twice the measured maximum gas. No automatic retry; at most one corrected attempt only after an authoritative reverted receipt.
 
-The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate only sanitized diagnostics with no raw or nested causes without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

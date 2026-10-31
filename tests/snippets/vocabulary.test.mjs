@@ -20,6 +20,12 @@ test('vocabulary CLI rejects injected prose, code, generated data, snapshots and
   const scratch = await mkdtemp(path.join(tmpdir(), 'arkiv-vocabulary-'));
   try {
     const cases = [
+      ['generated/uppercase.MAP', '{}', '{"sourceRoot":"' + String.fromCharCode(92) + 'u0070' + retired.slice(1) + '"}'],
+      ['generated/invalid.map', '{}', Buffer.from([255])],
+      ...['names', 'sources', 'file', 'sourcesContent', 'sourceRoot'].map(field => ['generated/source.js.map', '{}', JSON.stringify({version: 3, names: [], sources: [], sourcesContent: [], mappings: '', [field]: field === 'file' || field === 'sourceRoot' ? retired : [retired]})]),
+      ['generated/indexed.js.map', '{}', JSON.stringify({version: 3, sections: [{offset: {line: 0, column: 0}, map: {version: 3, sourceRoot: retired, names: [], sources: [], sourcesContent: [], mappings: ''}}]})],
+      ['generated/escaped.js.map', '{}', '{"names":["' + String.fromCharCode(92) + 'u0070' + retired.slice(1) + '"]}'],
+      ['generated/escaped.jsonl', '{}', '{"name":"' + String.fromCharCode(92) + 'u0070' + retired.slice(1) + '"}'],
       ['skills/example/SKILL.md', '# Entity bytes', `# Entity ${retired.toUpperCase()}`],
       ['scripts/seed.mjs', 'const entityBytes = [];', `const entity${retired} = [];`],
       ['generated/entities.json', '{"column":"bytes"}', JSON.stringify({column: retired})],

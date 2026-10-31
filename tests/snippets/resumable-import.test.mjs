@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {inspect} from 'node:util';
 import { createHash } from 'node:crypto';
 import * as filesystem from 'node:fs/promises';
 import path from 'node:path';
@@ -52,14 +53,14 @@ async function loadExactHelper(harness) {
           state = JSON.parse(text).state;
           if (harness.fault?.state === state && harness.fault.phase === 'write') {
             harness.fault.failedPrefix = previousBytes;
-            throw new Error(`Synthetic ${state} write failure`);
+            throw new Error(harness.fault.diagnostic ?? `Synthetic ${state} write failure`);
           }
           return file.writeFile(text, ...arguments_);
         },
         sync: async () => {
           if (harness.fault?.state === state && harness.fault.phase === 'sync') {
             harness.fault.failedPrefix = previousBytes;
-            throw new Error(`Synthetic ${state} sync failure`);
+            throw new Error(harness.fault.diagnostic ?? `Synthetic ${state} sync failure`);
           }
           await file.sync();
           harness.synced.push(state);
@@ -201,7 +202,7 @@ test('readback failure retains receipt_confirmed and resumes without repeating t
 for (const phase of ['write', 'sync']) {
   test(`verified checkpoint ${phase} failure retains prior receipt_confirmed and resume never resends`, () => withImport(3, async h => {
     h.fault = { state: 'verified', phase };
-    await assert.rejects(h.helper.runImport(h.options), new RegExp(`Synthetic verified ${phase} failure`));
+    await assert.rejects(h.helper.runImport(h.options), /Provider operation failed; reconcile durable intent before retrying/);
     const prefix = h.fault.failedPrefix.trimEnd().split('\n').map(JSON.parse);
     assert.equal(prefix.at(-1).state, 'receipt_confirmed');
     assert.equal(prefix.at(-1).txHash, h.fixture.sends[0].txHash);
@@ -214,7 +215,8 @@ for (const phase of ['write', 'sync']) {
   }));
   test(`prepared intent ${phase} failure prevents funded wallet entry and send`, () => withImport(3, async h => {
     h.fault = { state: 'prepared', phase };
-    await assert.rejects(h.helper.runImport(h.options), new RegExp(`Synthetic prepared ${phase} failure`));
+    await assert.rejects(h.helper.runImport(h.options), /Provider operation failed; reconcile durable intent before retrying/);
+    assert.equal(typeof h.fault.failedPrefix, 'string', 'The intended checkpoint fault must have executed');
     assert.equal(h.walletEntries, 0);
     assert.equal(h.signatures, 0);
     assert.equal(h.fixture.sends.length, 0);
@@ -224,7 +226,7 @@ for (const phase of ['write', 'sync']) {
 
 test('receipt checkpoint fsync failure retains submitting and resumes original hash without resend', () => withImport(3, async h => {
   h.fault = { state: 'receipt_confirmed', phase: 'sync' };
-  await assert.rejects(h.helper.runImport(h.options), /Synthetic receipt_confirmed sync failure/);
+  await assert.rejects(h.helper.runImport(h.options), /Provider operation failed; reconcile durable intent before retrying/);
   const prefix = h.fault.failedPrefix.trimEnd().split('\n').map(JSON.parse);
   assert.equal(prefix.at(-1).state, 'submitting');
   assert.equal(prefix.at(-1).txHash, h.fixture.sends[0].txHash);
@@ -330,12 +332,82 @@ test('legacy combined-confirmed journal is explicitly incompatible and remains b
   assert.equal(h.fixture.sends.length, 1);
 }));
 
-test('EIP1559 signed fee intent still authenticates and verifies the current batch', () => withImport(1, async h => {
+test('new plans refuse EIP-1559-only fees before signing or sending', async () => {
+  await assert.rejects(withImport(1, async () => assert.fail('Preparation must refuse these fees'),
+    { fees: { maxFeePerGas: 2n, maxPriorityFeePerGas: 1n } }), /New writes require gasPrice/);
+});
+
+test('new plans require the current eth_gasPrice rather than an arbitrary supplied price', async () => {
+  await assert.rejects(withImport(1, async () => assert.fail('Preparation must check the network price'),
+    { fees: { gasPrice: 2n } }), /current eth_gasPrice/);
+});
+
+test('a changed network gasPrice stops new signing without rewriting the frozen plan', () => withImport(1, async h => {
+  const text = await filesystem.readFile(h.options.planPath, 'utf8');
+  const request = h.options.request;
+  await assert.rejects(h.helper.runImport({ ...h.options, request: input => input.method === 'eth_gasPrice' ? Promise.resolve('0x2') : request(input) }), /Network gasPrice changed/);
+  assert.equal(h.signatures, 0);
+  assert.equal(h.fixture.sends.length, 0);
+  assert.equal(h.walletEntries, 0);
+  assert.equal(await filesystem.readFile(h.options.planPath, 'utf8'), text);
+}));
+
+// Construct new synthetic historical fixture files; never modify a real stored plan.
+async function historicalFixture(h, signed) {
+  const plan = { ...h.plan, fees: { maxFeePerGas: '2', maxPriorityFeePerGas: '1' } };
+  const text = JSON.stringify(plan) + '\n';
+  const planSha256 = createHash('sha256').update(text).digest('hex');
+  const directory = path.dirname(h.options.planPath);
+  h.options = { ...h.options, planPath: path.join(directory, 'historical-plan.json'),
+    journalPath: path.join(directory, 'historical-journal.jsonl'), planSha256 };
+  await filesystem.writeFile(h.options.planPath, text, { flag: 'wx' });
+  const events = [];
+  function record(event) {
+    const body = { planSha256, previous: events.at(-1)?.hash ?? '', ...event };
+    events.push({ ...body, hash: createHash('sha256').update(JSON.stringify(body)).digest('hex') });
+  }
+  const persist = async flags => {
+    const file = await filesystem.open(h.options.journalPath, flags);
+    const rows = flags === 'a' ? [events.at(-1)] : events;
+    try { await file.writeFile(rows.map(x => JSON.stringify(x)).join('\n') + '\n'); await file.sync(); }
+    finally { await file.close(); }
+  };
+  record({ state: 'initialized', journalVersion: 3 });
+  if (signed) record({ index: 0, state: 'prepared' });
+  await persist('wx');
+  if (signed) {
+    const batch = plan.batches[0];
+    const raw = await h.options.account.signTransaction({ type: 'eip1559', chainId: plan.chainId,
+      to: '0x4400000000000000000000000000000000000044', data: batch.input,
+      nonce: batch.nonce, gas: BigInt(batch.gas), maxFeePerGas: 2n, maxPriorityFeePerGas: 1n });
+    record({ index: 0, state: 'submitting', nonce: batch.nonce, txHash: viem.keccak256(raw), raw });
+    // This is fixture setup before reconciliation, not a production recovery action.
+    await persist('a');
+    h.fixture.beforeSend = undefined;
+    await h.fixture.request({ method: 'eth_sendRawTransaction', params: [raw] });
+  }
+  return text;
+}
+
+test('already-signed EIP-1559 history reconciles without rewriting intent, signing or resending', () => withImport(1, async h => {
+  const text = await historicalFixture(h, true);
+  const signatures = h.signatures, sends = h.fixture.sends.length, walletEntries = h.walletEntries;
   assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 1);
-  assert.equal(h.fixture.transactions.values().next().value.type, '0x2');
-  assert.equal((await h.journal()).at(-2).state, 'receipt_confirmed');
+  assert.equal(h.signatures, signatures);
+  assert.equal(h.fixture.sends.length, sends);
+  assert.equal(h.walletEntries, walletEntries);
+  assert.equal(await filesystem.readFile(h.options.planPath, 'utf8'), text);
   assert.equal((await h.journal()).at(-1).state, 'verified');
-}, { fees: { maxFeePerGas: 2n, maxPriorityFeePerGas: 1n } }));
+}));
+
+test('unsigned legacy EIP-1559 intent cannot admit a new write', () => withImport(1, async h => {
+  const text = await historicalFixture(h, false);
+  await assert.rejects(h.helper.runImport(h.options), /Legacy fee intent permits signed reconciliation only/);
+  assert.equal(h.signatures, 0);
+  assert.equal(h.fixture.sends.length, 0);
+  assert.equal(h.walletEntries, 0);
+  assert.equal(await filesystem.readFile(h.options.planPath, 'utf8'), text);
+}));
 
 test('twice the exact unsigned estimate governs gas when above the operation floor', () => withImport(1, async h => {
   assert.equal(h.plan.batches[0].gas, '1600000');
@@ -349,4 +421,35 @@ test('computed gas above the approved cap is refused before signing or submissio
 test('Rabdi batch gas floor scales by actual operation count, with one-operation floor on the tail', () => withImport(3, async h => {
   assert.deepEqual(h.plan.batches.map(batch => batch.gas), ['1400000', '1000000']);
   assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 2);
+}));
+
+
+const syntheticMarker = 'synthetic-surf-no-real-credential';
+const syntheticUrl = 'https://rpc.rabdi.db-chain.testnet.arkiv.network/' + syntheticMarker;
+function noPrivateDiagnostics(error) {
+  assert.equal(inspect(error, {depth: null}).includes(syntheticMarker), false);
+  assert.equal(Object.hasOwn(error, 'cause'), false);
+  assert.match(error.message, /Provider operation failed/);
+  return true;
+}
+for (const method of ['eth_chainId', 'eth_estimateGas']) test('import preparation sanitizes ' + method + ' provider failures', () => withImport(1, async h => {
+  let observed = false;
+  const options = { ...h.options, planPath: path.join(path.dirname(h.options.planPath), 'blocked-plan.json'),
+    journalPath: path.join(path.dirname(h.options.journalPath), 'blocked-journal.jsonl'), request: async input => {
+      if (input.method === method) { observed = true; throw new Error(syntheticUrl, {cause: new Error(syntheticUrl)}); }
+      return h.fixture.request(input);
+    } };
+  await assert.rejects(h.helper.prepareImport(options), noPrivateDiagnostics);
+  assert.equal(observed, true);
+  assert.equal(h.signatures, 0);
+  assert.equal(h.fixture.sends.length, 0);
+}));
+
+test('checkpoint errors cannot smuggle provider diagnostics through a returned cause', () => withImport(1, async h => {
+  h.fault = {state: 'prepared', phase: 'write', diagnostic: syntheticUrl};
+  await assert.rejects(h.helper.runImport(h.options), noPrivateDiagnostics);
+  assert.equal(typeof h.fault.failedPrefix, 'string');
+  assert.equal(h.walletEntries, 0);
+  assert.equal(h.signatures, 0);
+  assert.equal(h.fixture.sends.length, 0);
 }));

@@ -8,37 +8,65 @@ import { key, str } from '@arkiv-network/sdk/schema';
 import { asc, eq, gt } from '@arkiv-network/sdk/query';
 import type { Address, Hex } from 'viem';
 
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
+  }
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
+
 export async function captureSnapshot(reader: ReturnType<typeof createPublicClient>,
   schemaName: string, trustedCreator: Address, maxPages = 20) {
-  if (!Number.isSafeInteger(maxPages) || maxPages < 1) throw new Error('Invalid page budget');
-  const head = await reader.getBlockNumber({ cacheTime: 0 });
-  const header = await reader.getBlock({ blockNumber: head });
-  const genesis = await reader.getBlock({ blockNumber: 0n });
-  if (!header.hash || !genesis.hash) throw new Error('Missing source identity');
-  const entities = [];
-  let last: Hex | undefined;
-  let complete = false;
-  for (let n = 0; n < maxPages; n++) {
-    const query = reader.select({ $key: true, $owner: true, $creator: true,
-      $createdAt: true, $updatedAt: true, $expiresAt: true, $creationFlags: true,
-      $attributes: true, $attributeSchema: true }).where(eq('arkiv.schema', str(schemaName)))
-      .createdBy(trustedCreator).orderBy(asc('$key')).limit(100);
-    if (last) query.where(gt('$key', key(last)));
-    const page = await query.fetch();
-    if (page.blockNumber !== head) throw new Error('Source changed during export; keep incomplete export unpublished');
-    entities.push(...page.entities);
-    if (page.entities.length < 100) { complete = true; break; }
-    const next = page.entities.at(-1)?.$key;
-    if (!next || (last && next.toLowerCase() <= last.toLowerCase())) throw new Error('Keyset did not advance');
-    last = next;
+  try {
+    if (!Number.isSafeInteger(maxPages) || maxPages < 1) throw safeError('Invalid page budget');
+    const head = await reader.getBlockNumber({ cacheTime: 0 });
+    const header = await reader.getBlock({ blockNumber: head });
+    const genesis = await reader.getBlock({ blockNumber: 0n });
+    if (!header.hash || !genesis.hash) throw safeError('Missing source identity');
+    const entities = [];
+    let last: Hex | undefined;
+    let complete = false;
+    for (let n = 0; n < maxPages; n++) {
+      const query = reader.select({ $key: true, $owner: true, $creator: true,
+        $createdAt: true, $updatedAt: true, $expiresAt: true, $creationFlags: true,
+        $attributes: true, $attributeSchema: true }).where(eq('arkiv.schema', str(schemaName)))
+        .createdBy(trustedCreator).orderBy(asc('$key')).limit(100);
+      if (last) query.where(gt('$key', key(last)));
+      const page = await query.fetch();
+      if (page.blockNumber !== head) throw safeError('Source changed during export; keep incomplete export unpublished');
+      entities.push(...page.entities);
+      if (page.entities.length < 100) { complete = true; break; }
+      const next = page.entities.at(-1)?.$key;
+      if (!next || (last && next.toLowerCase() <= last.toLowerCase())) throw safeError('Keyset did not advance');
+      last = next;
+    }
+    if (!complete) throw safeError('Export page budget exhausted');
+    const finalHead = await reader.getBlockNumber({ cacheTime: 0 });
+    const finalHeader = await reader.getBlock({ blockNumber: head });
+    if (finalHead !== head || finalHeader.hash !== header.hash) throw safeError('Source changed during export');
+    return await JSON.parse(JSON.stringify({ format: 1, chainId: reader.chain?.id,
+      genesisHash: genesis.hash, observedBlock: head, observedHash: header.hash,
+      schemaName, trustedCreator, entities }, (_, v) => typeof v === 'bigint' ? v.toString() : v)) as unknown;
+  } catch (error) {
+    throw sanitizedFailure(error);
   }
-  if (!complete) throw new Error('Export page budget exhausted');
-  const finalHead = await reader.getBlockNumber({ cacheTime: 0 });
-  const finalHeader = await reader.getBlock({ blockNumber: head });
-  if (finalHead !== head || finalHeader.hash !== header.hash) throw new Error('Source changed during export');
-  return JSON.parse(JSON.stringify({ format: 1, chainId: reader.chain?.id,
-    genesisHash: genesis.hash, observedBlock: head, observedHash: header.hash,
-    schemaName, trustedCreator, entities }, (_, v) => typeof v === 'bigint' ? v.toString() : v)) as unknown;
 }
 ```
 

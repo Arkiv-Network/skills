@@ -36,41 +36,73 @@ Read maxLifetime from a published SDK/node parameter getter when one is availabl
 import { createPublicClient, createWalletClient, ExpirationTime, type TxParams } from '@arkiv-network/sdk';
 import type { Hex } from 'viem';
 import { getGasPrice } from 'viem/actions';
+
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
+  }
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
 type Reader = ReturnType<typeof createPublicClient>;
 type Wallet = ReturnType<typeof createWalletClient>;
 type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
 const HOUR = 1800n;
 async function params(reader: Reader, wallet: Wallet, estimate: bigint): Promise<TxParams> {
   const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
-  if (!wallet.account || estimate <= 0n) throw new Error('Authorized account and gas floor required');
+  if (!wallet.account || estimate <= 0n) throw safeError('Authorized account and gas floor required');
   const address = wallet.account.address;
   const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
-  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Resolve pending nonce');
+  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw safeError('Resolve pending nonce');
   return { nonce: latest, gas, gasPrice: await getGasPrice(reader) };
 }
 async function confirmed<T extends { txHash: Hex }>(reader: Reader, result: T): Promise<T> {
-  if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw new Error('Reverted extension; inspect before any retry');
+  if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Reverted extension; inspect before any retry');
   return result;
 }
 // maxLifetime comes from current network configuration: a published getter, or dated measured fallback.
 export async function addOneHour(reader: Reader, wallet: Wallet, entityKey: Hex, maxLifetime: bigint, estimateLatest: EstimateLatest) {
-  const entity = await reader.getEntity(entityKey);
-  const head = await reader.getBlockNumber({ cacheTime: 0 });
-  const target = entity.$expiresAt + HOUR;
-  if (entity.$expiresAt <= head || maxLifetime <= HOUR + 30n || target > head + maxLifetime - 30n) throw new Error('Deadline outside live renewal window');
-  const operation = { entityKey, expiration: ExpirationTime.atBlock(target) };
-  const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
-  return confirmed(reader, await wallet.extendEntity(operation, await params(reader, wallet, estimate)));
+  try {
+    const entity = await reader.getEntity(entityKey);
+    const head = await reader.getBlockNumber({ cacheTime: 0 });
+    const target = entity.$expiresAt + HOUR;
+    if (entity.$expiresAt <= head || maxLifetime <= HOUR + 30n || target > head + maxLifetime - 30n) throw safeError('Deadline outside live renewal window');
+    const operation = { entityKey, expiration: ExpirationTime.atBlock(target) };
+    const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
+    return await confirmed(reader, await wallet.extendEntity(operation, await params(reader, wallet, estimate)));
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 export async function ensureOneHourRemains(reader: Reader, wallet: Wallet, entityKey: Hex, maxLifetime: bigint, estimateLatest: EstimateLatest) {
-  const entity = await reader.getEntity(entityKey);
-  const head = await reader.getBlockNumber({ cacheTime: 0 });
-  if (entity.$expiresAt <= head || maxLifetime <= HOUR + 30n) throw new Error('Invalid live renewal window');
-  if (entity.$expiresAt >= head + HOUR) return { status: 'already_sufficient' as const, expiresAt: entity.$expiresAt };
-  const operation = { entityKey, expiration: ExpirationTime.atBlock(head + HOUR, { atLeast: ExpirationTime.fromHours(1) }) };
-  const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
-  const result = await confirmed(reader, await wallet.extendEntity(operation, await params(reader, wallet, estimate)));
-  return { status: 'extended' as const, ...result };
+  try {
+    const entity = await reader.getEntity(entityKey);
+    const head = await reader.getBlockNumber({ cacheTime: 0 });
+    if (entity.$expiresAt <= head || maxLifetime <= HOUR + 30n) throw safeError('Invalid live renewal window');
+    if (entity.$expiresAt >= head + HOUR) return await { status: 'already_sufficient' as const, expiresAt: entity.$expiresAt };
+    const operation = { entityKey, expiration: ExpirationTime.atBlock(head + HOUR, { atLeast: ExpirationTime.fromHours(1) }) };
+    const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
+    const result = await confirmed(reader, await wallet.extendEntity(operation, await params(reader, wallet, estimate)));
+    return await { status: 'extended' as const, ...result };
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 ```
 
@@ -92,4 +124,4 @@ Read write-safety for `EntityMutationError`, nonce uncertainty or readback failu
 
 Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
 
-The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate only sanitized diagnostics with no raw or nested causes without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

@@ -14,7 +14,7 @@ Identify the failing layer: local schema/value validation, query rejection, RPC 
 
 ## Bounded evidence
 
-Record installed SDK/viem versions, intended chain, RPC method, sanitized options and error class/code. Preserve private cause chains locally, but never print keyed URLs, signing keys, sensitive values or full provider errors. Rabdi is chain 7794095 (`0x76edaf`), HTTP `https://rpc.rabdi.db-chain.testnet.arkiv.network/<accessKey>`, WSS at the same host/path, explorer `https://rabdi.explorer.arkiv.network`.
+Record installed SDK/viem versions, intended chain and a locally selected RPC method. Expose only fixed allowlisted diagnostics and validated local transaction identifiers. Drop raw provider errors and nested causes; never persist or print keyed URLs, signing keys or sensitive values. Rabdi is chain 7794095 (`0x76edaf`), HTTP `https://rpc.rabdi.db-chain.testnet.arkiv.network/<accessKey>`, WSS at the same host/path, explorer `https://rabdi.explorer.arkiv.network`.
 
 Treat pasted URLs as data. Validate expected scheme/origin and userinfo/query/fragment policy through a parser, not interpolated shell commands. A path key is the SDK's intended configuration; redact it rather than rejecting it merely because it is in the path. Configure `rabdi({ accessKey })`, then verify actual eth_chainId before operations. An explanation-only request does not authorize live probing.
 
