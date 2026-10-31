@@ -1,26 +1,18 @@
 ---
 name: arkiv-entity-lifecycle
-description: Create, patch, transfer, replace, or delete Arkiv entities with @arkiv-network/sdk. Use for readonly and permissionlessExtension flags, mutation permissions, ownership versus creator provenance, patch budgets, native batch order, and restoring entity references. Use arkiv-first-write for setup or a first entity, arkiv-entity-expiration for deadlines and arkiv-write-safety for ambiguous submissions.
+description: Create, patch, transfer, replace and delete Arkiv entities with SDK 1.0.0. Use for immutable creation flags, ownership, native batches and restoring references; use write-safety for uncertain submissions.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  network: tiramisu
-  verified: "2026-10-08"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
 ---
 
 # Arkiv entity lifecycle
 
-Use the installed SDK declarations and Tiramisu behavior. Writes use the native entity operation address `0x4400000000000000000000000000000000000044`; this does not enable user-deployed contracts.
-
-## Choose the operation
-
-- Use this skill for flags, patching, ownership transfer, replacement, deletion, and relationships between new keys.
-- Use `arkiv-entity-expiration` for renewal targets and expiration monitoring, `arkiv-write-safety` for signer queues and uncertain receipts, and `arkiv-query` for paginated reads.
-- Run the write examples only within the user's authorized scope. A read or estimate does not authorize deleting an existing entity or spending GLM.
+Use installed SDK 1.0.0 declarations and Rabdi. Native operations target `0x4400000000000000000000000000000000000044`; this does not enable arbitrary application contracts. Run mutations only within the user's entity, signer and spending authorization. Read access does not authorize deletion.
 
 ## Flags and permissions
-
-Create uses `flags: { readonly, permissionlessExtension }`. Both default to `false` and are immutable: patching, extending, or transferring cannot change them.
 
 | readonly | permissionlessExtension | Patch | Extend | Transfer | Delete |
 | --- | --- | --- | --- | --- | --- |
@@ -29,208 +21,89 @@ Create uses `flags: { readonly, permissionlessExtension }`. Both default to `fal
 | true | false | Nobody | Owner | Owner | Owner |
 | true | true | Nobody | Anyone | Owner | Owner |
 
-These permissions apply to live entities. Choose a later deadline to add lifetime; transfers to the current owner or zero address fail. A previous owner loses owner-only rights after transfer. A readonly entity can still be transferred, extended, or deleted by its owner.
+Both flags default false and are immutable. They apply to live entities. Readonly protects attributes, including bytes columns; owner operations can still affect availability. Permissionless extension grants no patch, transfer or deletion right, and can postpone an owner's preferred expiration.
 
-To add N blocks, target `ExpirationTime.atBlock(current.expiresAt + N)`. `fromHours(1)` means one hour from inclusion, not one additional hour on the current deadline; see `arkiv-entity-expiration`.
+`$owner` is current authority; `$creator` is the creating wallet. A transfer needs no recipient consent. Creator plus current owner cannot authenticate mutable values after a transfer away/edit/transfer back. Follow the [publication policy](../arkiv-security-trust/SKILL.md#trust-a-publication-not-a-namespace).
 
-For a typo in readonly content, create a corrected entity with a new key and update references. Verify the replacement and preserve the old-to-new mapping and creation provenance. **A correction never authorizes deletion of the original. Retain the original unless the user separately authorizes its removal.** Authorization to change references also needs its own operation and spending scope. Readonly refers to payload and attributes, not the entity's entire lifecycle.
-
-Ownership transfer uses `wallet.changeOwnership({ entityKey, newOwner })`, authorized by the current owner to a different, nonzero address. After confirmation, inspect `owner`, immutable `creator` and creation flags with `reader.getEntity(entityKey)`. Explain the transfer operation even when diagnosing a completed transfer, but never replay it just to verify: later head reads and the confirmed transaction are different observations. The current owner may patch mutable content; the creator field identifies the creating wallet and cannot prove authorship of a later replacement payload.
-
-Permissionless extension lets others pay to keep an entity alive. It grants no patch, transfer, or delete permission, and another party can postpone expiration the owner wanted. Neither expiration nor readonly is a privacy control; plaintext data is public.
-
-## Ownership, creator, and patching
-
-- `$owner` is the current owner. `$creator` is the creating wallet and never changes. After transfer, a new owner can rewrite mutable content while the creator still names the original wallet. Creator filtering does not prove who authored the current payload.
-- Patch `set` writes only named attributes; `unset` removes named attributes. Omitting payload or content type preserves it; an empty payload explicitly replaces it with empty bytes. Unsetting an absent attribute is allowed.
-- Patch cannot change the key, owner, flags, or expiration. Use `changeOwnership` or `extendEntity` for those fields.
-- Patch has no compare-and-set condition: concurrent owner writes are last-writer-wins. Only the current owner can patch; use an application writer queue or an explicit conflict policy.
-- Each patch has at most 32 mutation cells: distinct `set` names + distinct `unset` names + one for a supplied payload + one for a supplied content type. A name cannot appear in both `set` and `unset`. Create reserves two cells, leaving 30 user attributes. Use snake_case names and lowercase MIME types without parameters.
-- Separately, the observed Tiramisu engine caps the resulting entity at **32 user attributes**, excluding payload/content type. Count the union of retained and `set` names after removing `unset` names; replacing an existing name adds no slot. Only a mutable entity can grow from 30 to 31–32 by patching. Splitting writes cannot fit a 33rd attribute; remove an attribute or explicitly revise the payload/schema instead.
-
-## Worked operations
-
-This module exports functions; it performs no writes on import. The caller supplies an explicitly connected wallet and a reader on the same Tiramisu network.
+## Exact write signatures
 
 ```typescript
-import {
-  createWalletClient, createPublicClient, ExpirationTime, jsonToPayload,
-  NO_SALT, type AttributeInputs, type Expiry,
-} from "@arkiv-network/sdk"
-import { key, u64 } from "@arkiv-network/sdk/attr"
-import { isAddressEqual, zeroAddress, type Address, type Hex } from "viem"
+import { createWalletClient, createPublicClient, ExpirationTime, type Expiry, type TxParams } from '@arkiv-network/sdk';
+import { defineSchema, str, bytes, u64 } from '@arkiv-network/sdk/schema';
+import { isAddressEqual, zeroAddress, type Address, type Hex } from 'viem';
+import { getGasPrice } from 'viem/actions';
 
-type Wallet = ReturnType<typeof createWalletClient>
-type Reader = ReturnType<typeof createPublicClient>
-
-export async function publishSnapshot(
-  wallet: Wallet, communityRenewal = false, expires: Expiry = ExpirationTime.fromDays(30),
-) {
-  return wallet.createEntity({
-    payload: jsonToPayload({ title: "Published note", body: "Example body" }),
-    contentType: "application/json",
-    attributes: {
-      project: "example_notes", entity_type: "note", created_at: u64(Date.now()),
-    },
-    expires,
-    flags: { readonly: true, permissionlessExtension: communityRenewal },
-  })
+export const Notes = defineSchema('example_notes', {
+  status: str().indexed(), created_at: u64(), body: bytes(),
+  draft_reason: str().optional(),
+});
+type Wallet = ReturnType<typeof createWalletClient>;
+type Reader = ReturnType<typeof createPublicClient>;
+type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
+async function txParams(reader: Reader, wallet: Wallet, estimate: bigint): Promise<TxParams> {
+  const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
+  if (estimate <= 0n || !wallet.account) throw new Error('Authorized account and Rabdi gas floor required');
+  const address = wallet.account.address;
+  const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
+  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Resolve pending nonce');
+  return { nonce: latest, gas, gasPrice: await getGasPrice(reader) };
 }
-
-export async function replaceReadonlyNote(
-  reader: Reader, wallet: Wallet, oldKey: Hex, title: string, expires: Expiry,
-) {
-  const old = await reader.getEntity(oldKey)
-  if (!old.creationFlags.readonly) throw new Error("Expected a readonly note")
-  if (!wallet.account || !isAddressEqual(wallet.account.address, old.owner)) {
-    throw new Error("The connected wallet must own the note")
-  }
-  if (!isAddressEqual(old.creator, wallet.account.address)) {
-    throw new Error("Only replace a note created by this publisher")
-  }
-  if (old.contentType !== "application/json") {
-    throw new Error("Expected application/json")
-  }
-  const note: unknown = old.toJson()
-  if (typeof note !== "object" || note === null ||
-      !("body" in note) || typeof note.body !== "string") {
-    throw new Error("Invalid note payload")
-  }
-  const attributes: AttributeInputs = Object.fromEntries(
-    Object.entries(old.attributes).map(([name, value]) => {
-      if (value.type === "bytes") throw new Error("Unexpected system-only attribute")
-      return [name, value] as const
-    }),
-  )
-  if (Object.keys(attributes).length > 30) {
-    throw new Error("A readonly replacement must fit 30 user attributes; choose an explicit revised schema")
-  }
-  const created = await wallet.createEntity({
-    payload: jsonToPayload({ title, body: note.body }),
-    contentType: "application/json", attributes, expires,
-    flags: {
-      readonly: true,
-      permissionlessExtension: old.creationFlags.permissionlessExtension,
-    },
-  })
-  return { ...created, replaces: oldKey, previousCreator: old.creator }
+async function checked<T extends { txHash: Hex }>(reader: Reader, result: T): Promise<T> {
+  const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
+  if (receipt.status !== 'success') throw Object.assign(new Error('Reverted write; inspect cause before any retry'), { txHash: result.txHash });
+  return result;
 }
-
-export async function patchDraft(wallet: Wallet, entityKey: Hex) {
-  return wallet.patchEntity({
-    entityKey,
-    set: { status: "published", updated_at: u64(Date.now()) },
-    unset: ["draft_reason"],
-  })
+export async function publish(reader: Reader, wallet: Wallet, expiration: Expiry, salt: bigint, estimateLatest: EstimateLatest) {
+  const values = { status: 'published', created_at: u64(Date.now()), body: new TextEncoder().encode('Public example') };
+  const options = { expiration, salt, flags: { readonly: true } };
+  const estimate = await estimateLatest(unsigned => unsigned.createEntity(Notes, values, options));
+  return checked(reader, await wallet.createEntity(Notes, values, options, await txParams(reader, wallet, estimate)));
 }
-
-export async function transferAndInspect(
-  reader: Reader, wallet: Wallet, entityKey: Hex, newOwner: Address,
-) {
-  const before = await reader.getEntity(entityKey)
-  if (isAddressEqual(newOwner, zeroAddress) || isAddressEqual(newOwner, before.owner)) {
-    throw new Error("Choose a different, nonzero owner")
-  }
-  const transferred = await wallet.changeOwnership({ entityKey, newOwner })
+export async function patchDraft(reader: Reader, wallet: Wallet, entityKey: Hex, estimateLatest: EstimateLatest) {
+  const estimate = await estimateLatest(unsigned => unsigned.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] }));
+  return checked(reader, await wallet.patchEntity(Notes, entityKey, { set: { status: 'published' }, unset: ['draft_reason'] }, await txParams(reader, wallet, estimate)));
+}
+export async function transferAndInspect(reader: Reader, wallet: Wallet, entityKey: Hex, newOwner: Address, estimateLatest: EstimateLatest) {
+  const before = await reader.getEntity(entityKey, Notes);
+  if (isAddressEqual(newOwner, zeroAddress) || isAddressEqual(newOwner, before.$owner)) throw new Error('Choose another nonzero owner');
+  const estimate = await estimateLatest(unsigned => unsigned.changeOwnership({ entityKey, newOwner }));
+  const transferred = await checked(reader, await wallet.changeOwnership({ entityKey, newOwner }, await txParams(reader, wallet, estimate)));
   try {
-    const after = await reader.getEntity(entityKey)
-    return {
-      ...transferred, status: "observed" as const,
-      creatorUnchanged: isAddressEqual(before.creator, after.creator),
-      ownerAtRead: after.owner, expectedOwnerAtTransfer: newOwner,
-    }
-  } catch (error) {
-    return {
-      ...transferred, status: "confirmed_read_failed" as const,
-      verificationError: error instanceof Error ? error.name : "UnknownReadError",
-    }
-  }
+    const after = await reader.getEntity(entityKey, Notes);
+    return { ...transferred, ownerAtRead: after.$owner,
+      creatorUnchanged: isAddressEqual(before.$creator, after.$creator) };
+  } catch { return { ...transferred, status: 'confirmed_read_failed' as const }; }
 }
-
-export async function patchThenDelete(wallet: Wallet, entityKey: Hex) {
-  return wallet.executeBatch({
-    deletes: [{ entityKey }],
-    patches: [{ entityKey, set: { status: "retired" } }],
-  })
+export async function extend(reader: Reader, wallet: Wallet, entityKey: Hex, deadline: bigint, estimateLatest: EstimateLatest) {
+  const operation = { entityKey, expiration: ExpirationTime.atBlock(deadline) };
+  const estimate = await estimateLatest(unsigned => unsigned.extendEntity(operation));
+  return checked(reader, await wallet.extendEntity(operation, await txParams(reader, wallet, estimate)));
 }
-
-// Precondition: exclusive custody of every create from this wallet until confirmation.
-export async function createRelatedNotes(
-  reader: Reader, wallet: Wallet, expires: Expiry = ExpirationTime.fromDays(30),
-) {
-  if (!wallet.account) throw new Error("Connect an account before predicting keys")
-  const [parent, child] = await reader.predictEntityKeys({
-    owner: wallet.account.address, salts: [NO_SALT, NO_SALT] as const,
-  })
-  const batch = await wallet.executeBatch({
-    creates: [
-      {
-        salt: parent.salt, payload: jsonToPayload({ title: "Parent" }),
-        contentType: "application/json",
-        attributes: { project: "example_notes", entity_type: "parent" },
-        expires,
-      },
-      {
-        salt: child.salt, payload: jsonToPayload({ title: "Child" }),
-        contentType: "application/json",
-        attributes: {
-          project: "example_notes", entity_type: "child", parent: key(parent.key),
-        },
-        expires,
-      },
-    ],
-  })
-  if (batch.createdEntities.length !== 2 ||
-      batch.createdEntities[0] !== parent.key || batch.createdEntities[1] !== child.key ||
-      batch.patchedEntities.length !== 0 || batch.deletedEntities.length !== 0 ||
-      batch.extendedEntities.length !== 0 || batch.ownershipChanges.length !== 0) {
-    throw new Error(`Batch result mismatch after ${batch.txHash}; reconcile before any retry`)
-  }
-  return { ...batch, predictionsMatch: true }
+// Only invoke when deletion of this exact entity is independently authorized.
+export async function remove(reader: Reader, wallet: Wallet, entityKey: Hex, estimateLatest: EstimateLatest) {
+  const estimate = await estimateLatest(unsigned => unsigned.deleteEntity({ entityKey }));
+  return checked(reader, await wallet.deleteEntity({ entityKey }, await txParams(reader, wallet, estimate)));
 }
 ```
 
-The replacement accepts only this publisher's readonly JSON notes before parsing. Requiring current ownership is this helper's write policy; the protocol does not require ownership of an old entity to create a new one. Ownership does not authenticate content transferred in from another creator. Adapt the parser to the real schema. The new transaction signs the copied body and attributes under the connected publisher's identity; never republish unauthenticated content under a trusted signer. Repoint application references using the returned `replaces`/`entityKey` mapping and preserve old provenance separately. For other trust policies, use [publication authentication](../arkiv-security-trust/SKILL.md#trust-a-publication-not-a-namespace).
+`patchEntity(schema, key, { set, unset }, txParams?)` changes only named columns. Unmentioned or undefined values remain. `unset` accepts only optional columns; required ones must keep a value. Defaults apply to creates only. Patch cannot change identity, owner, flags or expiration and has no compare-and-set. Coordinate same-owner writers.
 
-Transfer inspection is a subsequent head read. Later transactions can change ownership or remove the entity before that read. Inspect the confirmed receipt and later operations before retrying; a read failure is not proof transfer failed.
+Create uses `(schema, values, { expiration, flags?, salt? }, txParams?)`. Batches place `{ schema, values, expiration, flags?, salt? }` in `creates`, and `{ schema, entityKey, set?, unset? }` in `patches`. The SDK orders creates → patches → deletes → extensions → ownership changes. One batch is atomic regardless of object property order; multiple batches are independent. Deleting then extending the same key fails the whole native batch.
 
-## Atomic batches and new references
+For Rabdi, explicit nonce/gas/gasPrice is the recommended default for every operation. Before these helpers, authorize the exact mutation, estimate it unsigned and compare the chosen gas × current gasPrice with the approved spend and balance. Single-operation floor: 1,000,000; N-operation batch floor: `1,000,000 + 400,000 × (N − 1)`. Large bytes require at least twice the measured maximum gas as well. Fresh latest/pending nonce checks require exclusive signer custody; they do not reserve a nonce across processes.
 
-`executeBatch` is atomic and the SDK orders operations as creates → patches → deletes → extensions → ownership changes, regardless of object property order. `patchThenDelete` patches first. If that patch fails, the deletion is not applied. Deleting and extending the same key in a batch fails because deletion runs first; split or change the intended operations.
+The helpers do not retry. At most one retry is allowed after a confirmed reverted receipt and a corrected cause; never retry successful or uncertain writes. A revert consuming the entire gas limit needs a larger approved cap. A successful receipt followed by failed decoding/readback is a reconciliation case, not a reverted write.
 
-To transfer several authorized entities atomically, use `await wallet.executeBatch({ ownershipChanges: [{ entityKey, newOwner }] })` with one entry per entity. Validate every destination and retain the transaction hash; a recipient does not consent to incoming ownership, and receiving a batch does not authenticate its content.
+## Corrections and identity
 
-The related-note example uses the creator's entity-minting nonce, not its transaction nonce. `NO_SALT` resolves to zero salt; it does not bypass nonce-based identity. Reuse the returned salts exactly. Any intervening create from that owner invalidates predictions, even from another application or wallet session. If result validation throws after confirmation, keep the transaction hash and actual keys, inspect and repair the child reference; do not resubmit the batch. Validation compares the complete create count and all predicted keys, not just the parent's key.
+Readonly corrections require a new entity and old-to-new mapping. Validate source provenance, preserve original creator/ownership history in an independently authenticated manifest and update authorized app references. A correction never authorizes deleting the original. New creates initially belong to and identify the restoring signer, not the old creator.
 
-Zero salts make keys predictable to anyone who knows the creator and minting nonce. When public predictability is unnecessary, request `count: 2` instead of explicit salts and reuse the returned random salts. For a cycle, predict every key first and place references on both creates; readonly references cannot be patched afterward. Both helpers accept a caller-selected `Expiry` instead of requiring the default 30 days.
+Same-batch key references require exclusive coordination of all creates from that signer, exact predicted salts and complete ordered key validation. Read [relationships](../arkiv-data-modeling/references/relationships.md). On a mismatch after confirmation retain the actual keys/hash and reconcile instead of resending.
 
-Without exclusive custody, use stable application IDs for independently recoverable writes, or create the parent first and use its confirmed key. Namespace and ID filters do not enforce uniqueness.
+Deletion and natural expiration remove live availability, not copies already read. A missing entity can also mean wrong key/network or reset. An expired entity cannot be revived under its original key. Read [backup/restore](references/backup-restore.md) for authenticated capture and reference remapping and expiration guidance for deadlines.
 
-## End of life and errors
+Verify successful receipts and fresh selected fields after each operation. A later read is a head observation, not necessarily the transaction's block state. Any ambiguous send or decoding failure goes to write-safety before another mutation.
 
-- Delete removes the live entity immediately; Entity Expiration removes it when its deadline is reached. Neither operation retracts copies already read by others. An expired entity cannot be revived: recreate it with a new key and remap references.
-- For one authorized entity, use `await wallet.deleteEntity({ entityKey })`; the caller must own it. Keep its transaction hash and reconcile before any retry.
-- Expiration emits no event. Poll or sweep deadlines using `arkiv-entity-expiration`. `NoEntityFoundError` covers never-created, deleted, and expired entities; it does not prove which occurred.
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
 
-| Error or revert | Action |
-| --- | --- |
-| `ReadOnlyEntity` | Create a corrected entity and remap references. |
-| `NotOwner` | Verify the current owner and connected account. Permissionless extension changes only extension rights. |
-| `TransferToSelf` / `TransferToZeroAddress` | Select a different nonzero owner. |
-| `EntityNotFound` / `EntityExpired` | Check the key, network, and historical context; a longer target does not revive it. |
-| `EmptyPatchError` | Supply at least one mutation or skip the operation. |
-| `ConflictingMutationError` | Remove names appearing in both `set` and `unset`. |
-| Local SDK `TooManyAttributesError` | Fit each operation within 32 cells, including supplied system cells. Split only when every intermediate and final entity state stays within 32 user attributes. |
-| Decoded engine `TooManyAttributes(count,32)` | The resulting entity has too many user attributes. Unset fields or explicitly move them into payload; splitting transactions does not fix this state limit. The decoded revert name need not appear in `error.name` or its message. |
-| `EntityMutationError` | Inspect its hash and receipt before retrying; load `arkiv-write-safety`. |
-
-The engine names above are decoded revert names, not JavaScript exception classes or guaranteed message fragments. Extract them through the cause chain using [the error catalog](../arkiv-troubleshooting/references/error-catalog.md). A decoded estimate rejection helps correct inputs, but only instrumented proof that send admission was never reached establishes no broadcast. Missing hashes and unchanged nonces alone do not; retain write-safety's reconciliation rule.
-
-## Verification and references
-
-Verify mutation receipts and read back the selected fields. If a connected read-only profile provides `verify_entity` or `verify_tx`, inspect its schema and use it as an additional check; the SDK and explorer remain sufficient, and signing keys stay in the developer's wallet or server.
-
-- [Backup and restore](references/backup-restore.md): pinned snapshots, new identities, relation remapping, and cyclic graphs.
-- [Native mutations](https://docs.arkiv.network/json-rpc/mutating-entities/): permissions, flags, batches, events, and exact revert names.
-- [Query fields](https://docs.arkiv.network/typescript-sdk/querying-data/): current owner versus immutable creator.
-- [SDK 0.8.1 source](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/): `entity/flags.ts`, `actions/wallet/patchEntity.ts`, `attr/attributes.ts`, `utils/arkivTransactions.ts`, and `actions/public/predictEntityKeys.ts`.
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

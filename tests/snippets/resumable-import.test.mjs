@@ -7,7 +7,7 @@ import { SourceTextModule, SyntheticModule } from 'node:vm';
 import { after, before, test } from 'node:test';
 import { makeFixture } from './fixtures/importer-rpc-fixture.mjs';
 
-// Reuse an existing SDK 0.8.1 test workspace; do not install root dependencies.
+// Reuse an existing SDK 1.0.0 test workspace; do not install root dependencies.
 // ARKIV_SNIPPET_WORKSPACE only locates installed SDK/viem dependencies.
 // Run: node --experimental-vm-modules --test tests/snippets/resumable-import.test.mjs
 const workspace = process.env.ARKIV_SNIPPET_WORKSPACE;
@@ -18,11 +18,11 @@ assert.ok(scratchRoot && path.isAbsolute(scratchRoot), 'Set ARKIV_IMPORT_TEST_SC
 const sdkRoot = path.join(workspace, 'node_modules', '@arkiv-network/sdk');
 const sdkJsonPath = path.join(sdkRoot, 'package.json');
 const originalSdkJson = await filesystem.readFile(sdkJsonPath, 'utf8');
-assert.equal(JSON.parse(originalSdkJson).version, '0.8.1', 'This deterministic receipt fixture targets SDK 0.8.1');
+assert.equal(JSON.parse(originalSdkJson).version, '1.0.0', 'This deterministic receipt fixture targets SDK 1.0.0');
 const sdk = await import(pathToFileURL(path.join(sdkRoot, 'dist/index.js')));
 const query = await import(pathToFileURL(path.join(sdkRoot, 'dist/query/index.js')));
 const chains = await import(pathToFileURL(path.join(sdkRoot, 'dist/chains/index.js')));
-const attr = await import(pathToFileURL(path.join(sdkRoot, 'dist/attr/index.js')));
+const attr = await import(pathToFileURL(path.join(sdkRoot, 'dist/schema/index.js')));
 const viemRoot = path.join(workspace, 'node_modules', 'viem');
 const viem = await import(pathToFileURL(path.join(viemRoot, '_esm/index.js')));
 const accounts = await import(pathToFileURL(path.join(viemRoot, '_esm/accounts/index.js')));
@@ -84,7 +84,7 @@ async function loadExactHelper(harness) {
     },
   };
   const bindings = new Map([
-    ['@arkiv-network/sdk', linkedSdk], ['@arkiv-network/sdk/query', query], ['viem', viem], ['node:fs/promises', isolatedFs],
+    ['@arkiv-network/sdk', linkedSdk], ['@arkiv-network/sdk/query', query], ['@arkiv-network/sdk/schema', attr], ['viem', viem], ['node:fs/promises', isolatedFs],
   ]);
   const module = new SourceTextModule(fences[0][1], { identifier: reference });
   await module.link(async specifier => {
@@ -97,10 +97,11 @@ async function loadExactHelper(harness) {
   return module.namespace;
 }
 
-async function withImport(count, action, { batchSize = 2, fees = { gasPrice: 1n } } = {}) {
+async function withImport(count, action, { batchSize = 2, fees = { gasPrice: 1n }, estimatedGas = 100000n } = {}) {
   const directory = await filesystem.mkdtemp(path.join(scratchRoot, 'arkiv-import-regression-'));
   const signer = accounts.privateKeyToAccount(accounts.generatePrivateKey()); // Synthetic key stays in memory.
   const fixture = makeFixture(signer.address, { sdk, viem, chains, attr });
+  fixture.estimatedGas = estimatedGas;
   const harness = { fixture, synced: [], signatures: 0, walletEntries: 0, fault: null };
   const account = { ...signer, signTransaction: async transaction => {
     harness.signatures++;
@@ -109,12 +110,14 @@ async function withImport(count, action, { batchSize = 2, fees = { gasPrice: 1n 
   } };
   harness.options = {
     account, chain: fixture.reader.chain, request: fixture.request, jobId: 'synthetic-receipt-regression',
-    batchSize, gasCeiling: 200000n, maxTotalCost: 10000000n, fees,
+    batchSize, gasCeiling: 10000000n, maxTotalCost: 100000000n, fees,
     planPath: path.join(directory, 'plan.json'), journalPath: path.join(directory, 'journal.jsonl'),
     rows: Array.from({ length: count }, (_, index) => ({
       id: `row-${index}`, salt: BigInt(index), expiresAt: fixture.head + 3600n,
-      payload: new TextEncoder().encode(JSON.stringify({ body: `Synthetic ${index}` })), contentType: 'application/json',
-      attributes: { project: 'synthetic-import', row_number: sdk.u64(BigInt(index)), enabled: sdk.bool(index % 2 === 0) },
+      schema: sdk.defineSchema('synthetic_import', { project: sdk.str().indexed(), row_number: sdk.u64().indexed(),
+        enabled: sdk.bool().indexed(), body: sdk.bytes(), media_type: sdk.str().default('application/json') }),
+      values: { body: new TextEncoder().encode(JSON.stringify({ body: `Synthetic ${index}` })),
+        project: 'synthetic-import', row_number: sdk.u64(BigInt(index)), enabled: sdk.bool(index % 2 === 0) },
       flags: { readonly: true },
     })),
   };
@@ -134,13 +137,13 @@ async function withImport(count, action, { batchSize = 2, fees = { gasPrice: 1n 
     assert.equal(fixture.sends.length, 0);
     fixture.beforeSend = async ({ method, params }) => {
       assert.equal(method, 'eth_sendRawTransaction');
-      const records = await harness.journal();
-      const saved = records.at(-1);
+      const entries = await harness.journal();
+      const saved = entries.at(-1);
       assert.equal(saved.state, 'submitting');
       assert.equal(saved.raw, params[0]);
       assert.equal(saved.txHash, viem.keccak256(params[0]));
       assert.equal(harness.synced.at(-1), 'submitting', 'Capture is durable before provider forwarding');
-      assert.equal(records.filter(record => record.state === 'verified').length, fixture.sends.length, 'Previous batches are verified before admitting another send');
+      assert.equal(entries.filter(record => record.state === 'verified').length, fixture.sends.length, 'Previous batches are verified before admitting another send');
     };
     await action(harness);
   } finally {
@@ -155,9 +158,9 @@ test('60 rows verify each current batch of 20 after its durable receipt, then co
   const request = h.options.request;
   h.options.request = async input => {
     if (input.method === 'arkiv_query') {
-      const records = await h.journal();
+      const entries = await h.journal();
       const batch = h.plan.batches[h.fixture.sends.length - 1];
-      const confirmation = records.find(record => record.index === batch.index && record.state === 'receipt_confirmed');
+      const confirmation = entries.find(record => record.index === batch.index && record.state === 'receipt_confirmed');
       assert.ok(confirmation, 'Receipt confirmation must precede field readback');
       assert.equal(h.synced.at(-1), 'receipt_confirmed');
       assert.equal(confirmation.txHash, h.fixture.sends.at(-1).txHash);
@@ -182,11 +185,11 @@ test('60 rows verify each current batch of 20 after its durable receipt, then co
 
 test('readback failure retains receipt_confirmed and resumes without repeating the accepted batch', () => withImport(3, async h => {
   h.fixture.hideEntities = true;
-  await assert.rejects(h.helper.runImport(h.options), /absent at the readback snapshot/);
-  const records = await h.journal();
-  assert.equal(records.at(-1).state, 'receipt_confirmed');
-  assert.deepEqual(records.at(-1).receipt.keys, h.plan.batches[0].rows.map(row => row.expectedKey));
-  assert.equal(records.filter(record => record.state === 'verified').length, 0);
+  await assert.rejects(h.helper.runImport(h.options), /absent at the current readback/);
+  const entries = await h.journal();
+  assert.equal(entries.at(-1).state, 'receipt_confirmed');
+  assert.deepEqual(entries.at(-1).receipt.keys, h.plan.batches[0].rows.map(row => row.expectedKey));
+  assert.equal(entries.filter(record => record.state === 'verified').length, 0);
   assert.equal(h.fixture.sends.length, 1);
   h.fixture.hideEntities = false;
   assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 2);
@@ -249,7 +252,7 @@ test('lost send response retains hash; reconciliation saves receipt before reads
   assert.equal(h.fixture.sends.length, 1);
   h.fixture.broadcastResponseLost = false;
   h.fixture.hideEntities = true;
-  await assert.rejects(h.helper.runImport(h.options), /absent at the readback snapshot/);
+  await assert.rejects(h.helper.runImport(h.options), /absent at the current readback/);
   assert.equal((await h.journal()).at(-1).state, 'receipt_confirmed');
   h.fixture.hideEntities = false;
   assert.equal((await h.helper.runImport(h.options)).state, 'complete');
@@ -333,3 +336,17 @@ test('EIP1559 signed fee intent still authenticates and verifies the current bat
   assert.equal((await h.journal()).at(-2).state, 'receipt_confirmed');
   assert.equal((await h.journal()).at(-1).state, 'verified');
 }, { fees: { maxFeePerGas: 2n, maxPriorityFeePerGas: 1n } }));
+
+test('twice the exact unsigned estimate governs gas when above the operation floor', () => withImport(1, async h => {
+  assert.equal(h.plan.batches[0].gas, '1600000');
+  assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 1);
+}, { estimatedGas: 800000n }));
+
+test('computed gas above the approved cap is refused before signing or submission', async () => {
+  await assert.rejects(withImport(1, async () => assert.fail('Must reject during preparation'), { estimatedGas: 6000000n }), /Estimated gas exceeds approved ceiling/);
+});
+
+test('Rabdi batch gas floor scales by actual operation count, with one-operation floor on the tail', () => withImport(3, async h => {
+  assert.deepEqual(h.plan.batches.map(batch => batch.gas), ['1400000', '1000000']);
+  assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 2);
+}));

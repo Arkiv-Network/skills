@@ -1,57 +1,45 @@
 ---
 name: arkiv-app-integration
-description: Integrate Arkiv SDK 0.8.x into server APIs, injected-wallet apps and event-driven caches. Use when building a read proxy, signing endpoint, wallet connection, DTO or live cache refresh; use arkiv-indexing for durable checkpointed mirrors and lifecycle skills for the entity mutation itself.
+description: Integrate SDK 1.0.0 into authenticated server APIs, read proxies, injected-wallet apps and event-driven caches on Rabdi. Use indexing for persistent projections and lifecycle for entity operations.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  network: tiramisu
-  verified: "2026-10-08"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
 ---
 
-# Arkiv app integration
+# Arkiv application integration
 
-Choose the signing boundary before adding an endpoint. Arkiv access keys authenticate RPC access; they do not authorize your application's users or pay the signer's gas.
+Choose the signing boundary before adding endpoints. Target SDK 1.0.0 on Rabdi. An RPC access key neither authorizes app users nor pays transaction gas. Read the installed declarations before generating code.
 
-## Server APIs
+## Server boundary
 
-- Keep signing keys and `X-API-KEY` access headers server-side. Use the consumer's secret store; never ask for private keys in chat or put them in public environment variables or browser bundles.
-- Use a credential-free RPC URL, including in server-only configuration; put the access key in the server-side `X-API-KEY` header. A separate low-quota key, read-only permissions or IP/Origin restrictions do not make publishing an access key in `NEXT_PUBLIC_*` or a browser bundle acceptable. Use the bounded authenticated proxy when browser reads require credentialed RPC access.
-- Authenticate the session, authorize the specific operation and check CSRF, apply an attempt limit, bound and validate input, then apply a separate write limit. Invalid input consumes only the attempt budget. Test denial paths against the writer.
-- A shared signer owns its new entities. Derive user identity from the verified session and enforce user access in the backend. A `user_id` attribute alone cannot enforce it on-chain. Choose a shared signer, separate server signers or a browser EOA deliberately.
-- Require a stable `Idempotency-Key` and a durable operation registry before writing. Bind each user's operation ID to normalized input, chain and signer; changed input conflicts. Serialize all writers sharing that signer across processes and persist intent/nonce/signed bytes/hash before broadcasting. Return known key/hash and phase on uncertain outcomes; a timeout never authorizes a second create. See `arkiv-write-safety` for reconciliation.
-- Give read proxies an allowlist of filters, page-size and total-page limits, response-size bounds and their own rate limits. Do not expose arbitrary credentialed RPC methods.
-- For fresh Next.js RPC reads, use client `cacheTime: 0` and `http(url, { fetchOptions: { cache: "no-store" } })`; explicitly bypass cached heads for snapshot/expiration checks. Inspect route, application, service-worker and CDN caches too; RPC transport options cannot clear those caches.
-- Return a narrow DTO with bigint block fields converted to decimal strings. Validate `entity.toJson()` before copying fields, then attach `arkivEntityKey` from the actual entity key.
+- Configure `rabdi({ accessKey })` with a server-side `ARKIV_ACCESS_KEY`. The SDK puts the key in the RPC URL path. Keep operator keys out of `NEXT_PUBLIC_*`, browser bundles, logs and returned errors; app reads use bounded server endpoints. Browser-wallet users configure their own RPC credentials.
+- Authenticate the session, authorize the exact operation, validate CSRF for cookie writes, apply an attempt limit, stream-bound and validate input, then apply the write budget. Prove denial paths never invoke the writer.
+- A shared signer owns/creates the entities. Derive app-user identity from the session and enforce app access server-side; a public user_id column is not authorization.
+- Bind a stable operation ID to normalized input, chain/reset identity and signer in a durable registry. Conflicting input returns a conflict. Serialize all writers sharing that signer across processes. Fsync intent and signed bytes/hash before broadcast; return original phase/key/hash after timeouts instead of starting a new create.
+- A read proxy allowlists filters, fields and ordering, bounds pages/bytes and rate limits callers. Do not expose arbitrary credentialed JSON-RPC. Preserve upstream failures as failures, never empty successes.
+- Use client `cacheTime: 0`, uncached head requests and `http(undefined, { fetchOptions: { cache: 'no-store', redirect: 'error' } })` for fresh server reads. Inspect route, service worker, app and CDN caches separately.
+- Return validated narrow DTOs, attach actual `$key` after parsing and convert bigint fields to decimal strings. Bytes columns decode as hex; use explicit UTF-8/JSON decoding and schema validation.
 
-Read [server-boundary.md](references/server-boundary.md) for the authorization seam and payload/DTO example. Supply real session, authorization, CSRF, rate limits and the required durable writer; a callback that directly creates on every retry violates its contract.
+Read [server-boundary](references/server-boundary.md) for the endpoint contract and DTO seam. Supply actual authentication, transactional persistence and attempt/write limits; an in-memory map or fresh create on every callback is not crash recovery.
 
-For provider HTTP `401`/`403`/`429`, preserve the actual status, provider code and safe diagnostic fields; never return an empty successful query. Check the access key's network, monthly cost-unit quota and IP/Origin allowlists in the [access-key guide](https://docs.arkiv.network/start-here/access-keys/). An Origin header can be forged outside a browser and is not application authentication. Respect `Retry-After` and provider cost/reset headers when supplied, stop retry storms, and keep credentialed URLs/headers out of client errors. App session failures and app rate limits are separate from provider denials.
+## Wallet connection
 
-## Browser wallets and caches
+Use an explicit connected EOA account and verify Rabdi `7794095` (`0x76edaf`) before signing. For an unknown chain, add its definition with the user's own access-key URL and `https://rabdi.explorer.arkiv.network`. Read [browser-wallet](references/browser-wallet.md). Wallet network configuration does not authenticate an app session.
 
-- Use an EOA wallet with an explicit connected `account`. Connect, switch to Tiramisu and handle unknown-chain code `4902` by adding the network with `blockExplorerUrls`. Recheck account/chain before each write.
-- Clear pending write state and switch cache scope on `accountsChanged`, `chainChanged` and disconnect. Remove only listeners registered by your component when it unmounts. A previously constructed wallet client does not follow a changed address automatically.
-- For **wagmi 2**, call `useAccount` and `useWalletClient` inside a component/custom hook in a stable, unconditional order. Return no Arkiv writer before a connected address and a Tiramisu wallet client exist. Do not use module-level hooks or non-null assertions before connection; verify exports for other installed versions.
-- Keep `arkivEntityKey` in the cached result type, such as `StoredPost[]`. Cache keys include chain, account/trusted publisher, namespace, entity type and filters. Disabled detail queries still guard an absent key inside the query function.
-- Faucet sign-in/SIWE is separate from your app session. Implement and verify the app's session; do not treat faucet access or possession of an RPC key as app authentication.
+Recheck account/chain before each write. On accountsChanged, chainChanged or disconnect, clear pending UI state, switch cache scope and ignore stale asynchronous responses. Remove only listeners registered by the component. A client created for an old address does not automatically follow changes. For installed wagmi/React integrations, inspect their actual exports and call hooks unconditionally in components/custom hooks before gating values.
 
-Read [browser-wallet.md](references/browser-wallet.md) for the injected-wallet connection helper. This does not demonstrate RainbowKit, embedded-wallet or account-abstraction compatibility.
+## Live cache behavior
 
-## Realtime synchronization
+SDK events are EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred and EntityDeleted. They carry operation/key context rather than full values. The watcher follows head and starts on its first poll; startup/disconnected intervals need current-state reconciliation. Natural expiration has no event.
 
-The five SDK events are `EntityCreated`, `EntityPatched`, `ExpiryExtended`, `OwnershipTransferred` and `EntityDeleted`. The watcher filters Arkiv's operation address, not your project's namespace. Entity Expiration has no event.
+Fetch unknown patched keys because updates can move them into scope. For owner-filtered collections, fetch unknown incoming transfer keys whose newOwner matches; known keys need prior-scope invalidation for any destination. Re-evaluate all schema, creator/publication, namespace, liveness and collection filters before inclusion. Incoming ownership is not trusted authorship.
 
-- Fetch even unknown `EntityPatched` keys and re-evaluate namespace, authenticated authorship and collection filters; a patch can move an entity into the collection. Extensions and deletes can use prior collection membership. With a creator allowlist, cheaply drop `EntityCreated` events whose `owner` is outside that allowlist before fetching; only this creation event's owner equals its creator at creation. Fetch and validate new candidates before including them. Use the publication gate in `arkiv-security-trust`.
-- For an owner-filtered collection, fetch unknown `OwnershipTransferred` keys only when `newOwner` matches the owner filter, comparing addresses case-insensitively. Re-evaluate all filters and the publication gate before caching; recipient consent is not required, so incoming ownership does not establish trust. For known keys, invalidate their previous scope and re-evaluate membership even when `newOwner` is outside the filter.
-- Invalidate detail and affected collection caches. Attribute/ownership changes can remove an entity from its previous scope; deletion requires the saved previous scope because a head read cannot fetch the deleted entity.
-- Catch asynchronous handler failures, serialize processing where order matters, and stop the synchronous unwatch function during cleanup. A decoded event is an invalidation signal, not the full updated entity.
-- Replay finite HTTP block ranges from a verified checkpoint. Shrink on `-32602 "query exceeds max results 20000, retry with the range a-b"` or viem's code-free `ResponseBodyTooLargeError`; clamp hints without skipping blocks and preserve the checkpoint on failure. Do not pass an old checkpoint directly to `watchEntityEvents({ fromBlock })`: viem's HTTP fallback can repeatedly request the entire gap. Fetch canonical hashes and use `arkiv-indexing` for durable replay/reorg recovery.
-- Periodically refetch or sweep actual expiration blocks against chain head. An idle event stream does not prove a healthy connection or an unexpired cache.
+Use a bounded serial processing queue, catch async failures, mark the cache unhealthy on overflow/disconnect and stop listeners during cleanup. A late active handler also needs a scope token/abort guard. Sweep expiration and reconcile full current scope periodically. Read [realtime](references/realtime.md) and indexing for persistent projections; do not promise historical replay from SDK 1.0.0.
 
-Read [realtime.md](references/realtime.md) when implementing events, replay, checkpoints or expiration-aware caches.
+## Verify the whole path
 
-## Verify the app boundary
+Test authorization/CSRF, invalid and oversized requests, attempt versus write quotas, duplicate/conflicting operation IDs, uncertain receipts and response failures after confirmation without a second create. Verify creator/readonly policy, malformed bytes/JSON, exact bigint DTOs, wallet rejection, account/chain changes, unknown patched/transfer-in membership and listener cleanup. Trace current RPC → API → DOM and every intervening cache; deterministic fixtures do not certify actual wallets, persistence or provider limits.
 
-Exercise unauthorized, forbidden, invalid, oversized (`413`) and rate-limited requests and prove that none invokes the writer. Test concurrent retries with one operation ID, conflicting input, unresolved receipts and post-confirmation response failure without another create or leaked provider error. Test injected account/chain changes, malformed/untrusted JSON, bigint DTO serialization, duplicate/replayed events, handler failure and cleanup. Test the consumer's real durable store, caches and session separately from a mocked SDK transport.
-
-Source basis: [SDK source](https://github.com/Arkiv-Network/arkiv-sdk-js), [access-key docs](https://docs.arkiv.network/start-here/access-keys/), [live-event docs](https://docs.arkiv.network/typescript-sdk/live-events/). Recheck the installed SDK and wallet libraries before adapting examples.
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.

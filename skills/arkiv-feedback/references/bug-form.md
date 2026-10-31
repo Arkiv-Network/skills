@@ -1,6 +1,6 @@
-# Bug form — checked 2026-10-08
+# Bug form — checked 2026-10-30
 
-Source: [upstream bug form](https://github.com/Arkiv-Network/reported-issues/blob/main/.github/ISSUE_TEMPLATE/1-bug.yml), [raw YAML](https://raw.githubusercontent.com/Arkiv-Network/reported-issues/main/.github/ISSUE_TEMPLATE/1-bug.yml). Keep heading labels verbatim. Upstream's DB-chain options omit Tiramisu; offer Tiramisu first, then Local / devnet and `Other (please describe in the steps)`. Do not recommend retired networks. If the user reports an older network, retain their actual context in the repro rather than pretending it was Tiramisu. In the web-form fallback, select Other and explain Tiramisu in the steps.
+Source: [upstream bug form](https://github.com/Arkiv-Network/reported-issues/blob/main/.github/ISSUE_TEMPLATE/1-bug.yml), [raw YAML](https://raw.githubusercontent.com/Arkiv-Network/reported-issues/main/.github/ISSUE_TEMPLATE/1-bug.yml). Keep heading labels verbatim. Upstream's DB-chain options omit Rabdi; offer Rabdi first, then Local / devnet and `Other (please describe in the steps)`. Do not recommend retired networks. If the user reports an older network, retain their actual context in the repro rather than pretending it was Rabdi. In the web-form fallback, select Other and explain Rabdi in the steps.
 
 Title prefix: `[Bug]: `. The web form prefills it; paste only the summary. Upstream labels: `bug`, `triage`, `reported-issue`; issue type: `bug`; project: `Arkiv-Network/4`. CLI submission may omit this metadata; labels require explicit flags and suitable permissions. Do not promise they are auto-applied by `gh`.
 
@@ -16,7 +16,7 @@ Title prefix: `[Bug]: `. The web form prefills it; paste only the summary. Upstr
 | Transaction hash or entity ID (if any) | No |
 | Anything else we should know? | No |
 
-Surface options: `SDK (@arkiv-network/sdk)`, `CLI / tooling`, `Block explorer`, `Entity Explorer (data.arkiv.network)`, `Documentation`, `Website`, `Other`. These are literal option values; formatting backticks are not part of the submitted value. Example current SDK version: `@arkiv-network/sdk@0.8.1`. Contact information will be public: let the user omit it.
+Surface options: `SDK (@arkiv-network/sdk)`, `CLI / tooling`, `Block explorer`, `Entity Explorer (data.arkiv.network)`, `Documentation`, `Website`, `Other`. These are literal option values; formatting backticks are not part of the submitted value. Example current SDK version: `@arkiv-network/sdk@1.0.0`. Contact information will be public: let the user omit it.
 
 ```markdown
 ### How can we reach you?

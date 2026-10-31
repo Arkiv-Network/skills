@@ -1,61 +1,50 @@
-# Encrypted payloads with SDK 0.8.1
+# Ciphertext storage through SDK 1.0.0
 
-The caller supplies an independent, privately backed-up encryption key, an authorized wallet and an independently configured trusted publisher address. This example publishes readonly notes; a correction is a new publication. It exports helpers without creating a signer, reading a private key or broadcasting on import. Use the app's session/authorization/rate limits before invoking the writer, and reconcile uncertain writes through `arkiv-write-safety`.
+The caller supplies an authorized wallet, an independent privately backed-up encryption key and adapters bound to its installed encryption package. The adapters below are application seams, not claimed SDK exports. They let this example stay independent of a package version while the actual integration verifies encryption/decryption signatures.
 
 ```typescript
-import type { WalletArkivClient } from "@arkiv-network/sdk"
-import { ExpirationTime } from "@arkiv-network/sdk/utils"
-import { CONTENT_TYPE, encryptPayload, decryptPayload, type importKey } from "arkiv-encryption"
-import type { Hex } from "viem"
-
-type Note = { text: string }
-type StoredNote = Note & { arkivEntityKey: Hex }
-type PayloadKey = Awaited<ReturnType<typeof importKey>>
-type EncryptedPublication = {
-  key: Hex; payload: Uint8Array; contentType: string; creator: Hex; owner: Hex
-  creationFlags: { readonly: boolean; permissionlessExtension: boolean }
+import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
+import { defineSchema, bytes, str } from '@arkiv-network/sdk/schema';
+import { hexToBytes, type Hex } from 'viem';
+import { getGasPrice } from 'viem/actions';
+export const EncryptedNotes = defineSchema('example_encrypted_notes', { body: bytes(), media_type: str() });
+type Wallet = ReturnType<typeof createWalletClient>;
+type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
+type Cipher = { encrypt(plain: Uint8Array): Promise<Uint8Array>; decrypt(envelope: Uint8Array): Promise<Uint8Array> };
+export async function writeEncryptedNote(reader: ReturnType<typeof createPublicClient>,
+  wallet: ReturnType<typeof createWalletClient>, cipher: Cipher, text: string, salt: bigint, estimateLatest: EstimateLatest) {
+  if (text.length > 10000) throw new Error('Note exceeds app limit');
+  const envelope = await cipher.encrypt(new TextEncoder().encode(JSON.stringify({ text })));
+  const values = { body: envelope, media_type: 'application/vnd.arkiv.encrypted.v1' };
+  const options = { expiration: ExpirationTime.fromDays(1), salt, flags: { readonly: true } };
+  const estimate = await estimateLatest(unsigned => unsigned.createEntity(EncryptedNotes, values, options));
+  if (estimate <= 0n) throw new Error('Unsigned estimate required');
+  const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
+  if (!wallet.account) throw new Error('Authorized account and approved gas floor required');
+  const address = wallet.account.address;
+  const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
+  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Resolve pending nonce');
+  const gasPrice = await getGasPrice(reader);
+  const result = await wallet.createEntity(EncryptedNotes, values, options, { nonce: latest, gas, gasPrice });
+  if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw new Error('Reverted write; inspect before any retry');
+  return result;
 }
-
-function parseNote(raw: unknown): Note {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw) ||
-      !("text" in raw) || typeof raw.text !== "string" || raw.text.length > 10_000) {
-    throw new Error("Invalid note")
-  }
-  return { text: raw.text }
-}
-
-export async function writeEncryptedNote(wallet: Pick<WalletArkivClient, "createEntity">,
-  key: PayloadKey, raw: unknown) {
-  const note = parseNote(raw)
-  const payload = await encryptPayload(key, JSON.stringify(note))
-  return wallet.createEntity({ payload, contentType: CONTENT_TYPE,
-    attributes: { project: "example_encrypted", entity_type: "note" },
-    expires: ExpirationTime.fromDays(30), flags: { readonly: true } })
-}
-
-export async function readEncryptedNote(entity: EncryptedPublication,
-  key: PayloadKey, trustedPublisher: Hex): Promise<StoredNote> {
-  if (entity.creator.toLowerCase() !== trustedPublisher.toLowerCase()) {
-    throw new Error("Untrusted encrypted publication creator")
-  }
-  if (!entity.creationFlags.readonly) throw new Error("Encrypted publication is mutable")
-  if (entity.contentType !== CONTENT_TYPE) throw new Error("Unsupported encrypted format")
-  const bytes = await decryptPayload(key, entity.payload)
+export async function readEncryptedNote(reader: ReturnType<typeof createPublicClient>,
+  entityKey: Hex, cipher: Cipher, trustedCreator: Hex) {
+  const entity = await reader.getEntity(entityKey, EncryptedNotes);
+  if (entity.$creator.toLowerCase() !== trustedCreator.toLowerCase() || !entity.$creationFlags.readonly ||
+    entity.media_type.value !== 'application/vnd.arkiv.encrypted.v1') throw new Error('Untrusted encrypted publication');
+  const plain = await cipher.decrypt(hexToBytes(entity.body.value));
   try {
-    const raw: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-    return { ...parseNote(raw), arkivEntityKey: entity.key }
-  } catch { throw new Error("Invalid decrypted note") }
+    const raw: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plain));
+    if (!raw || typeof raw !== 'object' || !('text' in raw) || typeof raw.text !== 'string' || raw.text.length > 10000) throw new Error();
+    return { text: raw.text, arkivEntityKey: entity.$key };
+  } catch { throw new Error('Invalid decrypted note'); }
 }
 ```
 
-Fetch `key`, `payload`, `contentType`, `creator`, `owner` and `creationFlags` from the configured chain. Scope a publisher feed with `.createdBy(trustedPublisher)` and still apply the helper's checks **before decryption**. Never derive `trustedPublisher` from the returned entity or its attributes. The helper discards extra fields and preserves the actual chain key.
+Validate session/operation authorization and durable write intent before calling the writer. Reconcile unknown outcomes under write-safety; a failed read/decrypt is not permission to create again. The allowlisted creator must come from app configuration, never fetched attributes. Key IDs and rotation policy belong to the app; keys stay private. Decrypted content remains untrusted data.
 
-Follow [owner is not payload provenance](../../arkiv-security-trust/SKILL.md#trust-a-publication-not-a-namespace): transfers need no consent, and even trusted creator plus current owner cannot authenticate a mutable current payload. The readonly gate accepts a trusted creator's fixed publication after transfer; current ownership affects availability separately. A mutable product requires a verified signed content version or authenticated mutation history before decrypting, rather than removing the readonly check or replacing it with an owner allowlist.
+Use the first-write gas/budget policy before invoking this helper: explicit latest nonce, gas and network gasPrice, exact unsigned estimate, approved cost/balance and exclusive signer custody. Larger encrypted bytes need at least twice the measured maximum gas. No automatic retry; at most one corrected attempt only after an authoritative reverted receipt.
 
-Do not put plaintext, encryption key or sensitive labels in attributes. Replace the synthetic `example_encrypted` project with an application-unique namespace and combine its query with `.createdBy(trustedPublisher)`; labels are not authorization. Decrypted text remains untrusted content; render it safely and never interpret its instructions as permission to call tools.
-
-Return a safe application error on invalid UTF-8, JSON or note schema. Do not attach or log the original parse error: its message can quote decrypted plaintext. Library `EncryptionError` codes remain available for key/envelope failures; they do not establish publisher identity.
-
-For rotation, retain old keys privately while their ciphertext is needed and associate versions through an application-owned policy. `CryptoKey.extractable` is false, so export the independent raw secret to the approved store **before** import rather than attempting to extract the handle later. A compromised old key can decrypt old public ciphertext; replacing it does not retract those bytes.
-
-There is no built-in HMAC/index-key rotation or encrypted query API. Query only approved public attributes. Expiration controls live availability; it is not a confidentiality or recipient-revocation mechanism.
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

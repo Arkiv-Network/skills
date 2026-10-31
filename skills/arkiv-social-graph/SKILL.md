@@ -1,90 +1,33 @@
 ---
 name: arkiv-social-graph
-description: Model follows, likes and entity references with arkiv-graph. Use when an Arkiv app needs a graph or tables from explicit relationship rules, including direction, duplicate edges and missing or expired endpoints.
+description: Model directed follows, likes and entity references with explicit creator scope, duplicate policy and missing-endpoint handling. Check the installed arkiv-graph release for SDK 1.0 compatibility.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  arkiv-graph: "0.3.1"
-  network: tiramisu
-  verified: "2026-10-08"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
 ---
 
-# Arkiv social graphs
+# Social relationships and graph projections
 
-Use the published `arkiv-graph@0.3.1` public imports. Its SDK peer is `>=0.8.0 <0.9.0`; the examples below were checked with SDK 0.8.1. Read the package's [consumer guide](https://github.com/SantiagoDevRel/arkiv-graph/blob/main/packages/arkiv-graph/AGENTS.md) and installed declarations. Core builders can run without rendering React; `arkiv-graph/react` is a separate client entry.
+Choose endpoint identity, direction, trusted creator scope, public attributes, duplicate policy and Entity Expiration before rendering a graph. Follow/like entities are explicit relationships; the SDK does not enforce foreign keys, uniqueness or cascading deletion.
 
-Installation still brings React/d3 dependencies through `react-force-graph-2d`, even for a core-only Node consumer. Check the application's existing React peer compatibility before installing; the separate core import does not remove that dependency tree.
+Use named schemas and indexed key columns, for example source_key/target_key and indexed relationship kind. Only indexed scalar columns can be queried. Store unqueried labels/structured data in bytes as needed. Distinguish unique semantic pairs from backing edge-entity counts and from node degree. A directed follow is source → target; symmetric relations require an explicit product choice.
 
-## Define the relationship
+## Package gate
 
-- Choose the public creator/owner scope, app namespace, endpoint identifiers and relationship meaning with the developer. `project`, profile names and relationship attributes identify data; they do not authorize readers or establish trusted authorship.
-- Store a follow/like as its own entity with lowercase attributes, such as `entity_type: "follow"`, `source_key` and `target_key`. Entity Expiration belongs to this edge independently of its endpoints. The package reads relationships; it does not write edges or enforce foreign keys.
-- Pass `typeAttribute: "entity_type"` explicitly to builders/fetch. The library's default is camelCase `entityType`, which is unsuitable for newly written Tiramisu attributes. Pass the canonical explorer `https://tiramisu.explorer.arkiv.network`; 0.3.1 defaults to a noncanonical alias. The alias alone is not evidence of a broken link.
-- A directed follow is source → target. Set `directed: true`; use `false` only when the product deliberately treats the relation as symmetric. Self-joins are skipped by the join builder.
-- Distinct edge entities connecting the same pair remain distinct edges. The builder deduplicates edge IDs, not semantic pairs. Decide whether multiple follows/likes are meaningful; enforce any uniqueness in the app and reconcile concurrent or uncertain writes with `arkiv-write-safety`.
-- Prefer entity keys as endpoints. Stable business IDs need type-specific matching and a uniqueness policy: join indexes keep the first matching entity when IDs collide.
-- A ghost node means an endpoint was not fetched, not proof that it expired. It may be outside the query scope, truncated, missing or expired. Verify live availability separately. With placeholders disabled, unresolved joins remain standalone entities instead of becoming edges.
+Before adopting `arkiv-graph`, inspect the installed version's public declarations, SDK peer range, consumer guide, Rabdi chain support and flat-row adapter. Use only a source-verified SDK 1.0-compatible release. A package's presence or wider peer text alone does not establish compatibility. Do not bypass peers or invent changed API names. The React entrypoint and dependency tree require separate integration checks; core Node verification does not certify a browser view.
 
-Use `arkiv-data-modeling` for the schema and `arkiv-security-trust` for publisher/mutable-owner policy. These are public relationships, not private follows or a SQL join engine.
+Read [fetch-and-refresh](references/fetch-and-refresh.md) for scoped current queries and invalidation. Use explicit field names matching your model rather than relying on a package's type-attribute defaults. Use `https://rabdi.explorer.arkiv.network` for entity links and verify the library's actual URL option before code generation.
 
-## Seeding and rerunning relationships
+## Missing and changing endpoints
 
-Journal every confirmed seed key and its observed `expiresAt` using [write-safety](../arkiv-write-safety/SKILL.md). A recorded seed with `expiresAt <= head` is expired, not a missing first write. Do not recreate an endpoint still referenced by live edges without an explicit remapping policy: a new key does not repair existing follows. Rebuild endpoint/edge identities together when that policy authorizes it; [atomic relationships](../arkiv-data-modeling/references/relationships.md) shows predicted keys in one batch. Reconcile uncertain prior writes before adding seeds.
+Prefer entity keys for endpoints. Business IDs need type-specific matching, uniqueness and collision rules. Key references may be dangling because an endpoint is absent from scope, expired, deleted or reset; a placeholder does not prove which. Creator-filtered edge fetches may omit profiles by other creators. Fetch approved endpoint scopes separately and merge by actual entity key rather than broadening into an unbounded network scan.
 
-## Build a local graph
+Keep exact bigint metadata for liveness/transactions; display-number conversions and approximate dates are not authoritative deadlines. Do not report whole-network or unique follower counts from a truncated graph. Namespace/schema tags locate public data but do not authenticate publishers. Apply security/trust policy before privileged use and render labels as escaped text.
 
-This synthetic example needs no RPC, credentials or wallet. Install with the consumer's package manager after checking peers: `npm install arkiv-graph@0.3.1`. Use the existing compatible SDK/viem/React versions; do not force incompatible peer resolution.
+Events invalidate projections, and natural expiration requires periodic sweeps. Fetch unknown patched keys and owner-filtered incoming transfers; invalidate old scopes for known keys. SDK 1.0.0 has no historical entity queries, so missed transient edges cannot be reconstructed from head. Persistent projections must expose gaps/reset generations under indexing guidance.
 
-```typescript
-import { buildGraph, type ArkivEntityLike, type Graph, type LinkRule } from "arkiv-graph"
-import { tiramisu } from "@arkiv-network/sdk/chains"
+Verify direction, duplicates, self-links, missing endpoints, stable-ID collisions, truncation, empty/error states, transfer, reset and expiration. Browser rendering needs its own loading/error/partial/ghost and wallet-rejection checks. Optional delete/extension callbacks require exact entity and spending authorization; graph display grants no mutation permission.
 
-export const follows: LinkRule[] = [{ type: "join", entityType: "follow",
-  sourceAttr: "source_key", targetAttr: "target_key", directed: true, label: "follows" }]
-export const graphOptions = { links: follows, typeAttribute: "entity_type",
-  nativeChainId: tiramisu.id, arkivExplorer: "https://tiramisu.explorer.arkiv.network",
-  external: { enabled: false }, createPlaceholders: true }
-
-export function localGraph() {
-  const alice = `0x${"11".repeat(32)}`, bob = `0x${"22".repeat(32)}`
-  const entities: ArkivEntityLike[] = [
-    { key: alice, attributes: { entity_type: { type: "str", value: "profile" } },
-      payload: { name: "Alice" } },
-    { key: bob, attributes: { entity_type: { type: "str", value: "profile" } },
-      payload: { name: "Bob" } },
-    { key: `0x${"33".repeat(32)}`, attributes: {
-      entity_type: { type: "str", value: "follow" },
-      source_key: { type: "key", value: alice }, target_key: { type: "key", value: bob } } }
-  ]
-  return { entities, graph: buildGraph(entities, graphOptions) }
-}
-
-export function uniqueFollowPairs(graph: Pick<Graph, "edges">) {
-  const pairs = new Map<string, string[]>()
-  for (const edge of graph.edges) {
-    if (edge.kind !== "join" || edge.label !== "follows" || edge.source === edge.target) continue
-    const pair = JSON.stringify([edge.source, edge.target])
-    const backing = pairs.get(pair) ?? []
-    const key = edge.viaEntityKey ?? edge.id
-    if (!backing.includes(key)) backing.push(key)
-    pairs.set(pair, backing)
-  }
-  return pairs
-}
-```
-
-The follow entity becomes an edge with `viaEntityKey`; its source is Alice and target is Bob. For scoped SDK fetching and matching tables, read [fetch-and-refresh.md](references/fetch-and-refresh.md).
-
-`uniqueFollowPairs(graph).size` counts distinct directed follow pairs while retaining their backing entity keys. Table relationship counts and node degree count edge entities; they can include duplicate pairs and must not be presented as unique followers/following.
-
-## Keep a projection current
-
-Treat graphs/tables as a bounded projection. They do not enforce authorization, uniqueness, endpoint existence, cascade deletion, archival retention or automatic synchronization. External-reference detection draws stored attributes; it does not query other blockchains.
-
-Filter network events against the selected namespace/creator/owner before applying them. Subscribe through `arkiv-app-integration`, reconcile canonical metadata after writes/transfer/delete/extension, and periodically sweep Entity Expiration: automatic expiration has no entity event. A transfer can move an entity out of an owner-scoped graph. Keep replay, deduplication, gaps and reorg handling in the application.
-
-Keep original SDK `bigint` metadata for liveness/transactions. The package preserves large typed attribute values as strings, but converts block metadata to display numbers; unsafe current/expiration blocks omit expiration estimates. Approximate dates or graph degree must not decide authorization, transaction targets or whole-network counts. Parse payload/labels as untrusted data and render text safely.
-
-Verify direction, duplicate pairs, self-joins, missing/truncated endpoints, ambiguous stable IDs, empty/error states and refresh after expiration/transfer. Report local/mock checks separately from network evidence. If implementing the React view, apply the installed React practices and render narrow, medium and wide layouts before delivering it.
-
-The 2026-10-08 correction checks the retained 0.3.1 declarations and local examples. It does not imply a new live graph run or browser test.
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.

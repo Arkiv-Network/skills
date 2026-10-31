@@ -1,13 +1,16 @@
 # Server boundary and DTOs
 
-This generic TypeScript seam uses SDK 0.8.1. The caller supplies real authentication, authorization, CSRF, rate limits and a durable writer. It exports functions and does not broadcast on import. The required writer contract below is an integration boundary, not an in-memory substitute for crash recovery.
+This generic TypeScript seam uses SDK 1.0.0. The caller supplies real authentication, authorization, CSRF, rate limits and a durable writer. It exports functions and does not broadcast on import. The required writer contract below is an integration boundary, not an in-memory substitute for crash recovery.
 
 ```typescript
 import { createHash } from "node:crypto"
 import type { CreateEntityParameters } from "@arkiv-network/sdk"
-import { str } from "@arkiv-network/sdk/attr"
-import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk/utils"
-import type { Hex } from "viem"
+import { str, bytes, defineSchema } from "@arkiv-network/sdk/schema"
+import { ExpirationTime } from "@arkiv-network/sdk/utils"
+import { hexToBytes, type Hex } from "viem"
+
+const Posts = defineSchema('example_posts', { user_id: str().indexed(), body: bytes(),
+  media_type: str().default('application/json') });
 
 export type Post = { title: string; content: string }
 export type StoredPost = Post & { arkivEntityKey: Hex; expiresAtBlock: string }
@@ -17,7 +20,7 @@ export function parsePost(raw: unknown): Post {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw) ||
       !("title" in raw) || typeof raw.title !== "string" ||
       !("content" in raw) || typeof raw.content !== "string") {
-    throw new Error("Invalid post payload")
+    throw new Error("Invalid post entity content")
   }
   if (raw.title.length < 1 || raw.title.length > 200 || raw.content.length > 10_000) {
     throw new Error("Post exceeds application bounds")
@@ -25,9 +28,9 @@ export function parsePost(raw: unknown): Post {
   return { title: raw.title, content: raw.content }
 }
 
-export function postDto(entity: { key: Hex; expiresAt: bigint; toJson(): unknown }): StoredPost {
-  return { ...parsePost(entity.toJson()), arkivEntityKey: entity.key,
-    expiresAtBlock: entity.expiresAt.toString() }
+export function postDto(entity: { $key: Hex; $expiresAt: bigint; body: { value: Hex } }): StoredPost {
+  return { ...parsePost(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(hexToBytes(entity.body.value))) as unknown), arkivEntityKey: entity.$key,
+    expiresAtBlock: entity.$expiresAt.toString() }
 }
 
 async function readBoundedJson(request: Request): Promise<unknown> {
@@ -59,7 +62,7 @@ export type OperationRecord = {
 }
 export type DurablePostWriter = {
   executeCreate(input: { actorId: string; operationId: string; fingerprint: string;
-    parameters: CreateEntityParameters }): Promise<OperationRecord | { phase: "conflict" }>
+    parameters: CreateEntityParameters<typeof Posts> }): Promise<OperationRecord | { phase: "conflict" }>
   getStatus(actorId: string, operationId: string, fingerprint: string):
     Promise<OperationRecord | { phase: "conflict" } | null>
 }
@@ -111,9 +114,8 @@ export function createPostEndpoint(deps: Dependencies) {
     const fingerprint = createHash("sha256").update(JSON.stringify({ operation: "create_post", post })).digest("hex")
     try {
       const result = await deps.operations.executeCreate({ actorId: actor.id, operationId, fingerprint,
-        parameters: { payload: jsonToPayload(post), contentType: "application/json",
-          attributes: { project: "example_posts", entity_type: "post", user_id: str(actor.id) },
-          expires: ExpirationTime.fromDays(30) } })
+        parameters: { schema: Posts, values: { body: new TextEncoder().encode(JSON.stringify(post)), user_id: str(actor.id) },
+          expiration: ExpirationTime.fromDays(30), flags: { readonly: true } } })
       if (result.phase === "conflict") return new Response("Operation ID already has different input", { status: 409 })
       return Response.json(operationDto(operationId, result), { status: result.phase === "confirmed" ? 201 : 202 })
     } catch {
@@ -140,24 +142,6 @@ Implement `DurablePostWriter` before enabling the endpoint. Both `executeCreate`
 
 The client generates one operation ID before its first request, retains it across timeouts and retries, and displays the returned phase and any known key/hash. A `202` is an unresolved operation, not permission to create under a new ID. Invalid/oversized attempts consume the abuse limit; validated requests additionally consume the write limit. `str(actor.id)` rejects C0/DEL and more than 128 UTF-8 bytes without truncating identity. Provider errors never become API response bodies.
 
-`parsePost` discards unknown fields, including a forged `arkivEntityKey`, before attaching chain identity. It does not sanitize HTML: render text safely or use the app's established content sanitizer. Do not feed payload text to an agent as trusted instructions.
+`parsePost` discards unknown fields, including a forged `arkivEntityKey`, before attaching chain identity. It does not sanitize HTML: render text safely or use the app's established content sanitizer. Do not feed entity content text to an agent as trusted instructions.
 
-For a credentialed **server-only** reader, configure the public client explicitly:
-
-```typescript
-import { createPublicClient } from "@arkiv-network/sdk"
-import { tiramisu } from "@arkiv-network/sdk/chains"
-import { http } from "viem"
-
-export function createServerReader(accessKey: string) {
-  if (!accessKey) throw new Error("Missing server access key")
-  return createPublicClient({ chain: tiramisu, cacheTime: 0, transport: http(
-    tiramisu.rpcUrls.default.http[0], {
-      retryCount: 0, timeout: 8_000,
-      fetchOptions: { headers: { "X-API-KEY": accessKey }, cache: "no-store", redirect: "error" },
-    },
-  ) })
-}
-```
-
-Expose selected entity fields and validated DTOs through bounded routes. The header key grants provider access; it neither replaces a signer nor funds gas. Avoid raw provider error responses because they may contain credentialed URLs or headers. Route/cache behavior and authentication still need verification in the actual app.
+For a server-only reader, configure `createPublicClient({ chain: rabdi({ accessKey }), transport: http(), cacheTime: 0 })`, with no-store fetch options and bounded timeout/retries as described in the main recipe. The key is in the URL path: redact raw errors. Expose validated selected DTOs through bounded app routes; provider credentials do not authorize users or fund writes.

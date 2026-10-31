@@ -1,48 +1,40 @@
-# Injected browser wallet
+# Injected wallet connection on Rabdi
 
-This helper connects an EIP-1193 wallet and supplies an explicit account to SDK 0.8.1. Run it in a user-triggered browser interaction. It does not sign an entity write or supply a server key. `isAddress` validates address format only; it does not prove an EOA or account-abstraction compatibility. Verify the intended wallet's EOA signing path separately.
+Run this in a user-triggered interaction. The user supplies their own free RPC key from [Hub access keys](https://hub.arkiv.network/access-keys); never give a browser the operator's server key. The chain definition embeds that key in its URL. Do not log the provider, chain object or raw errors.
 
 ```typescript
-import { createWalletClient } from "@arkiv-network/sdk"
-import { tiramisu } from "@arkiv-network/sdk/chains"
-import { custom, isAddress, type EIP1193Provider } from "viem"
+import { createWalletClient } from '@arkiv-network/sdk';
+import { rabdi } from '@arkiv-network/sdk/chains';
+import { custom, isAddress, type EIP1193Provider } from 'viem';
 
-export async function connectArkivWallet(provider: EIP1193Provider) {
-  const addresses = await provider.request({ method: "eth_requestAccounts" })
-  const account = addresses[0]
-  if (!account || !isAddress(account)) throw new Error("Connect a valid wallet account")
+export async function connectArkivWallet(provider: EIP1193Provider, userAccessKey: string) {
+  const chain = rabdi({ accessKey: userAccessKey });
+  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const account = addresses[0];
+  if (!account || !isAddress(account)) throw new Error('Connect a valid account');
   try {
-    await provider.request({ method: "wallet_switchEthereumChain",
-      params: [{ chainId: "0x7614d1" }] })
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x76edaf' }] });
   } catch (error) {
-    if (typeof error !== "object" || error === null || !("code" in error) ||
-        error.code !== 4902) throw error
-    await provider.request({ method: "wallet_addEthereumChain", params: [{
-      chainId: "0x7614d1", chainName: "Arkiv Tiramisu Testnet",
-      nativeCurrency: tiramisu.nativeCurrency,
-      rpcUrls: [tiramisu.rpcUrls.default.http[0]],
-      blockExplorerUrls: ["https://tiramisu.explorer.arkiv.network"],
-    }] })
-    await provider.request({ method: "wallet_switchEthereumChain",
-      params: [{ chainId: "0x7614d1" }] })
+    if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== 4902) throw error;
+    await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x76edaf',
+      chainName: 'Rabdi', nativeCurrency: chain.nativeCurrency,
+      rpcUrls: [chain.rpcUrls.default.http[0]], blockExplorerUrls: [chain.blockExplorers.default.url] }] });
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x76edaf' }] });
   }
-  if (await provider.request({ method: "eth_chainId" }) !== "0x7614d1") {
-    throw new Error("Wallet is not on Tiramisu")
-  }
-  const current = await provider.request({ method: "eth_accounts" })
-  if (current[0]?.toLowerCase() !== account.toLowerCase()) {
-    throw new Error("Wallet account changed during connection")
-  }
-  return createWalletClient({ chain: tiramisu, account, transport: custom(provider) })
+  const actualChain = await provider.request({ method: 'eth_chainId' });
+  if (BigInt(actualChain) !== 7794095n) throw new Error('Wallet is not on Rabdi');
+  const current = await provider.request({ method: 'eth_accounts' });
+  if (current[0]?.toLowerCase() !== account.toLowerCase()) throw new Error('Account changed during connection');
+  return createWalletClient({ chain, account, transport: custom(provider) });
 }
 ```
 
-An injected provider can change while the connection dialog is open. This helper rechecks the selected account after switching; the app must also recheck it and the chain immediately before signing. Handle rejection as a canceled interaction, without retrying a write.
+Address-format validation does not prove EOA or account-abstraction compatibility. This helper requests connection/network configuration; it sends no entity transaction. Respect user rejection. Recheck account, chain, entity authorization and budget before signing.
 
-Register `accountsChanged`, `chainChanged` and `disconnect` listeners to reset pending state and caches; remove these same listeners on cleanup. Cancel/ignore late reads from the previous scope. Do not keep using a wallet client created with a former address.
+Handle accountsChanged, chainChanged and disconnect by changing cache scope, clearing pending UI state and guarding late responses. Remove only your own listeners. Reconstruct a wallet client after address changes. App login and faucet sign-in are separate from wallet/RPC access.
 
-For wagmi 2, call hooks unconditionally inside a React component/custom hook, then gate their returned values. Confirm the connected address and Tiramisu chain on both account state and wallet client before constructing an Arkiv client with `account: address` and `transport: custom(walletClient.transport)`. Check other versions' exports rather than copying a hook name blindly. Cache result types must retain chain entity identity, not only payload fields. See the versioned [useAccount](https://2.x.wagmi.sh/react/api/hooks/useAccount) and [useWalletClient](https://2.x.wagmi.sh/react/api/hooks/useWalletClient) docs.
+Verify the intended wallet's unsigned request, nonce, selected RPC and approved transaction on Rabdi before claiming wallet-specific behavior. A local SDK signer test does not establish injected-wallet compatibility. Do not diagnose nonce problems from a generic RPC execution message alone.
 
-Tiramisu uses chain ID `7738577` (`0x7614d1`). Its SDK chain definition does not include `blockExplorers`, so the add-chain request includes the official explorer explicitly. Read [network documentation](https://docs.arkiv.network/networks/tiramisu/) before changing connection details. Provider availability, wallet UI, browser behavior and rate limits need consumer-specific verification.
+Include explicit gas and network gasPrice in the wallet request; do not leave Rabdi estimation to MetaMask. Under exclusive account custody, read the transaction nonce at latest and check pending before proposing. Use first-write's measured floor of 1,000,000 plus 400,000 per extra batch operation, exact-operation estimate and approved fee budget; large bytes need at least twice measured maximum gas. Verify receipt.status. At most one corrected retry after an authoritative revert; successful or uncertain writes require reconciliation. Keep state reads at latest/pending to avoid head-only errors.
 
-The `4902` branch follows [MetaMask network management](https://docs.metamask.io/metamask-connect/evm/guides/manage-networks/). Other providers may report different errors; preserve their actual codes and messages rather than treating every switch failure as an unknown network.
+Source: [SDK chain](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/chains/rabdi.ts), [wallet client](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/clients/createWalletClient.ts).

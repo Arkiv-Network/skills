@@ -1,99 +1,59 @@
-# Backup and restore
+# Authenticated backup and restore
 
-A backup is a snapshot of selected live Arkiv entities, not a copy of all historical transactions. Choose the chain, namespace, creator/provenance policy, selection, and block before exporting. Preserve that block if a historical query fails; silently restarting at head changes the backup.
-
-## Capture a consistent snapshot
-
-This server-compatible module captures all pages at one block and returns JSON-safe values. The selection includes payload, typed attributes, flags, owner, creator, and deadline; a keys-only query is insufficient for restoration. The SDK decoder does not validate application JSON, so preserve raw payload bytes and validate them separately before restoring application data.
+SDK 1.0.0 queries current entity state only. A multi-page export is normally a series of observations. The helper below fails unless every page is observed at the same unchanged head; use an exclusive writer/maintenance window and bound retries outside this helper. It does not request historical state or recover expired entities.
 
 ```typescript
-import { createPublicClient } from "@arkiv-network/sdk"
-import { eq } from "@arkiv-network/sdk/query"
-import { bytesToHex, type Address } from "viem"
+import { createPublicClient } from '@arkiv-network/sdk';
+import { key, str } from '@arkiv-network/sdk/schema';
+import { asc, eq, gt } from '@arkiv-network/sdk/query';
+import type { Address, Hex } from 'viem';
 
-type Reader = ReturnType<typeof createPublicClient>
-
-export async function captureSnapshot(
-  reader: Reader, project: string, trustedCreator: Address,
-) {
-  const atBlock = await reader.getBlockNumber({ cacheTime: 0 })
-  let page = await reader.select("*")
-    .where(eq("project", project)).createdBy(trustedCreator)
-    .atBlock(atBlock).limit(100).fetch()
-  const entities = [...page.entities]
-  while (page.hasNextPage()) {
-    page = await page.next()
-    entities.push(...page.entities)
+export async function captureSnapshot(reader: ReturnType<typeof createPublicClient>,
+  schemaName: string, trustedCreator: Address, maxPages = 20) {
+  if (!Number.isSafeInteger(maxPages) || maxPages < 1) throw new Error('Invalid page budget');
+  const head = await reader.getBlockNumber({ cacheTime: 0 });
+  const header = await reader.getBlock({ blockNumber: head });
+  const genesis = await reader.getBlock({ blockNumber: 0n });
+  if (!header.hash || !genesis.hash) throw new Error('Missing source identity');
+  const entities = [];
+  let last: Hex | undefined;
+  let complete = false;
+  for (let n = 0; n < maxPages; n++) {
+    const query = reader.select({ $key: true, $owner: true, $creator: true,
+      $createdAt: true, $updatedAt: true, $expiresAt: true, $creationFlags: true,
+      $attributes: true, $attributeSchema: true }).where(eq('arkiv.schema', str(schemaName)))
+      .createdBy(trustedCreator).orderBy(asc('$key')).limit(100);
+    if (last) query.where(gt('$key', key(last)));
+    const page = await query.fetch();
+    if (page.blockNumber !== head) throw new Error('Source changed during export; keep incomplete export unpublished');
+    entities.push(...page.entities);
+    if (page.entities.length < 100) { complete = true; break; }
+    const next = page.entities.at(-1)?.$key;
+    if (!next || (last && next.toLowerCase() <= last.toLowerCase())) throw new Error('Keyset did not advance');
+    last = next;
   }
-  return {
-    chainId: reader.chain?.id,
-    atBlock: atBlock.toString(),
-    entities: entities.map(entity => ({
-      oldKey: entity.key, owner: entity.owner, creator: entity.creator,
-      createdAt: entity.createdAt.toString(),
-      updatedAt: entity.updatedAt.toString(),
-      expiresAt: entity.expiresAt.toString(),
-      flags: {
-        readonly: entity.creationFlags.readonly,
-        permissionlessExtension: entity.creationFlags.permissionlessExtension,
-      },
-      contentType: entity.contentType,
-      payloadHex: bytesToHex(entity.payload),
-      attributes: Object.entries(entity.attributes).map(([name, typed]) => ({
-        name, type: typed.type,
-        value: typeof typed.value === "bigint" ? typed.value.toString() : typed.value,
-      })),
-    })),
-  }
+  if (!complete) throw new Error('Export page budget exhausted');
+  const finalHead = await reader.getBlockNumber({ cacheTime: 0 });
+  const finalHeader = await reader.getBlock({ blockNumber: head });
+  if (finalHead !== head || finalHeader.hash !== header.hash) throw new Error('Source changed during export');
+  return JSON.parse(JSON.stringify({ format: 1, chainId: reader.chain?.id,
+    genesisHash: genesis.hash, observedBlock: head, observedHash: header.hash,
+    schemaName, trustedCreator, entities }, (_, v) => typeof v === 'bigint' ? v.toString() : v)) as unknown;
 }
 ```
 
-Persist the returned object only after every page succeeds. Keep a manifest with the source network, snapshot block, entity count, payload checksums, format version, and query/trust scope. A snapshot can contain sensitive application data even though the chain data is public; honor the user's chosen destination.
+Persist only a successful complete export. Keep an independently authenticated manifest binding source chain/genesis/head/hash, scope, each original key, typed values, indexing, creation flags, creator/owner and content checksums. A file's own checksum does not authenticate its claims. Before a trusted signer restores, authenticate each source publication: readonly by an independently trusted creator, an exact version signed by an authorized publisher, or complete authenticated mutation provenance. Creator plus current owner is insufficient for mutable content.
 
-Creator scoping identifies only the original publisher. Neither the current owner nor creator + owner authenticates a mutable payload; see [publication authentication](../../arkiv-security-trust/SKILL.md#trust-a-publication-not-a-namespace). Trust snapshot content only if it is readonly by an independently allowlisted creator, has an exact version signed by an independently authorized publisher, or has authenticated mutation history. A version signature must bind the source chain, original entity key, content type, exact payload hash and canonical typed attributes; a valid signature from an untrusted signer is insufficient. Do not restore unsigned fields as authenticated content. Never restore unauthenticated content under any signer consumers trust or will trust after restoration. Using a new restoring wallet does not erase the source content's provenance.
+At capture, verify the chain data and publication policy; sign/store the manifest through the application's existing trusted channel. A later restore cannot re-read that old state with SDK 1.0.0. If no independently authenticated capture or authorized signed version exists, exclude/quarantine the entry. Never silently substitute head data for the original source version. Version signatures must bind chain, key, typed values and schema/indexing context; freshness needs an independently trusted monotonic version policy.
 
-Authentication does not establish freshness: a mutable owner can roll back to an older validly signed version. If the application requires the latest accepted version, bind a monotonic version or sequence in the signature and compare it with an independently trusted version record for the selected snapshot. Reject stale or unverifiable versions under that policy. Intentionally restoring an older version requires an explicit product decision.
+## Restore new identities
 
-Before trusting any exported entry, use the independently configured source chain/RPC to re-read its original key at the manifest's snapshot block. Compare its creator, creation flags, content type, payload hash and typed attributes with the export. A snapshot's `readonly: true` or checksum alone is not evidence from the chain. If the historical state is unavailable, exclude or quarantine the entry unless an independently authenticated snapshot manifest preserves those checks and the publication-policy decision made at capture. Do not silently substitute current head state.
+1. Validate the entire manifest, typed fields, indexing flags, app JSON schemas and publication policy before choosing the restoring signer. Excluded/quarantined targets still need an explicit relationship policy.
+2. Choose authorized signer, public destination values, immutable flags, retention and optional post-create transfers. System creator/creation block cannot be rewritten; restoration signs under the new creator.
+3. Build SDK schemas preserving column types/indexing and the chosen schema-name policy. Respect the 32-attribute budget including a named tag; do not silently drop fields, change types or flatten bytes into strings. Defaults/optional choices are SDK policy that the exporter may need to retain separately from wire state.
+4. Persist progress and `oldKey → newKey` from every authenticated result. Multiple batches can leave partial progress; reconcile unknown outcomes before continuing.
+5. Remap typed key relationships and documented references inside decoded bytes/application indexes. Do not rewrite every hex-looking value. Handle external/excluded targets through explicit preserve/replace/quarantine choices.
+6. DAGs can use confirmed parent keys; cycles and readonly same-batch references require exclusive creator coordination, predictions and exact salts. Validate every returned key in order.
+7. Verify destination keys, exact typed values, indexing flags, owners/creator, readonly flags, observed deadlines, relationships and consuming application reads before changing readers.
 
-Authenticated mutation history requires an independently allowlisted original creator, the complete canonical `EntityPatched` history from creation through the snapshot block, successful receipts and verified transaction senders, with every patch sender independently allowlisted. Bind the final content type, payload hash and canonical typed attributes to the state at the snapshot block. An event's owner field alone does not authenticate its transaction sender. Missing ranges, unavailable transactions or unresolved verification failures leave the entry unauthenticated.
-
-## Restore new identities and relationships
-
-1. Authenticate every entry against its source snapshot and apply the publication policy above before choosing a signer or writing. Exclude or quarantine unauthenticated mutable entries. References targeting those entries follow the external-reference policy below; do not silently drop them from remaps. Then validate the complete snapshot and every application's payload schema. Rebuild typed attributes using their stored tags; decimal strings, `u64`/`u256`, addresses, and entity keys must not silently become ordinary strings.
-2. Choose authorized signer(s), destination ownership policy, creation flags, and new deadlines. Historical owner/creator/creation-block metadata does not authenticate mutable payloads and is not writable system data. Restoration signs the copied content under the restoring publisher's identity. Creates initially belong to that signer; authorized transfers can set the desired owner afterward, but creator remains the restoring signer.
-3. Check both budgets: a create carries at most 30 user attributes, while the observed Tiramisu post-patch state ceiling is 32. Restore a mutable 31–32-attribute entity with a create of at most 30 plus a patch of the remaining fields, optionally in one batch using its predicted key. A readonly create cannot be patched later, including within the same batch; preserving readonly and all 31–32 indexed fields is not supported by this route. Reject that plan or agree on a schema with at most 30 attributes and explicitly move selected fields to payload. Preserve provenance in the manifest or payload instead of exceeding either budget.
-4. Build an explicit `oldKey → newKey` map from successful create receipts. Keep transaction hashes and progress after each batch. A partial multi-transaction restore is not an atomic restore; reconcile an uncertain batch before continuing or retrying.
-5. Rewrite typed `key()` relationships and any documented keys inside validated payloads or application indexes. Do not replace every hex-looking string: transaction hashes, addresses, and opaque application IDs are different values.
-6. For a DAG, restore parents before children and use their confirmed keys. For cycles or same-batch readonly relationships, predict every new key under exclusive control of the restoring wallet's entity nonce and reuse the exact salts. Without that control, use stable application IDs or a staged mutable representation agreed with the user.
-7. Mutable entities may be patched to remap references after creation. Readonly entities require correct references at creation or another replacement. Splitting a cyclic graph across readonly batches cannot be solved by patching it later.
-8. Verify new keys, payload checksums, attribute tags, flags, current owners, actual expiration blocks, and every remapped relationship. Check counts and unique application IDs across all pages, not just the first page or an empty result.
-9. After the restored application and references are verified, retire superseded resources you created within the task. Removing an older entity or backup outside that authorized scope requires the user's explicit instruction.
-
-An old deadline may already be past at restore time; choose the new lifetime explicitly rather than submitting a dead deadline or extending it silently. Expired entities cannot be revived under their old keys. References to entities outside the export or excluded/quarantined during authentication require an explicit preservation or replacement policy. Preserve an original external key only when the target and application policy permit it, use an independently authenticated replacement, or stop/quarantine the dependent entry. List unresolved targets in the manifest; never silently discard a relationship or invent a successful remap.
-
-## Plan a wide mutable restore
-
-This helper partitions validated user attributes without dropping their types or values. Use `createAttributes` on the create and `patchAttributes` on a patch of its confirmed or exclusively predicted key. Omit an empty patch. For an atomic restore, creates run before patches in `executeBatch`; keep the original mutable creation flags. Flags cannot be changed later to make a staged mutable entity readonly.
-
-```typescript
-import type { AttributeInputs } from "@arkiv-network/sdk"
-
-export function planRestoredAttributes(attributes: AttributeInputs, isReadonly: boolean) {
-  const entries = Object.entries(attributes)
-  if (entries.length > 32) throw new Error("The restored entity exceeds 32 user attributes")
-  if (isReadonly && entries.length > 30) {
-    throw new Error("Readonly restoration requires an explicit schema of at most 30 user attributes")
-  }
-  return {
-    createAttributes: Object.fromEntries(entries.slice(0, 30)),
-    patchAttributes: Object.fromEntries(entries.slice(30)),
-  }
-}
-```
-
-## Verify the restore
-
-Use a new pinned snapshot after all confirmed writes. Compare application identity and content against the manifest, then traverse the restored relationships with a bounded traversal and a visited-key set. Verify the consuming application reads the new keys; having a correct map in a scratch file is not enough.
-
-Sources: [SDK queries and projections](https://docs.arkiv.network/typescript-sdk/querying-data/), [native operations](https://docs.arkiv.network/json-rpc/mutating-entities/), and SDK 0.8.1 `src/query/{queryBuilder,queryResult,selection}.ts`, `src/attr/{codec,values}.ts`, and `src/actions/public/predictEntityKeys.ts`. Restore policy and application-level provenance are design choices, not additional protocol guarantees.
+A reset or expired original needs new keys. A missing entity is not proof of why it disappeared. Preserve original provenance in the manifest and old resources unless removal is separately authorized. Deletion/expiration cannot retract copies already read.

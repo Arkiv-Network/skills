@@ -1,196 +1,133 @@
 ---
 name: arkiv-first-write
-description: Set up @arkiv-network/sdk on a verified Arkiv testnet and make a first entity write with funding, safe key custody, explicit expiration, seed reconciliation and query read-back. Tiramisu is the default. Use for a first write, quickstart or minimal SDK example; use arkiv-app-integration for authenticated application endpoints.
+description: Set up SDK 1.0.0 on Rabdi with an access key, typed schema, authorized signer and verified first entity. Use for quickstarts and idempotent seeds; use arkiv-app-integration for application endpoints.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  network: "tiramisu"
-  verified: "2026-10-08"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
 ---
 
 # First Arkiv write
 
-Use `arkiv` for orientation. This skill produces one verified entity, not a production signing API. Read `arkiv-write-safety` before bulk imports or recovery from an ambiguous submission.
+Target **SDK 1.0.0, Rabdi, chain 7794095 (`0x76edaf`)**. Inspect the application's manifest, lockfile and installed declarations before giving executable SDK code. If evidence is unavailable, obtain it first. Read write-safety before bulk work or an uncertain submission.
 
-## Prepare the project
+## Prepare inputs and authorization
 
-Before producing executable SDK code, observe the project's installed SDK version and inspect its installed declarations. If either is unavailable, request that evidence or approval to obtain it before giving executable SDK code; an "unverified" label does not satisfy this gate. Recommend SDK `0.8.1` exactly or state the supported range literally as `>=0.8.1 <0.9`; never describe `0.8.x` as a compatibility guarantee. If the project uses SDK `0.8.0`, stop integration and ask for approval to upgrade, without forcing or bypassing peers. Report only files you actually inspected.
+Use the app's package manager and explain an SDK upgrade before doing it. The SDK requires viem as a peer; do not force peer requirements. Get a free RPC key at [Hub access keys](https://hub.arkiv.network/access-keys) and fund a dedicated development EOA through the [Hub faucet](https://hub.arkiv.network/faucet). Never request a private key in chat. Keep locally held signing keys in the server's secret store.
 
-For an explanation-only request, still identify the current API shapes: object-valued `attributes` and `expires` constructed with `ExpirationTime`, such as `ExpirationTime.fromDays(1)`. Distinguish that relative input from the entity's resulting absolute `expiresAt` block. Describe awaiting the create result, checking its receipt and reading the entity back. These explanations do not claim installed-declaration inspection or authorize execution.
+Configure `rabdi({ accessKey })` and `http()` from viem. The SDK places the encoded access key in the URL path. Missing or non-string keys raise `MissingAccessKeyError`; an explicitly empty key opts into a heavily limited endpoint that can return HTTP 429. Keep operator keys server-side, sanitize transport errors and never expose keyed URLs in logs. Browser wallets use the RPC configured by their user.
 
-Inspect the existing package manager and installed SDK declarations. Explain a dependency installation before running it. For a new npm project:
+Announce network, signer, entity and spend scope before broadcasting. Verify RPC chain ID and signer balance; compare an unsigned exact gas estimate plus current fee cap and margin with both available funds and the approved budget. An access key does not pay gas or authenticate app users. SDK 1.0.0 has no public create-estimator method: use [the guarded estimator](references/estimate.md), which blocks signing and broadcast.
 
-```bash
-npm install @arkiv-network/sdk@^0.8.1 viem
-```
+## Define and create a note
 
-Configure `ARKIV_PRIVATE_KEY` locally in a server-only environment. Never request its value in chat. Use a dedicated development EOA, not a production account. An access key, if needed, goes in a server-side `X-API-KEY` header bound to the official RPC origin; it does not fund transactions. The helpers below reject access keys for other origins and refuse redirects.
-
-Announce **Tiramisu, chain 7738577**, and the proposed entity before sending. A live write spends test GLM: get authorization for that write or a bounded smoke-test budget. Check the balance and estimate the actual transaction; a positive balance alone does not establish enough gas. Use the [Hub faucet](https://hub.arkiv.network/faucet) without promising an amount or cooldown. If spending is not authorized, stop at preparation and estimation.
-
-For another Arkiv chain, announce its verified name, chain ID and RPC instead. SDK 0.8.1 exports Tiramisu and localhost; an RPC URL alone does not change a client's chain. Build a viem `Chain` from verified network coordinates and pass it explicitly to the helper and the [dry run](references/estimate.md). Check funding on that chain. Never rename Tiramisu or invent an SDK chain export.
-
-SDK 0.8.1 has no public create-estimator method. Use the guarded [dry run](references/estimate.md) with the same create parameters: it captures the SDK's gas estimate and blocks every broadcast. It is not a live write/read-back test.
-
-## Create, reconcile a seed, and read back
-
-The following server-only helper assumes the write has been authorized. Pass a locally loaded `LocalAccount` from viem's `privateKeyToAccount`; validate that the configured value is a 32-byte hex key without logging it. No environment secret is read at import time.
-
-Use an exclusive writer for this creator while running the seed. Query-before-create prevents routine repeated runs; it is **not atomic uniqueness** across processes. A reset chain or expired seed means a new key, so rebuild references. This example makes its note readonly; its owner can still delete, transfer or extend it.
-
-Save the helper as `first-note.ts` and the [guarded estimator](references/estimate.md) as `estimate-create.ts`. Import their exports in your server entrypoint and call `ensureFirstNote(account, rpcUrl, chain, { accessKey, estimateGas: data => estimateCreate(account, data, rpcUrl, chain, accessKey) })`. The callback estimates the same frozen parameters without broadcasting. A fresh seed fails closed if it is missing; seed reuse needs no estimator.
+This module exports helpers and performs no write on import. The caller supplies an authorized wallet, matching reader and explicit retention choice. A `recordIntent` callback must durably register this operation before entry; for process-crash recovery use [the importer](../arkiv-write-safety/references/resumable-import.md), which also captures signed bytes before forwarding.
 
 ```typescript
-import {
-  createPublicClient, createWalletClient, EntityMutationError,
-  ExpirationTime, jsonToPayload, type CreateEntityParameters,
-} from "@arkiv-network/sdk";
-import { key, u64 } from "@arkiv-network/sdk/attr";
-import { tiramisu } from "@arkiv-network/sdk/chains";
-import { eq } from "@arkiv-network/sdk/query";
-import { http, type Chain, type LocalAccount, type TransactionReceipt } from "viem";
-import { estimateFeesPerGas } from "viem/actions";
+import { createPublicClient, createWalletClient, ExpirationTime, type Expiry, type TxParams } from '@arkiv-network/sdk';
+import { defineSchema, str, bytes, u64 } from '@arkiv-network/sdk/schema';
+import { eq } from '@arkiv-network/sdk/query';
+import { rabdi } from '@arkiv-network/sdk/chains';
+import { http, type LocalAccount } from 'viem';
+import { getGasPrice } from 'viem/actions';
 
-type FirstWriteOptions = {
-  accessKey?: string;
-  estimateGas?: (data: CreateEntityParameters) => Promise<bigint>;
-};
-
-export function firstNoteParameters(): CreateEntityParameters {
-  return {
-    payload: jsonToPayload({ text: "Hello, Arkiv" }), contentType: "application/json",
-    attributes: {
-      project: "first_note", entity_type: "note", seed_id: "welcome_v1",
-      created_at: u64(Date.now()),
-    },
-    expires: ExpirationTime.fromDays(1),
-    flags: { readonly: true, permissionlessExtension: false },
-  };
+export const Notes = defineSchema('example_first_note', {
+  seed_id: str().indexed(), created_at: u64(), body: bytes(),
+  media_type: str().default('application/json'),
+});
+export function clients(account: LocalAccount, accessKey: string) {
+  const chain = rabdi({ accessKey });
+  const transport = http(undefined, { retryCount: 0, timeout: 10000,
+    fetchOptions: { cache: 'no-store', redirect: 'error' } });
+  return { reader: createPublicClient({ chain, transport, cacheTime: 0 }),
+    wallet: createWalletClient({ account, chain, transport, cacheTime: 0 }) };
 }
-
-export async function ensureFirstNote(
-  account: LocalAccount,
-  rpcUrl: string = tiramisu.rpcUrls.default.http[0],
-  chain: Chain = tiramisu,
-  options: FirstWriteOptions = {},
-) {
-  if (options.accessKey && new URL(rpcUrl).origin !== new URL(tiramisu.rpcUrls.default.http[0]).origin) {
-    throw new Error("Access key origin mismatch");
-  }
-  const fetchOptions = { cache: "no-store" as const, redirect: "error" as const,
-    ...(options.accessKey ? { headers: { "X-API-KEY": options.accessKey } } : {}) };
-  const publicClient = createPublicClient({
-    chain, cacheTime: 0,
-    transport: http(rpcUrl, { fetchOptions, retryCount: 0, timeout: 10_000 }),
-  });
-  if (await publicClient.getChainId() !== chain.id) throw new Error("Wrong chain");
-  const expected = jsonToPayload({ text: "Hello, Arkiv" });
-  const matches = (payload: Uint8Array) =>
-    payload.length === expected.length && payload.every((value, i) => value === expected[i]);
-  const prior = await publicClient
-    .select({ key: true, payload: true, expiresAt: true, creationFlags: true,
-      contentType: true, attributes: true })
-    .where(eq("project", "first_note"), eq("entity_type", "note"), eq("seed_id", "welcome_v1"))
-    .createdBy(account.address)
-    .atBlock(await publicClient.getBlockNumber({ cacheTime: 0 }))
-    .limit(2)
-    .fetch();
-  if (prior.entities.length > 1 || prior.hasNextPage()) throw new Error("Duplicate seed: reconcile");
+export function firstNoteParameters(expiration: Expiry = ExpirationTime.fromDays(1)) {
+  return { schema: Notes, values: { seed_id: 'welcome_v1', created_at: u64(Date.now()),
+    body: new TextEncoder().encode(JSON.stringify({ text: 'Hello, Arkiv' })) },
+    expiration, flags: { readonly: true, permissionlessExtension: false } };
+}
+type Clients = ReturnType<typeof clients>;
+type Wallet = ReturnType<typeof createWalletClient>;
+type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
+export async function rabdiTxParams(reader: Clients['reader'], address: LocalAccount['address'],
+  approvedMaximumCost: bigint, estimate: bigint, operations = 1): Promise<TxParams> {
+  if (estimate <= 0n || !Number.isSafeInteger(operations) || operations < 1) throw new Error('Valid unsigned estimate and operation count required');
+  const floor = 1000000n + 400000n * BigInt(operations - 1);
+  const gas = floor > 2n * estimate ? floor : 2n * estimate;
+  const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
+  if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw new Error('Reconcile pending nonce first');
+  const gasPrice = await getGasPrice(reader);
+  if (gas * gasPrice > approvedMaximumCost || gas * gasPrice > await reader.getBalance({ address })) throw new Error('Gas cap exceeds budget/balance');
+  return { nonce: latest, gas, gasPrice };
+}
+export async function ensureFirstNote({ reader, wallet }: Clients,
+  recordIntent: (txParams: TxParams) => Promise<void>, expiration: Expiry, approvedMaximumCost: bigint,
+  estimateLatest: EstimateLatest) {
+  if (await reader.getChainId() !== 7794095 || wallet.chain?.id !== 7794095) throw new Error('Wrong chain');
+  const prior = await reader.select({ $key: true, $creator: true, $creationFlags: true, body: true, media_type: true })
+    .from(Notes, { onMismatch: 'throw' }).createdBy(wallet.account.address)
+    .where(eq('seed_id', 'welcome_v1')).limit(2).fetch();
+  if (prior.entities.length > 1) throw new Error('Duplicate seed; reconcile');
+  const expected = new TextEncoder().encode(JSON.stringify({ text: 'Hello, Arkiv' }));
   const existing = prior.entities[0];
   if (existing) {
-    if (!existing.creationFlags.readonly || existing.creationFlags.permissionlessExtension
-        || existing.contentType !== "application/json" || !matches(existing.payload)
-        || existing.attributes.created_at?.type !== "u64") {
-      throw new Error("Seed differs: reconcile instead of overwriting");
-    }
-    return { entityKey: existing.key, expiresAt: existing.expiresAt.toString(), reused: true };
+    const expectedHex = '0x' + Array.from(expected, b => b.toString(16).padStart(2, '0')).join('');
+    if (!existing.$creationFlags.readonly || existing.$creationFlags.permissionlessExtension ||
+      existing.media_type.value !== 'application/json' || existing.body.value !== expectedHex) throw new Error('Seed differs; reconcile');
+    return { entityKey: existing.$key, reused: true as const };
   }
-  const balance = await publicClient.getBalance({ address: account.address });
-  if (balance === 0n) {
-    throw new Error("Fund the signer before writing");
-  }
-  if (typeof options.estimateGas !== "function") throw new Error("Configure guarded estimateCreate before writing");
-  const parameters = firstNoteParameters();
-  const estimated = await options.estimateGas(parameters);
-  if (typeof estimated !== "bigint" || estimated <= 0n) throw new Error("Invalid gas estimate");
-  const gas = (estimated * 12n + 9n) / 10n; // Round up this helper's 20% gas margin.
-  const fees = await estimateFeesPerGas(publicClient);
-  if (balance < gas * fees.maxFeePerGas) throw new Error("Insufficient funds for estimated gas and fee cap");
-  const walletClient = createWalletClient({
-    account, chain, cacheTime: 0,
-    transport: http(rpcUrl, { fetchOptions, retryCount: 0, timeout: 10_000 }),
-  });
-  let created;
+  // Precondition: exclusive writer, sufficient funding, successful unsigned estimate,
+  // and no unresolved earlier seed attempt in the durable operation registry.
+  const input = { ...firstNoteParameters(expiration), salt: 1n };
+  const options = { expiration: input.expiration, flags: input.flags, salt: input.salt };
+  const estimate = await estimateLatest(unsigned => unsigned.createEntity(input.schema, input.values, options));
+  const txParams = await rabdiTxParams(reader, wallet.account.address, approvedMaximumCost, estimate);
+  await recordIntent(txParams);
+  const result = await wallet.createEntity(input.schema, input.values,
+    options, txParams);
+  // Persist returned hash/key immediately in the caller's durable writer.
   try {
-    // createEntity returns { entityKey, txHash, expiresAt }, without a receipt.
-    created = await walletClient.createEntity(parameters, { gas, ...fees });
-  } catch (error) {
-    if (error instanceof EntityMutationError && error.txHash) {
-      // This may be a revert, a receipt-decode failure, or a timeout with the tx still pending.
-      // Inspect receipt status/logs and the scoped seed before deciding to send again.
-      throw Object.assign(new Error(`Reconcile transaction ${error.txHash}; do not resend yet`, { cause: error }),
-        { txHash: error.txHash });
+    const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
+    const entity = await reader.getEntity(result.entityKey, Notes);
+    if (receipt.status !== 'success' || !entity.$creationFlags.readonly ||
+      entity.$creator.toLowerCase() !== wallet.account.address.toLowerCase() ||
+      entity.$expiresAt !== result.expiresAt || entity.created_at.value !== input.values.created_at.value ||
+      entity.body.value !== '0x' + Array.from(expected, b => b.toString(16).padStart(2, '0')).join('')) {
+      throw new Error('Readback mismatch');
     }
-    throw error; // No hash also requires nonce/pending/seed inspection if broadcast was possible.
-  }
-  let receipt: TransactionReceipt | undefined;
-  try {
-    receipt = await publicClient.getTransactionReceipt({ hash: created.txHash });
-    if (receipt.status !== "success") throw new Error("Create receipt is not successful");
-    const page = await publicClient
-      .select({ key: true, payload: true, expiresAt: true, contentType: true,
-        creationFlags: true, attributes: true })
-      .where(eq("$key", key(created.entityKey)))
-      .atBlock(receipt.blockNumber).limit(1).fetch();
-    const entity = page.entities[0];
-    const timestamp = entity?.attributes.created_at;
-    const expectedTimestamp = parameters.attributes?.created_at;
-    if (!entity || entity.key !== created.entityKey || !matches(entity.payload)
-        || entity.contentType !== parameters.contentType || !entity.creationFlags.readonly
-        || entity.creationFlags.permissionlessExtension || timestamp?.type !== "u64"
-        || typeof expectedTimestamp !== "object" || expectedTimestamp?.type !== "u64"
-        || timestamp.value !== expectedTimestamp.value) throw new Error("Read-back mismatch");
-    if (entity.expiresAt !== created.expiresAt
-        || entity.expiresAt - receipt.blockNumber !== parameters.expires.minLifetime) {
-      throw new Error("Create expiration does not match its requested lifetime");
-    }
-    return { entityKey: entity.key, txHash: created.txHash,
-      receiptBlock: receipt.blockNumber.toString(), gasUsed: receipt.gasUsed.toString(),
-      expiresAt: entity.expiresAt.toString(), reused: false };
-  } catch (error) {
-    throw Object.assign(new Error("Confirmed write needs reconciliation; do not resend", { cause: error }), {
-      entityKey: created.entityKey, txHash: created.txHash, expiresAt: created.expiresAt.toString(),
-      receiptBlock: receipt?.blockNumber.toString(), gasUsed: receipt?.gasUsed.toString(),
-    });
+    return { ...result, reused: false as const };
+  } catch (cause) {
+    throw Object.assign(new Error('Confirmed write needs reconciliation; do not resend', { cause }), result);
   }
 }
 ```
 
-The returned `expiresAt` is decoded from the create receipt in SDK 0.8.1. It is a block number, while `created_at` above is an application timestamp in milliseconds. Payload and attributes are public. Readonly and Entity Expiration do not make them private.
+Explicit `txParams` are the recommended Rabdi default: latest transaction nonce, `gas` and current network `gasPrice`, under exclusive signer custody. For one operation use at least 1,000,000 gas; for a batch of N operations use at least `1,000,000 + 400,000 × (N − 1)`. Also honor the exact unsigned estimate and approved fee/balance limits. Large bytes/chunk/image writes need measurements and at least twice the measured maximum gas, never below that floor. These are measured Rabdi starting caps, not universal limits; raise the approved cap when the exact operation needs more.
 
-Inspect the confirmed transaction and entity in the [Tiramisu explorer](https://tiramisu.explorer.arkiv.network): entity route `/entity/<entityKey>` and transaction route `/tx/<txHash>`. If the host already has read-only verification tools, use their actual available schemas; the SDK and explorer suffice without an integration. Keep the returned key and hash as separate values, including structured error fields after a failed read-back.
+Lane W's 2026-10-30 controls found default estimation gas-exhaustion reverts; explicit nonce/gas/fees passed its tested wallet/account cases. Check `receipt.status === 'success'` before readback. This helper makes no automatic retry. A caller may retry at most once only after an authoritative reverted receipt, correcting the demonstrated cause, refreshing nonce/fees and obtaining budget for the retry. Successful or uncertain writes always require reconciliation instead.
 
-## Add project rules with consent
+Query-before-create prevents routine repeats under an exclusive writer; it is not atomic uniqueness. A missing result after an uncertain send does not authorize recreating. A reset or expired seed creates a new identity; update dependent references. Readonly still allows owner transfer, deletion and Lifetime Extension.
 
-Offer this candidate block for the consumer project's `AGENTS.md`. Ask before editing that file; preserve its existing guidance. The broader evaluation suite may refine these rules later.
+Create uses `(schema, values, options, txParams?)`, patch uses `(schema, entityKey, changes, txParams?)`. Options use `expiration`, while returned flat entity metadata uses `$expiresAt`. `createEntity` returns `entityKey`, `txHash`, receipt-derived `expiresAt`. Keep keys and transaction hashes separate and inspect them in the [Rabdi explorer](https://rabdi.explorer.arkiv.network).
+
+## Project rules and verification
+
+Offer this block for the consumer's AGENTS.md with consent, preserving its existing instructions:
 
 ```markdown
 ## Arkiv rules for this project
-- Use @arkiv-network/sdk >=0.8.1 <0.9 on Tiramisu; inspect installed version/declarations before SDK calls. If unavailable, obtain them before producing executable SDK code; never guess exports.
-- Attribute names start with a lowercase letter and use lowercase letters, digits and underscores; exclude reserved words.
-- Use u64(Date.now()) for millisecond timestamps in writes and matching queries; bare numbers become i32.
-- Access keys and local signing keys stay server-side; never put them in URLs, chat or public environment variables.
-- Load the arkiv router for Arkiv work.
+- Use SDK 1.0.0 on Rabdi (7794095); inspect installed version/declarations before executable SDK code.
+- Declare typed schemas; index filter columns explicitly. Store binary/JSON data in named bytes columns, which cannot be filtered.
+- Preserve constructor types; use u64 for app milliseconds and expiry-block predicates.
+- Configure rabdi({ accessKey }); redact keyed URLs. Operator access/signing keys stay server-side and out of chat/public bundles.
+- Pass explicit latest nonce, gas and gasPrice for Rabdi writes; check the receipt and use the measured gas floors from first-write.
+- Reconcile uncertain writes before another submission; load the arkiv router for Arkiv tasks.
 ```
 
-## Failures and testing
+Read [testing](references/testing.md) for deterministic and funded checks. Test missing access keys, schema mismatch, invalid indexing, seed collision, reset identity, insufficient funding, wrong chain and confirmed-read failure. Each key has 100,000,000 quota units; each query costs 10, other calls zero under current policy. A rejected query is not an empty result.
 
-- `InvalidValueError` mentioning i32: use `u64` in both write and query.
-- `outside the name charset` / `Ident32InvalidByte` / `0x276f7798`: Tiramisu rejects uppercase attribute names even though the SDK's rendered charset message lists A–Z; rename them to lowercase.
-- `InvalidContentTypeError`: use a lowercase MIME type/subtype, such as `application/json`, without parameters or whitespace.
-- `EntityMutationError` or missing read-back: reconcile; never treat a second create as repair.
-- Seed collision, wrong chain, insufficient funding or missing estimator: stop before sending.
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
 
-Read [testing.md](references/testing.md) for realistic fixtures and a bounded live smoke. Read `arkiv-query` for multi-page seeds; `arkiv-app-integration` for browser wallets and authenticated routes.
-
-Sources: [SDK 0.8.1](https://www.npmjs.com/package/@arkiv-network/sdk/v/0.8.1), [create implementation](https://unpkg.com/@arkiv-network/sdk@0.8.1/src/actions/wallet/createEntity.ts), [query documentation](https://docs.arkiv.network/json-rpc/querying-data/), [faucet](https://hub.arkiv.network/faucet).
+The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate a sanitized original error without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

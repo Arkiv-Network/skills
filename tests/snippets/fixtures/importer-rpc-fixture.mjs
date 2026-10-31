@@ -2,7 +2,7 @@
 // existing test workspace; this module creates no HTTP transport or funded send.
 export function makeFixture(owner, { sdk, viem, chains, attr }) {
   const { createPublicClient, predictEntityKey, ENTITY_EVENTS_ABI } = sdk;
-  const { tiramisu } = chains;
+  const chain = chains.rabdi({ accessKey: "synthetic-offline-key" });
   const { decFromUnits } = attr;
   const {
     custom, decodeFunctionData, decodeAbiParameters, encodeAbiParameters,
@@ -12,7 +12,7 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
   const execute = parseAbi(['function execute((uint8 operation, bytes operationData)[] ops) external returns (bytes32[] keys)']);
   const nonceAbi = parseAbi(['function entityNonce(address owner) external view returns(uint64)']);
   const createParams = parseAbiParameters('(uint128 salt,uint64 expiresAt,uint64 minLifetime,uint8 creationFlags,(bytes32 name,uint8 typeId,bytes value)[] attributes)');
-  const names = { 1: 'bool', 2: 'i32', 3: 'u64', 4: 'u256', 5: 'dec', 6: 'bytes32', 7: 'bytes', 8: 'str', 9: 'addr', 10: 'key' };
+  const names = { 1: 'bool', 2: 'i32', 3: 'u64', 4: 'u256', 5: 'dec', 7: 'bytes', 8: 'str', 9: 'addr', 10: 'key' };
   const text = hex => new TextDecoder().decode(hexToBytes(hex)).replace(/\0+$/, '');
   const hex = value => '0x' + BigInt(value).toString(16);
   const native = '0x4400000000000000000000000000000000000044';
@@ -22,23 +22,24 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
     sends: [], methods: [], queries: [], receipts: new Map(), transactions: new Map(),
   };
   function decodeAttribute(cell) {
-    const type = names[cell.typeId];
-    const value = [7, 8].includes(cell.typeId) ? (cell.typeId === 7 ? cell.value : text(cell.value))
-      : cell.typeId === 1 ? BigInt(cell.value) !== 0n
-        : cell.typeId === 2 ? Number(BigInt.asIntN(32, BigInt(cell.value)))
-          : cell.typeId === 5 ? decFromUnits(BigInt.asIntN(256, BigInt(cell.value))).value
-            : cell.typeId === 9 ? '0x' + cell.value.slice(-40) : cell.value;
-    return { name: text(cell.name), type, value };
+    const tag = cell.typeId & 0x7f;
+    const type = names[tag];
+    const value = [7, 8].includes(tag) ? (tag === 7 ? cell.value : text(cell.value))
+      : tag === 1 ? BigInt(cell.value) !== 0n
+        : tag === 2 ? Number(BigInt.asIntN(32, BigInt(cell.value)))
+          : tag === 5 ? decFromUnits(BigInt.asIntN(256, BigInt(cell.value))).value
+            : tag === 9 ? '0x' + cell.value.slice(-40) : cell.value;
+    return { name: text(cell.name), type, value, indexed: Boolean(cell.typeId & 0x80) };
   }
   async function request({ method, params = [] }) {
     fixture.methods.push(method);
-    if (method === 'eth_chainId') return '0x7614d1';
+    if (method === 'eth_chainId') return '0x76edaf';
     if (method === 'eth_blockNumber') return hex(fixture.head);
     if (method === 'eth_getBalance') return hex(fixture.balance);
     if (method === 'eth_getTransactionCount') return hex((params[1] === 'pending' ? fixture.pendingNonce : fixture.latestNonce) ?? fixture.sends.length);
     if (method === 'eth_gasPrice' || method === 'eth_maxPriorityFeePerGas') return '0x1';
     if (method === 'eth_fillTransaction') throw { code: -32601, message: 'Optional method unavailable in local fixture' };
-    if (method === 'eth_estimateGas') return '0x186a0';
+    if (method === 'eth_estimateGas') return hex(fixture.estimatedGas ?? 100000n);
     if (method === 'eth_getBlockByNumber') {
       const number = params[0] === 'latest' ? fixture.head : BigInt(params[0]);
       return {
@@ -56,14 +57,16 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
     if (method === 'arkiv_query') {
       const [query, options] = params;
       fixture.queries.push(params);
-      if (options.atBlock && BigInt(options.atBlock) !== fixture.head) throw { code: -32006, message: 'Requested historical snapshot unavailable in this fixture' };
       let entities = fixture.hideEntities ? [] : [...fixture.entities.values()];
       const wantedKey = /\$key = key\((0x[0-9a-fA-F]+)\)/.exec(query)?.[1];
       if (wantedKey) entities = entities.filter(entity => entity.key === wantedKey);
-      const start = options.cursor ? Number(options.cursor.split(':')[1]) : 0;
+      const start = options.offset ? Number(BigInt(options.offset)) : 0;
       const count = Math.min(2, options.limit ? Number(BigInt(options.limit)) : 2);
-      const selected = entities.slice(start, start + count).map(entity => Object.fromEntries(Object.entries(entity).filter(([name]) => options.select[name])));
-      return { blockNumber: hex(fixture.head), data: selected, ...(entities.length > start + count ? { cursor: `offline:${start + count}` } : {}) };
+      const selected = entities.slice(start, start + count).map(entity => Object.fromEntries(Object.entries(entity)
+        .filter(([name]) => options.select[name]).map(([name, value]) => [name,
+          name === 'attributes' && typeof options.select.attributes === 'object'
+            ? value.filter(cell => options.select.attributes[cell.name]) : value])));
+      return { blockNumber: hex(fixture.head), data: selected, ...(options.select.count ? { count: hex(entities.length) } : {}) };
     }
     if (method === 'eth_sendRawTransaction') {
       if (fixture.beforeSend) await fixture.beforeSend({ method, params });
@@ -76,16 +79,15 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
         const value = decodeAbiParameters(createParams, operation.operationData)[0];
         decodedOps.push({ operation: operation.operation, value });
         const mint = fixture.nonces.get(actor) ?? 0n;
-        const key = predictEntityKey({ owner: tx.from, nonce: mint, salt: value.salt, chainId: tiramisu.id });
+        const key = predictEntityKey({ owner: tx.from, nonce: mint, salt: value.salt, chainId: chain.id });
         fixture.nonces.set(actor, mint + 1n);
         const cells = value.attributes.map(decodeAttribute);
         const expiresAt = BigInt(value.expiresAt) > fixture.head + value.minLifetime ? BigInt(value.expiresAt) : fixture.head + value.minLifetime;
         fixture.entities.set(key, {
           key, owner: tx.from, creator: tx.from, createdAt: hex(fixture.head), updatedAt: hex(fixture.head),
           expiresAt: hex(expiresAt), creationFlags: value.creationFlags,
-          contentType: cells.find(cell => cell.name === '$contentType').value,
-          payload: cells.find(cell => cell.name === '$payload').value,
-          attributes: cells.filter(cell => !cell.name.startsWith('$')),
+          attributes: cells.map(({ indexed, ...attribute }) => attribute),
+          attributeSchema: cells.map(({ name, type, indexed }) => ({ name, type, indexed })),
         });
         logs.push({
           address: native,
@@ -97,7 +99,7 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
       fixture.transactions.set(txHash, {
         hash: txHash, from: tx.from, to: tx.to, input: tx.data, value: hex(tx.value ?? 0),
         nonce: hex(tx.nonce ?? fixture.sends.length - 1), gas: hex(tx.gas ?? 100000),
-        chainId: hex(tx.chainId ?? tiramisu.id), gasPrice: hex(tx.gasPrice ?? tx.maxFeePerGas ?? 1),
+        chainId: hex(tx.chainId ?? chain.id), gasPrice: hex(tx.gasPrice ?? tx.maxFeePerGas ?? 1),
         ...(tx.maxFeePerGas === undefined ? {} : { maxFeePerGas: hex(tx.maxFeePerGas), maxPriorityFeePerGas: hex(tx.maxPriorityFeePerGas) }),
         blockHash, blockNumber: hex(fixture.head), transactionIndex: '0x0',
         type: tx.type === 'eip1559' ? '0x2' : '0x0', v: hex(tx.v ?? 27),
@@ -115,6 +117,6 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
     throw new Error('Unexpected offline fixture RPC method ' + method);
   }
   fixture.request = request;
-  fixture.reader = createPublicClient({ chain: tiramisu, transport: custom({ request }, { retryCount: 0 }), cacheTime: 0 });
+  fixture.reader = createPublicClient({ chain, transport: custom({ request }, { retryCount: 0 }), cacheTime: 0 });
   return fixture;
 }

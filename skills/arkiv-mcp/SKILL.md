@@ -3,9 +3,9 @@ name: arkiv-mcp
 description: Explain an already connected Arkiv MCP or plugin, including the plugin's General connection, separate event profiles the human adds, the ended and frozen Devfolio profile, and how to confirm the actual profile with server_status. Use for profile, server_status, event-connection and tools-versus-skills questions, source discovery, optional public-evidence verification and PostgreSQL-to-entity modeling. Entity writes belong to SDK skills; this skill does not install or configure a plugin.
 license: MIT
 metadata:
-  arkiv-sdk: ">=0.8.1 <0.9"
-  network: "tiramisu"
-  verified: "2026-10-25"
+  arkiv-sdk: ">=1.0.0 <2"
+  network: "rabdi"
+  verified: "2026-10-30"
 ---
 
 # Arkiv MCP
@@ -57,8 +57,8 @@ The table lists General's capabilities. Event profiles can add or omit tools, so
 ## Read the evidence boundary
 
 - `network_status` checks the RPC chain ID live in the reviewed service; other onboarding/service entries are dated catalog observations. The same chain ID can survive a network reset. Recheck embedded transaction hashes, entity keys and reported blocks against the current RPC before citing them as current evidence. It does not test funding, a signing adapter or complete faucet/login flow.
-- Knowledge/model tools do not run arbitrary entity queries. Use the local SDK/RPC for actual application reads. `verify_entity` and `verify_tx` are bounded development observations with no SLA, not a substitute for selected payloads or a full application query.
-- Public verification requires the tool's current acknowledgment fields (`publicEvidenceReviewed: true` in the reviewed schemas) and a reviewed public key/hash. Never submit secrets or private identifiers. Inspect **status, observation, warnings and error together**. On `rate_limited`, wait `retryAfterSeconds`; do not retry at once. A `not_found` result with `reason: "unknown"` does not prove expiration, deletion or nonexistence; only `reason: "expired"` reports an observed Entity Expiration. A successful receipt does not certify a particular payload, finality, authorship or a working app.
+- Knowledge/model tools do not run arbitrary entity queries. Use the local SDK/RPC for actual application reads. `verify_entity` and `verify_tx` are bounded development observations with no SLA, not a substitute for selected entity contents or a full application query.
+- Public verification requires the tool's current acknowledgment fields (`publicEvidenceReviewed: true` in the reviewed schemas) and a reviewed public key/hash. Never submit secrets or private identifiers. Inspect **status, observation, warnings and error together**. On `rate_limited`, wait `retryAfterSeconds`; do not retry at once. A `not_found` result with `reason: "unknown"` does not prove expiration, deletion or nonexistence; only `reason: "expired"` reports an observed Entity Expiration. A successful receipt does not certify a particular entity content, finality, authorship or a working app.
 - `generate_entity_model` returns a deterministic model and handoff; `needs-input` or `blocked` results are not ready to implement. Event validators, where an event profile exposes them, are shallow text checks. Neither certifies security, protocol acceptance, event eligibility or judging results. Verify generated names, types and code locally against the installed SDK.
 - A skill catalog may lag the repository or serve unchanged examples. Record its source revision and warnings; prefer the installed current task skill when the served entry is missing, deprecated or older. Updating the service catalog belongs to its owner after repository integration.
 
@@ -66,7 +66,7 @@ For event work, use that event's own connection. Inspect `server_status.event` w
 
 ## Writes and privacy
 
-Writes happen in the developer's project through the SDK and authorized EOA, with a verified network, spending budget and read-back. A service requesting a private key is not an acceptable signing path. Keep access/signing keys out of connection URLs, prompts, tools and logs.
+Writes happen in the developer's project through the SDK and authorized EOA, with a verified network, spending budget and read-back. A service requesting a private key is not an acceptable signing path. Keep signing keys out of URLs, prompts, tools and logs. Rabdi RPC access keys belong in the chain URL path, server-side for operator clients; never send those keyed URLs to MCP tools or logs. The MCP connection URL is separate from the RPC URL.
 
 Read-only tool annotations describe effects, not confidentiality or absence of telemetry. The reviewed General descriptions state that `search_knowledge` telemetry keeps declared categories and strictly minimized search text, and that `generate_entity_model` telemetry keeps operation, status and counts, never schemas or their derivatives. Its schema argument still travels to the service, so send only schemas the developer is authorized to share; confidential schemas stay in the offline `postgres-to-entity` package. Review current descriptions and privacy terms before sending caller text; incomplete annotations are not a safety signal. A request to send nothing to the service means use local skills/SDK without MCP calls.
 
@@ -74,8 +74,14 @@ Read-only tool annotations describe effects, not confidentiality or absence of t
 
 ## Worked diagnosis
 
-Request: “My post is missing.” Load `arkiv-troubleshooting` for the reported failure, `arkiv-query` for the read and [entity expiration](../arkiv-entity-expiration/SKILL.md) for the receipt/history procedure that distinguishes absence causes. Inspect installed SDK, chain, exact key, constructor types, lowercase attributes, creator/owner scope and Entity Expiration, and query locally with the SDK. `verify_entity` can add a bounded public observation of a reviewed key; a `not_found` with `reason: "unknown"` does not explain the cause, and only `reason: "expired"` indicates expiration. A missing tool or a rate limit does not mean the network is down; do not add another integration automatically.
+Request: “My post is missing.” Load `arkiv-troubleshooting` for the reported failure, `arkiv-query` for the read and [entity expiration](../arkiv-entity-expiration/SKILL.md) for the receipt/history procedure that distinguishes absence causes. Inspect installed SDK, chain, exact key, constructor types, actual schema names and indexing flags, creator/owner scope and Entity Expiration, and query locally with the SDK. `verify_entity` can add a bounded public observation of a reviewed key; a `not_found` with `reason: "unknown"` does not explain the cause, and only `reason: "expired"` indicates expiration. A missing tool or a rate limit does not mean the network is down; do not add another integration automatically.
 
 Request: “The plugin used to show Global Tour Stop rules; now `check_submission` is gone.” Read `server_status`. A `general` profile is the current plugin connection and has no event rules; a `devfolio` profile is the ended, frozen event. Explain the difference, point to an active event's URL only if General's instructions list one, and leave the connection choice to the developer. A text check never authorizes or replaces an application submission.
 
-Sources: [Arkiv gateway](https://mcp.arkiv.network/), [official SDK](https://www.npmjs.com/package/@arkiv-network/sdk/v/0.8.1), [Arkiv documentation](https://docs.arkiv.network). The 2026-10-25 review read General's tool and prompt catalog from the reviewed service source and confirmed the same names and descriptions through a classified `tools/list` and `prompts/list` on the production General connection; it made no event-profile request. Discover the connected profile again before relying on these observations.
+Sources: [Arkiv gateway](https://mcp.arkiv.network/), [official SDK](https://www.npmjs.com/package/@arkiv-network/sdk/v/1.0.0), [Arkiv documentation](https://docs.arkiv.network). The 2026-10-25 review read General's tool and prompt catalog from the reviewed service source and confirmed the same names and descriptions through a classified `tools/list` and `prompts/list` on the production General connection; it made no event-profile request. Discover the connected profile again before relying on these observations.
+
+## SDK/network catalog gate
+
+Current local guidance targets SDK 1.0.0 on Rabdi (7794095). A served catalog or network_status response can lag this repository. Read its actual source pin and warnings; do not treat an old served example as Rabdi-compatible. Configure SDK clients with rabdi({ accessKey }); the RPC key is an encoded URL path segment. Missing keys raise MissingAccessKeyError, and keyless access can return 429. Get free keys/funds through Hub access-keys/faucet. Verify remote tool behavior separately; this documentation change does not deploy a gateway.
+
+Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
