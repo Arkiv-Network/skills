@@ -62,7 +62,7 @@ Separate default local-signer transactions and one tested MetaMask 13.55.0 trans
 
 Measured small creates used approximately 190k gas for one, 1.50M for ten in a batch and 2.97M for twenty. Use a starting cap of at least `1,000,000 + 400,000 × (N − 1)` for N operations; measure larger bytes/chunks/images and allow at least twice their measured maximum, never below that floor. Also estimate the exact intended operation and approve the cap against balance and total spend. The values are dated Rabdi measurements, not universal limits or a wallet-support certificate.
 
-Check receipt.status before readback. Permit at most one corrected retry only after an authoritative reverted receipt; consuming the full gas cap supports raising the approved cap. Successful or uncertain hashes must be reconciled without another submission. Never apply the diagnostic selector rewrite silently. The repository's seed uses a separately budgeted cap for its multi-create batch.
+Check receipt.status before readback. Any transaction retry must satisfy every condition of the [write-safety retry contract](../arkiv-write-safety/SKILL.md#reconcile-before-another-submission); no other retry or resend is allowed. Successful or uncertain hashes must be reconciled without another submission. Never apply the diagnostic selector rewrite silently. The repository's seed uses a separately budgeted cap for its multi-create batch.
 
 Fix the demonstrated cause and rerun its smallest credible check. Broader funded probes need explicit operation/spend scope. Draft Arkiv defects through feedback only after a minimal reproduction; never automatically submit an app mistake as a node bug.
 
