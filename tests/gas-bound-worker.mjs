@@ -6,9 +6,10 @@ import {pathToFileURL} from 'node:url';
 import {SourceTextModule,SyntheticModule} from 'node:vm';
 import {parentPort,workerData} from 'node:worker_threads';
 import {makeFixture} from './snippets/fixtures/importer-rpc-fixture.mjs';
+import {deepFreeze,frozenProvider,gasVectors,GAS_VECTOR_SEED} from './gas-bound-fixtures.mjs';
 
 const {root,workspace,row}=workerData;
-globalThis.fetch=()=>{throw new Error('Network forbidden in gas-bound execution');};
+globalThis.fetch=async function fetch(){throw new TypeError('fetch failed');};
 const modules=new Map();
 async function dependency(specifier) {
  const files={'@arkiv-network/sdk':'@arkiv-network/sdk/dist/index.js','@arkiv-network/sdk/schema':'@arkiv-network/sdk/dist/schema/index.js',
@@ -16,7 +17,9 @@ async function dependency(specifier) {
   viem:'viem/_esm/index.js','viem/actions':'viem/_esm/actions/index.js','viem/accounts':'viem/_esm/accounts/index.js'};
  if(modules.has(specifier))return modules.get(specifier);
  if(!specifier.startsWith('node:')&&!files[specifier])throw new Error('Unregistered dependency: '+specifier);
- const value=await import(specifier.startsWith('node:')?specifier:pathToFileURL(path.join(workspace,'node_modules',files[specifier])));
+ let value=await import(specifier.startsWith('node:')?specifier:pathToFileURL(path.join(workspace,'node_modules',files[specifier])));
+ // Freeze the formatted SDK return values as well as the raw RPC fixtures.
+ if(specifier==='@arkiv-network/sdk') {const sdk=value;value={...sdk,createPublicClient:(...args)=>frozenProvider(sdk.createPublicClient(...args))};}
  modules.set(specifier,value);return value;
 }
 const {default:ts}=await import(pathToFileURL(path.join(workspace,'node_modules/typescript/lib/typescript.js')));
@@ -44,18 +47,18 @@ const adapters=new Map([
  ...['requiredGas','checkHalfBlock','prepareImport','runImport'].map(name=>[importer+':'+name,'importer']),
 ]);
 const address='0x'+'11'.repeat(20),key='0x'+'22'.repeat(32),child='0x'+'33'.repeat(32),hash='0x'+'44'.repeat(32);
-function state() {
+function state(vector) {
  const h={reads:0,sends:0,signatures:0};
- const builder={};for(const name of ['from','createdBy','where','limit'])builder[name]=()=>builder;builder.fetch=async()=>({entities:[]});
- h.reader={skip:true,chain:{id:7794095},select:()=>builder,getChainId:async()=>7794095,
-  getBlock:async options=>{assert.deepEqual(options,{blockTag:'latest'});h.reads++;return {gasLimit:10000000n};},
+ const builder={};for(const name of ['from','createdBy','where','limit'])builder[name]=()=>builder;builder.fetch=async()=>deepFreeze({entities:[]});deepFreeze(builder);
+ h.reader=frozenProvider({skip:true,chain:{id:7794095},select:()=>builder,getChainId:async()=>7794095,
+  getBlock:async options=>{assert.deepEqual(options,{blockTag:'latest'});h.reads++;return deepFreeze({gasLimit:vector.blockLimit});},
   getTransactionCount:async()=>2,getBalance:async()=>10n**24n,request:async({method})=>{assert.equal(method,'eth_gasPrice');return '0x3';},
-  predictEntityKeys:async()=>[{key,salt:1n},{key:child,salt:2n}],getTransactionReceipt:async()=>({status:'success'})};
- const send=async(...args)=>{h.sends++;h.gas=args.at(-1).gas;return {txHash:hash,entityKey:key,createdEntities:[key,child],patchedEntities:[],deletedEntities:[],extendedEntities:[],ownershipChanges:[]};};
- h.wallet={account:{address},chain:{id:7794095},createEntity:send,executeBatch:send};return h;
+  predictEntityKeys:async()=>[{key,salt:1n},{key:child,salt:2n}],getTransactionReceipt:async()=>({status:'success'})});
+ const send=async(...args)=>{h.sends++;h.gas=args.at(-1).gas;return deepFreeze({txHash:hash,entityKey:key,createdEntities:[key,child],patchedEntities:[],deletedEntities:[],extendedEntities:[],ownershipChanges:[]});};
+ h.wallet=deepFreeze({account:{address},chain:{id:7794095},createEntity:send,executeBatch:send});return h;
 }
-async function importerCall(module,h,above) {
- const estimate=above?4000000n:2000000n,gas=estimate*2n;
+async function importerCall(module,h,vector) {
+ const {estimate,gas}=vector;
  if(row.function==='checkHalfBlock')return module.checkHalfBlock(h.reader,gas);
  if(row.function==='requiredGas') {
   // Pure arithmetic has no block input: execute its actual admission pair.
@@ -66,17 +69,17 @@ async function importerCall(module,h,above) {
  const signer=accounts.privateKeyToAccount(accounts.generatePrivateKey()),fixture=makeFixture(signer.address,{sdk,viem,chains,attr});
  const account={...signer,signTransaction:async tx=>{h.signatures++;return signer.signTransaction(tx);}};
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'arkiv-gas-execution-'));
- const options={account,chain:fixture.reader.chain,request:async args=>{
+ const options={account,chain:fixture.reader.chain,request:deepFreeze(async args=>{
   if(args.method==='eth_getBlockByNumber'&&args.params[0]==='latest')h.reads++;
-  return fixture.request(args);
- },jobId:'gas-execution',batchSize:1,gasCeiling:10000000n,maxTotalCost:100000000n,fees:{gasPrice:1n},
+  return deepFreeze(await fixture.request(args));
+ }),jobId:'gas-execution',batchSize:1,gasCeiling:100000000n,maxTotalCost:1000000000n,fees:{gasPrice:1n},
   planPath:path.join(directory,'plan.json'),journalPath:path.join(directory,'journal.jsonl'),
   rows:[{id:'gas-row',salt:1n,expiresAt:fixture.head+3600n,schema:sdk.defineSchema('gas_execution',{body:sdk.bytes()}),values:{body:new Uint8Array([1])},flags:{readonly:true}}]};
- fixture.estimatedGas=estimate;fixture.blockGasLimit=row.function==='runImport'?30000000n:10000000n;
+ fixture.estimatedGas=estimate;fixture.blockGasLimit=row.function==='runImport'?100000000n:vector.blockLimit;
  try {
   const prepared=await module.prepareImport(options);
   if(row.function==='prepareImport'){assert.equal(prepared.batches,1);return prepared;}
-  options.planSha256=prepared.planSha256;fixture.blockGasLimit=10000000n;h.reads=0;
+  options.planSha256=prepared.planSha256;fixture.blockGasLimit=vector.blockLimit;h.reads=0;
   const result=await module.runImport(options);assert.equal(result.state,'complete');return result;
  } finally {
   h.sends=fixture.sends.length;
@@ -84,20 +87,20 @@ async function importerCall(module,h,above) {
   await fs.rm(directory,{recursive:true});
  }
 }
-async function call(module,h,above,adapter) {
- const estimate=above?4000000n:2000000n;
- if(adapter==='importer')return importerCall(module,h,above);
+async function call(module,h,vector,adapter) {
+ const {estimate}=vector;
+ if(adapter==='importer')return importerCall(module,h,vector);
  if(adapter==='params')return row.function==='rabdiTxParams'?module[row.function](h.reader,address,10n**24n,estimate):module[row.function](h.reader,h.wallet,estimate);
  if(adapter==='relationships')return module.createRelated(h.reader,h.wallet,address,'gas-execution',async()=>estimate);
  if(adapter==='encryption')return module.writeEncryptedNote(h.reader,h.wallet,{encrypt:async()=>new Uint8Array([1])},'test',1n,async()=>estimate);
  if(adapter==='estimator') {
-  const rpc={request:async({method,params})=>{
+  const rpc=frozenProvider({request:async({method,params})=>{
    if(method==='eth_chainId')return '0x76edaf';
    if(method==='eth_estimateGas'){assert.equal(params[1],'latest');return '0x'+estimate.toString(16);}
-   if(method==='eth_getBlockByNumber'){assert.deepEqual(params,['latest',false]);h.reads++;return {gasLimit:'0x989680'};}
+   if(method==='eth_getBlockByNumber'){assert.deepEqual(params,['latest',false]);h.reads++;return deepFreeze({gasLimit:'0x'+vector.blockLimit.toString(16)});}
    h.sends++;throw new Error('Unexpected request');
-  }};
-  const chain={id:7794095,name:'Synthetic',nativeCurrency:{name:'Test',symbol:'TEST',decimals:18},rpcUrls:{default:{http:['https://example.invalid']}}};
+  }});
+  const chain=deepFreeze({id:7794095,name:'Synthetic',nativeCurrency:{name:'Test',symbol:'TEST',decimals:18},rpcUrls:{default:{http:['https://example.invalid']}}});
   return module.estimateWithRequest({type:'local',address,signTransaction:async()=>{h.signatures++;throw new Error('Signing forbidden');}},chain,rpc,wallet=>wallet.request({method:'eth_estimateGas',params:[{from:address,to:address,data:'0x'}]}));
  }
  throw new Error('Unexecutable adapter');
@@ -105,11 +108,11 @@ async function call(module,h,above,adapter) {
 try {
  const adapter=adapters.get(row.file+':'+row.function);assert.ok(adapter,'Missing execution adapter: '+row.file+':'+row.function);
  const cases=[];
- for(const above of [false,true]) {
-  const module=await extract(),h=state();let rejected=false,result,error;
-  try{result=await call(module,h,above,adapter);}catch(e){rejected=true;error=e.message;}
+ for(const vector of gasVectors()) {
+  const {above}=vector,module=await extract(),h=state(vector);let rejected=false,result,error;
+  try{result=await call(module,h,vector,adapter);}catch(e){rejected=true;error=e.message;}
   const passed=above?rejected&&h.reads>0&&h.sends===0&&h.signatures===0:!rejected&&h.reads>0;
-  cases.push({above,rejected,reads:h.reads,sends:h.sends,signatures:h.signatures,passed,error});
+  cases.push({name:vector.name,estimate:String(vector.estimate),gas:String(vector.gas),blockLimit:String(vector.blockLimit),above,rejected,reads:h.reads,sends:h.sends,signatures:h.signatures,passed,error});
  }
- parentPort.postMessage({passed:cases.every(x=>x.passed),cases});
+ parentPort.postMessage({passed:cases.every(x=>x.passed),seed:GAS_VECTOR_SEED,cases});
 }catch(error){parentPort.postMessage({passed:false,error:error.message});}

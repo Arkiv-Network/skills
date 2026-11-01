@@ -13,6 +13,26 @@ const direct='skills/arkiv-first-write/SKILL.md';
 const originals=new Map(await Promise.all([importer,direct].map(async file=>[file,await fs.readFile(file,'utf8')])));
 function replaceOnce(text,needle,replacement) {assert.equal(text.split(needle).length,2,'Mutation must target the exact published code');return text.replace(needle,replacement);}
 const noOp='const check = (ok, why) => { /* if (!ok) throw safeError(why); */ };';
+for(const [name,mutation] of [
+ ['exact-value bypass','block.gasLimit = estimate === 4000000n ? block.gasLimit : 1000000000n;'],
+ ['worker-global bypass',"block.gasLimit = globalThis.fetch.toString().includes('Network forbidden in gas-bound execution') ? block.gasLimit : 1000000000n;"],
+])test('Turn 12 audited observed-limit mutation: '+name,async t=>{
+ const result=await inspectFixture(t,direct,text=>replaceOnce(text,"const block = await reader.getBlock({ blockTag: 'latest' });","const block = await reader.getBlock({ blockTag: 'latest' });\n"+mutation));
+ assert.equal(result.staticPassed,false);assert.equal(result.behavioral.passed,false);assert.equal(result.passed,false);
+});
+for(const [name,mutation] of [
+ ['property assignment','block.gasLimit = 1000000000n;'],
+ ['defineProperty',"Object.defineProperty(block, 'gasLimit', { value: 1000000000n });"],
+ ['spread overwrite','block = { ...block, gasLimit: 1000000000n };'],
+ ['assign overwrite','Object.assign(block, { gasLimit: 1000000000n });'],
+ ['alias mutation','const alias = block; alias.gasLimit = 1000000000n;'],
+ ['gas assignment','gas = 1n;'],
+ ['estimate assignment','estimate = 1n;'],
+ ['delete property','delete block.gasLimit;'],
+])test('Turn 12 observed inputs stay unchanged: '+name,async t=>{
+ const result=await inspectFixture(t,direct,text=>replaceOnce(text,"const block = await reader.getBlock({ blockTag: 'latest' });","const block = await reader.getBlock({ blockTag: 'latest' });\n"+mutation));
+ assert.equal(result.staticPassed,false);assert.equal(result.passed,false);
+});
 test('Turn 11 exact reassigned assertion cannot borrow its initializer',async t=>{
  const result=await inspectFixture(t,importer,text=>replaceOnce(replaceOnce(text,'const check = (ok, why) =>','let check = (ok, why) =>'),
   'async function checkHalfBlock(reader, gas) {','async function checkHalfBlock(reader, gas) {\n  check = (_ok, _why) => {};'));

@@ -166,6 +166,28 @@ export async function inspectGasBounds(root,workspace) {
      return ts.isPrefixUnaryExpression(predicate)&&predicate.operator===ts.SyntaxKind.ExclamationToken&&ts.isIdentifier(unwrap(predicate.operand))&&unwrap(predicate.operand).text===parameter&&throwsOnEveryPath(statement.thenStatement)&&rejectsCaller(statement);
     });
    }
+   function observedValuesIntact(read,comparison,gasName) {
+    const names=new Set([read.name.text,gasName]);
+    visit(source,node=>{if(ts.isIdentifier(node)&&/estimate/i.test(node.text))names.add(node.text);});
+    const contains=node=>{let found=false;visit(node,part=>{if(ts.isIdentifier(part)&&names.has(part.text))found=true;});return found;};
+    const reference=node=>{node=unwrap(node);return ts.isIdentifier(node)&&names.has(node.text);};
+    let intact=true;
+    visit(source,node=>{
+     if(node.getStart(source)<read.end||node.end>comparison.getStart(source))return;
+     if(ts.isBinaryExpression(node)&&node.operatorToken.kind>=ts.SyntaxKind.FirstAssignment&&node.operatorToken.kind<=ts.SyntaxKind.LastAssignment&&contains(node.left))intact=false;
+     if((ts.isPrefixUnaryExpression(node)||ts.isPostfixUnaryExpression(node))&&[ts.SyntaxKind.PlusPlusToken,ts.SyntaxKind.MinusMinusToken].includes(node.operator)&&contains(node.operand))intact=false;
+     if(ts.isDeleteExpression(node)&&contains(node.expression))intact=false;
+     if(ts.isVariableDeclaration(node)&&node.initializer&&reference(node.initializer))intact=false;
+     if(ts.isSpreadAssignment(node)&&contains(node.expression))intact=false;
+     if(ts.isCallExpression(node)||ts.isNewExpression(node)) {
+      // Passing the observed object to any callable loses mutation custody;
+      // property reads inside ordinary validation expressions do not.
+      if(node.arguments?.some(reference))intact=false;
+      if(ts.isPropertyAccessExpression(node.expression)&&contains(node.expression.expression))intact=false;
+     }
+    });
+    return intact;
+   }
    function blocked(block,gasName,after=-1) {
     if(!block||!ts.isBlock(block))return false;
     const statements=block.statements,reads=[];
@@ -175,7 +197,7 @@ export async function inspectGasBounds(root,workspace) {
      if(ts.isCallExpression(call)&&!call.questionDotToken&&ts.isPropertyAccessExpression(call.expression)&&!call.expression.questionDotToken&&call.expression.name.text==='getBlock'&&call.arguments.some(arg=>ts.isObjectLiteralExpression(arg)&&arg.properties.some(p=>ts.isPropertyAssignment(p)&&(ts.isIdentifier(p.name)||ts.isStringLiteral(p.name))&&p.name.text==='blockTag'&&ts.isStringLiteral(p.initializer)&&p.initializer.text==='latest')))reads.push(d);
     }
     for(const read of reads)for(const statement of statements) {
-     if(statement.pos<read.end||!reachable(statement))continue;
+     if(statement.pos<read.end||!reachable(statement)||!observedValuesIntact(read,statement,gasName))continue;
      if(ts.isIfStatement(statement)&&comparison(statement.expression,gasName,read.name.text,ts.SyntaxKind.GreaterThanToken)&&throwsOnEveryPath(statement.thenStatement)&&rejectsCaller(statement))return {position:statement.end,kind:'direct'};
      if(ts.isExpressionStatement(statement)) {
       const awaited=ts.isAwaitExpression(statement.expression),call=awaited?statement.expression.expression:statement.expression;
