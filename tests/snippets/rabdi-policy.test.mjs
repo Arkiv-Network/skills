@@ -105,7 +105,7 @@ test('lifecycle copied create sends explicit default gas/nonce/price and checks 
   assert.equal(BigInt(tx.gasPrice), 1n);
   assert.equal(BigInt(tx.nonce), 0n);
   const failedReader = { ...fixture.reader, getTransactionReceipt: async () => ({ status: 'reverted' }) };
-  await assert.rejects(module.publish(failedReader, wallet, sdk.ExpirationTime.fromBlocks(100), 2n, estimateLatest), /Reverted write/);
+  await assert.rejects(module.publish(failedReader, wallet, sdk.ExpirationTime.fromBlocks(100), 2n, estimateLatest), /Receipt disagrees after SDK success/);
   assert.equal(fixture.sends.length, 2, 'One send per invocation; no automatic retry after failed receipt check');
 });
 

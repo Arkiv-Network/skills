@@ -16,13 +16,13 @@ Choose independent encryption-key custody, private backup, recipients and recove
 
 Inspect the installed `arkiv-encryption` version, public declarations and consumer guide before using its API. Its SDK-independent AES-256-GCM helpers are separate from SDK storage; compatibility of one does not certify a sample application's signer or Rabdi path. Never invent a newer package release or key-recovery method.
 
-The published API names are `generateKey`, `importKey`, `encryptPayload`, `decryptPayload`, and `CONTENT_TYPE`. These are package symbol names, not SDK entity fields. Verify their installed signatures. An imported raw encryption key is independent of wallet keys, passwords and signatures; import is not password derivation. Back up the raw secret privately before losing a non-extractable handle. Never log keys or decrypted data.
+Use `arkiv-encryption` 1.1.0 or newer for `generateKey`, `importKey`, `encryptBytes`, `decryptBytes`, and `CONTENT_TYPE`. These are package symbol names, separate from SDK entity columns. Verify the installed version exports them and check their signatures before integrating. An imported raw encryption key is independent of wallet keys, passwords and signatures; import is not password derivation. Back up the raw secret privately before losing a non-extractable handle. Never log keys or decrypted data.
 
 The package's v1 envelope uses a random 12-byte IV, ciphertext and 16-byte tag, without padding or additional authenticated data. It reveals plaintext length plus 28 bytes and does not bind the envelope to an entity/network/publisher. Its 100,000-byte plaintext bound is package policy. Per-key random-IV usage needs a budget and rotation well before 2^32 encryptions, including all devices. Recipient sharing, recovery, keyring/index-key rotation and encrypted large-file protocols require explicit app designs.
 
 ## SDK storage and trust
 
-Use a named `bytes()` column for the envelope and a stored `str()` media-type column. Read [SDK ciphertext storage](references/sdk-payload.md) for a typed write/read seam.
+Use a named `bytes()` column for the envelope and a stored `str()` media-type column. Read [SDK ciphertext storage](references/sdk-bytes.md) for a typed write/read seam.
 
 Before decrypting a trusted publication, verify independently configured creator, readonly creation and expected media type. Current owner plus creator cannot authenticate mutable contents after transfers. A mutable product needs an exact authorized signed version or complete authenticated provenance, with separate freshness/sequence checks. Successful decryption proves neither authorship nor user authorization.
 

@@ -1,6 +1,6 @@
 # Source-declared SDK 1.0.0 errors
 
-This catalog describes inspected source, not a claim that every error was reproduced on a live node. Preserve actual method/status/cause locally and sanitize diagnostics before sharing. Outer viem or EntityMutationError text can hide the original cause.
+This catalog describes inspected source, not a claim that every error was reproduced on a live node. Use fixed allowlisted diagnostics and validated local transaction identifiers. Never expose or persist raw provider errors or nested causes: the RPC URL path contains a credential. Outer viem or EntityMutationError objects can include that URL in multiple fields.
 
 | Class | Correction |
 | --- | --- |
@@ -50,6 +50,6 @@ Set not_reached only from trusted instrumented send-admission evidence, never in
 
 For HTTP 413 measure the exact request rather than only binary data size. Keep evidence of whether signing/forwarding occurred. A pre-send validation/unsigned-estimate failure and a paid reverted receipt are different outcomes. Explicit gas can skip estimation. Native revert names can be decoded from inspected versioned ABI/cause data; they are not guaranteed outer JavaScript class names.
 
-Explicit transaction fields are the recommended Rabdi default. A successful receipt followed by a decode/read failure must never be retried. A corrected operation may be retried at most once only after a confirmed reverted receipt, fresh nonce/fees and approved budget; these recovery helpers do not send or retry.
+Explicit transaction fields are the recommended Rabdi default. A successful receipt followed by a decode/read failure must never be retried. Allow at most one retry per operation, only after an authoritative reverted receipt proves gas exhaustion (`gasUsed === gasLimit`) and the SDK did not report success. Obtain a fresh unsigned estimate at `latest`; require the corrected gas to meet the operation floor and `2 × estimate`, at least double the previous gas cap, and satisfy `gas <= latestBlock.gasLimit / 2`. Use a fresh nonce and current network gasPrice, exclusive signer custody and approved balance/spend. Never resend after SDK success or an uncertain submission, even if a later receipt lookup is missing or disagrees. Non-gas reverts are terminal under this policy. These recovery helpers do not send or retry.
 
 Sources: [SDK errors](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/errors.ts), [schema errors](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/schema/errors.ts), [query errors](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/query/errors.ts).

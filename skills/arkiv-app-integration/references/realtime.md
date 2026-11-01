@@ -7,22 +7,50 @@ This bounded queue is for UI invalidation. It does not establish durable replay 
 ```typescript
 import type { PublicArkivClient } from '@arkiv-network/sdk';
 import type { EntityEvent } from '@arkiv-network/sdk/types';
+
+// Diagnostics contain only fixed messages and validated local transaction identifiers.
+type SafeDetails = { txHash?: string; entityKey?: string; expiresAt?: bigint };
+const safeErrors = new WeakMap<object, { message: string; details: SafeDetails }>();
+function safeError(message = 'Arkiv operation failed', details: SafeDetails = {}): Error & SafeDetails {
+  const allowed: SafeDetails = {};
+  for (const field of ['txHash', 'entityKey'] as const) {
+    const value = details[field];
+    if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) allowed[field] = value;
+  }
+  if (typeof details.expiresAt === 'bigint' && details.expiresAt >= 0n && details.expiresAt < 2n ** 64n) allowed.expiresAt = details.expiresAt;
+  const result = Object.assign(new Error(message), allowed);
+  safeErrors.set(result, { message, details: { ...allowed } });
+  return result;
+}
+function sanitizedFailure(error: unknown, fallback = 'Arkiv request failed; reconcile any admitted write before retrying'): Error & SafeDetails {
+  const own = error !== null && typeof error === 'object' ? safeErrors.get(error) : undefined;
+  if (own) return safeError(own.message, own.details);
+  // Preserve this exact cross-recipe preflight verdict, never any attached diagnostics.
+  try { if (error instanceof Error && error.message === 'Unsigned preparation/estimate failed') return safeError('Unsigned preparation/estimate failed'); } catch {}
+  return safeError(fallback);
+}
+
+
 export function watchSerially(client: Pick<PublicArkivClient, 'watchEntityEvents'>,
   handle: (event: EntityEvent) => Promise<void>, report: (error: unknown) => void,
   options: { maxQueued?: number; pollingInterval?: number } = {}) {
-  const { maxQueued = 256, pollingInterval = 1000 } = options;
-  if (!Number.isSafeInteger(maxQueued) || maxQueued < 1 || !Number.isSafeInteger(pollingInterval) || pollingInterval < 1) throw new Error('Invalid watcher bounds');
-  let stopped = false, queued = 0;
-  let unwatch = () => {};
-  let tail = Promise.resolve();
-  const fail = (error: unknown) => { stopped = true; unwatch(); try { report(error); } catch {} };
-  unwatch = client.watchEntityEvents({ pollingInterval, onEvent: event => {
-    if (stopped) return;
-    if (++queued > maxQueued) { fail(new Error('Queue overflow; reconcile cache')); return; }
-    tail = tail.then(async () => { try { if (!stopped) await handle(event); } finally { queued--; } }).catch(fail);
-  }, onError: fail });
-  if (stopped) unwatch();
-  return () => { stopped = true; unwatch(); };
+  try {
+    const { maxQueued = 256, pollingInterval = 1000 } = options;
+    if (!Number.isSafeInteger(maxQueued) || maxQueued < 1 || !Number.isSafeInteger(pollingInterval) || pollingInterval < 1) throw safeError('Invalid watcher bounds');
+    let stopped = false, queued = 0;
+    let unwatch = () => {};
+    let tail = Promise.resolve();
+    const fail = (error: unknown) => { stopped = true; try { unwatch(); } catch {} try { report(sanitizedFailure(error)); } catch {} };
+    unwatch = client.watchEntityEvents({ pollingInterval, onEvent: event => {
+      if (stopped) return;
+      if (++queued > maxQueued) { fail(safeError('Queue overflow; reconcile cache')); return; }
+      tail = tail.then(async () => { try { if (!stopped) await handle(event); } finally { queued--; } }).catch(fail);
+    }, onError: fail });
+    if (stopped) unwatch();
+    return () => { stopped = true; try { unwatch(); } catch (error) { throw sanitizedFailure(error); } };
+  } catch (error) {
+    throw sanitizedFailure(error);
+  }
 }
 ```
 

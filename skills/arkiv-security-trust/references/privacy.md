@@ -2,7 +2,7 @@
 
 Public entities are not a private database. The SDK includes all stored attributes, including bytes columns, in native operation calldata. An access key in the Rabdi URL path protects provider access; it cannot make public network data confidential. Wallet ownership controls eligible mutations, not read confidentiality.
 
-The SDK-independent `arkiv-encryption` API encrypts bytes with AES-256-GCM. Its public symbols include `generateKey`, `importKey`, `encryptPayload` and `decryptPayload`; inspect their installed signatures and consumer guide before integrating. The v1 envelope uses media type `application/vnd.arkiv.encrypted.v1`. The package's 100,000-byte plaintext bound is its own policy, not a universal transaction cap.
+The SDK-independent `arkiv-encryption` API encrypts bytes with AES-256-GCM. Use version 1.1.0 or newer for `generateKey`, `importKey`, `encryptBytes` and `decryptBytes`; verify those exports and inspect their installed signatures and consumer guide before integrating. The v1 envelope uses media type `application/vnd.arkiv.encrypted.v1`. The package's 100,000-byte plaintext bound is its own policy, not a universal transaction cap.
 
 Keep an independent encryption key, with private backup and an explicit sharing/recovery policy. A wallet's private key, seed, password or wallet signature is not the input to `importKey`. The package imports exactly 32 raw key bytes or a 64-character hex key without `0x`; it is not a password KDF.
 

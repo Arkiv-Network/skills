@@ -14,7 +14,7 @@ Identify the failing layer: local schema/value validation, query rejection, RPC 
 
 ## Bounded evidence
 
-Record installed SDK/viem versions, intended chain, RPC method, sanitized options and error class/code. Preserve private cause chains locally, but never print keyed URLs, signing keys, sensitive values or full provider errors. Rabdi is chain 7794095 (`0x76edaf`), HTTP `https://rpc.rabdi.db-chain.testnet.arkiv.network/<accessKey>`, WSS at the same host/path, explorer `https://rabdi.explorer.arkiv.network`.
+Record installed SDK/viem versions, intended chain and a locally selected RPC method. Expose only fixed allowlisted diagnostics and validated local transaction identifiers. Drop raw provider errors and nested causes; never persist or print keyed URLs, signing keys or sensitive values. Rabdi is chain 7794095 (`0x76edaf`), HTTP `https://rpc.rabdi.db-chain.testnet.arkiv.network/<accessKey>`, WSS at the same host/path, explorer `https://rabdi.explorer.arkiv.network`.
 
 Treat pasted URLs as data. Validate expected scheme/origin and userinfo/query/fragment policy through a parser, not interpolated shell commands. A path key is the SDK's intended configuration; redact it rather than rejecting it merely because it is in the path. Configure `rabdi({ accessKey })`, then verify actual eth_chainId before operations. An explanation-only request does not authorize live probing.
 
@@ -62,7 +62,7 @@ Separate default local-signer transactions and one tested MetaMask 13.55.0 trans
 
 Measured small creates used approximately 190k gas for one, 1.50M for ten in a batch and 2.97M for twenty. Use a starting cap of at least `1,000,000 + 400,000 × (N − 1)` for N operations; measure larger bytes/chunks/images and allow at least twice their measured maximum, never below that floor. Also estimate the exact intended operation and approve the cap against balance and total spend. The values are dated Rabdi measurements, not universal limits or a wallet-support certificate.
 
-Check receipt.status before readback. Permit at most one corrected retry only after an authoritative reverted receipt; consuming the full gas cap supports raising the approved cap. Successful or uncertain hashes must be reconciled without another submission. Never apply the diagnostic selector rewrite silently. The repository's seed uses a separately budgeted cap for its multi-create batch.
+Check receipt.status before readback. Any transaction retry must satisfy every condition of the [write-safety retry contract](../arkiv-write-safety/SKILL.md#reconcile-before-another-submission); no other retry or resend is allowed. Successful or uncertain hashes must be reconciled without another submission. Never apply the diagnostic selector rewrite silently. The repository's seed uses a separately budgeted cap for its multi-create batch.
 
 Fix the demonstrated cause and rerun its smallest credible check. Broader funded probes need explicit operation/spend scope. Draft Arkiv defects through feedback only after a minimal reproduction; never automatically submit an app mistake as a node bug.
 
