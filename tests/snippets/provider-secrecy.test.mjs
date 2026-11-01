@@ -91,7 +91,7 @@ test('confirmed first-write read failure preserves only validated local identifi
  const txHash='0x'+'11'.repeat(32),entityKey='0x'+'22'.repeat(32);
  const builder={};for(const method of ['from','createdBy','where','limit'])builder[method]=()=>builder;
  builder.fetch=async()=>({entities:[]});
- const reader={getChainId:async()=>7794095,select:()=>builder,getTransactionCount:async()=>0,
+ const reader={getBlock:async()=>({gasLimit:30000000n}),getChainId:async()=>7794095,select:()=>builder,getTransactionCount:async()=>0,
   request:async()=> '0x1',getBalance:async()=>10000000n,getTransactionReceipt:async()=>{throw providerError();}};
  const wallet={chain:{id:7794095},account:{address:account.address},createEntity:async()=>({txHash,entityKey,expiresAt:1000n})};
  const error=await rejected(()=>module.ensureFirstNote({reader,wallet},async()=>{},sdk.ExpirationTime.fromDays(1),10000000n,async()=>100000n));

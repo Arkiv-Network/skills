@@ -56,6 +56,9 @@ export async function createRelated(reader: ReturnType<typeof createPublicClient
     const estimate = await estimateLatest(unsigned => unsigned.executeBatch(batch));
     if (estimate <= 0n) throw safeError('Unsigned estimate required');
     const gas = 2n * estimate > 1400000n ? 2n * estimate : 1400000n;
+    const block = await reader.getBlock({ blockTag: 'latest' });
+    if (typeof block.gasLimit !== 'bigint' || block.gasLimit <= 0n) throw safeError('Latest block gas limit required');
+    if (gas > block.gasLimit / 2n) throw safeError('Gas exceeds half the latest block limit; split unprepared work');
     const result = await wallet.executeBatch(batch, { nonce: latest, gas, gasPrice });
     if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Receipt disagrees after SDK success; reconcile without resending');
     if (result.createdEntities.length !== 2 || result.createdEntities[0] !== parent.key || result.createdEntities[1] !== child.key ||

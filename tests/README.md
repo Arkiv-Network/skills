@@ -16,6 +16,12 @@ node tests/snippets/published-imports.mjs
 
 The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance requires `arkiv-encryption` 1.1.0 or newer; verify its named bytes exports before consuming it.
 
+The gas-bound repository gate requires both conservative AST validation and execution of each discovered helper's complete documentation fence. `verifyGasBounds` runs real helper bodies with synthetic above-bound and within-bound inputs in bounded workers; any missing adapter, execution error, timeout or missing result fails the gate. The importer's arithmetic-only formula is executed with its actual admission guard, while preparation, resume and the private guard also execute independently. `inspectGasBounds` remains the static unit-test layer. A passing structural result alone cannot certify a helper. No funded signer or provider is used.
+
+The gas-bound gate catches accidental regressions in published snippets, including removed, weakened, unreachable or swallowed half-block checks. It does not defend against code deliberately written to detect and fool the tests; human review is required for every skill change.
+
+Provider facades and raw/formatted return values are deeply frozen. Execution uses boundary, oversized and varied deterministic vectors from seed `0x41524b49`; the neutral network refusal adds no test-only global flag. The seed and complete vector table are emitted with the execution evidence.
+
 If only the SDK needs upgrading, `node tests/prepare-sdk.mjs <viem-workspace> <typescript-workspace> <node-types-workspace>` verifies the official 1.0.0 tarball and prepares `.checks`, reusing existing peers without installing or executing package scripts. It creates symlinks to those existing peers; their lifecycle remains the contributor's responsibility.
 
 ## Authorized Rabdi smoke and seed

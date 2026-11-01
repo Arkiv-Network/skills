@@ -157,7 +157,7 @@ function requiredGas(estimate, operations, chainId) {
 async function checkHalfBlock(reader, gas) {
   const block = await reader.getBlock({ blockTag: "latest" });
   check(typeof block.gasLimit === "bigint" && block.gasLimit > 0n, "Latest block gas limit required");
-  check(gas <= block.gasLimit / 2n, "Gas exceeds half the latest block limit; retain intent and reconcile");
+  check(gas <= block.gasLimit / 2n, "Gas exceeds half the latest block limit; retain intent and reconcile; split only unprepared work");
 }
 async function sdkCalldata(account, chain, read, creates, nonce, gas, fees) {
   let captured;
