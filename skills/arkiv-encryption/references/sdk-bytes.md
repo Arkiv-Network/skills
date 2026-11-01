@@ -45,6 +45,9 @@ export async function writeEncryptedNote(reader: ReturnType<typeof createPublicC
     const estimate = await estimateLatest(unsigned => unsigned.createEntity(EncryptedNotes, values, options));
     if (estimate <= 0n) throw safeError('Unsigned estimate required');
     const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
+    const block = await reader.getBlock({ blockTag: 'latest' });
+    if (typeof block.gasLimit !== 'bigint' || block.gasLimit <= 0n) throw safeError('Latest block gas limit required');
+    if (gas > block.gasLimit / 2n) throw safeError('Gas exceeds half the latest block limit; split unprepared work');
     if (!wallet.account) throw safeError('Authorized account and approved gas floor required');
     const address = wallet.account.address;
     const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });

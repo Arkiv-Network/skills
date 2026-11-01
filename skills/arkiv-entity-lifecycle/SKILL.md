@@ -66,6 +66,9 @@ type Reader = ReturnType<typeof createPublicClient>;
 type EstimateLatest = (prepare: (unsigned: Wallet) => Promise<unknown>) => Promise<bigint>;
 async function txParams(reader: Reader, wallet: Wallet, estimate: bigint): Promise<TxParams> {
   const gas = 2n * estimate > 1000000n ? 2n * estimate : 1000000n;
+  const block = await reader.getBlock({ blockTag: 'latest' });
+  if (typeof block.gasLimit !== 'bigint' || block.gasLimit <= 0n) throw safeError('Latest block gas limit required');
+  if (gas > block.gasLimit / 2n) throw safeError('Gas exceeds half the latest block limit; split unprepared work');
   if (estimate <= 0n || !wallet.account) throw safeError('Authorized account and Rabdi gas floor required');
   const address = wallet.account.address;
   const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });

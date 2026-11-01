@@ -77,6 +77,7 @@ const diagnostics = new Set([
  'throw safeError("Stopped before durable send admission; inspect journal before retrying");',
 ]);
 const disabledTransports = new Set([
+ 'const reader = createPublicClient({ chain, cacheTime: 0, transport: custom(rpc, { retryCount: 0 }) });',
  'const transport = http(undefined, { retryCount: 0, timeout: 10000,',
  '} }, { retryCount: 0 });',
  'const rpc = http(undefined, { retryCount: 0, timeout: 10000,',
@@ -105,7 +106,20 @@ export function retrySentences(markdown) {
   const found=[];let fence,paragraph=[],start=1;
   function flush() {
     const context=paragraph.join('\n').replace(/^(?:\s*[-*+] |\s*\d+\. )/gm,'');
-    for(const {segment,index} of segmenter.segment(context))if(action.test(segment))found.push({line:start+context.slice(0,index).split('\n').length-1,text:normalize(segment),context:normalize(context),kind:'prose'});
+    // Mask link destinations with equal-length text so ../ punctuation cannot
+    // become a sentence boundary. Restore original bytes before classification.
+    let protectedText='',cursor=0;
+    for(let i=0;i<context.length-1;i++)if(context[i]===']'&&context[i+1]==='(') {
+      let depth=1,end=i+2;
+      for(;end<context.length&&depth;end++){if(context[end]==='\\'){end++;continue;}if(context[end]==='(')depth++;else if(context[end]===')')depth--;}
+      if(depth)continue;
+      protectedText+=context.slice(cursor,i+1)+context.slice(i+1,end).replace(/[^\n]/g,'X');cursor=end;i=end-1;
+    }
+    protectedText+=context.slice(cursor);
+    for(const {segment,index} of segmenter.segment(protectedText)) {
+      const original=context.slice(index,index+segment.length);
+      if(action.test(original))found.push({line:start+context.slice(0,index).split('\n').length-1,text:normalize(original),context:normalize(context),kind:'prose'});
+    }
     paragraph=[];
   }
   markdown.split(/\r?\n/).forEach((line,index)=>{

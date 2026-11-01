@@ -85,6 +85,9 @@ export async function rabdiTxParams(reader: Clients['reader'], address: LocalAcc
     if (estimate <= 0n || !Number.isSafeInteger(operations) || operations < 1) throw safeError('Valid unsigned estimate and operation count required');
     const floor = 1000000n + 400000n * BigInt(operations - 1);
     const gas = floor > 2n * estimate ? floor : 2n * estimate;
+    const block = await reader.getBlock({ blockTag: 'latest' });
+    if (typeof block.gasLimit !== 'bigint' || block.gasLimit <= 0n) throw safeError('Latest block gas limit required');
+    if (gas > block.gasLimit / 2n) throw safeError('Gas exceeds half the latest block limit; split unprepared work');
     const latest = await reader.getTransactionCount({ address, blockTag: 'latest' });
     if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw safeError('Reconcile pending nonce first');
     const gasPrice = await getGasPrice(reader);

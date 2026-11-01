@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { makeFixture } from './fixtures/importer-rpc-fixture.mjs';
+import {inspectGasBounds} from '../gas-bound-check.mjs';
 const workspace = process.env.ARKIV_SNIPPET_WORKSPACE;
 assert.ok(workspace);
 const root = path.resolve('skills');
@@ -12,6 +13,13 @@ const chains = await import(pathToFileURL(path.join(workspace, 'node_modules/@ar
 const attr = await import(pathToFileURL(path.join(workspace, 'node_modules/@arkiv-network/sdk/dist/schema/index.js')));
 const viem = await import(pathToFileURL(path.join(workspace, 'node_modules/viem/_esm/index.js')));
 const accounts = await import(pathToFileURL(path.join(workspace, 'node_modules/viem/_esm/accounts/index.js')));
+
+test('every executable gas calculation enforces the latest half-block bound',async()=>{
+  const result=await inspectGasBounds(process.cwd(),workspace);
+  console.log(JSON.stringify({gasBoundInventory:result}));
+  assert.ok(result.inventory.length>0);
+  assert.deepEqual(result.failures,[]);
+});
 
 function validateRetentionGuidance(markdown) {
   for (const fence of markdown.matchAll(/```(?:typescript|javascript)\r?\n([\s\S]*?)\r?\n```/g)) {
@@ -71,7 +79,7 @@ test('first-write default uses latest nonce and explicit gas/price, refuses pend
   const module = await documentationModule('skills/arkiv-first-write/SKILL.md');
   const address = '0x' + '11'.repeat(20);
   let pending = 7;
-  const reader = { getTransactionCount: async ({ blockTag }) => blockTag === 'latest' ? 7 : pending,
+  const reader = { getBlock: async()=>({gasLimit:30000000n}), getTransactionCount: async ({ blockTag }) => blockTag === 'latest' ? 7 : pending,
     request: async ({ method }) => { assert.equal(method, 'eth_gasPrice'); return '0x2'; }, getBalance: async () => 10000000n };
   assert.deepEqual(await module.rabdiTxParams(reader, address, 2000000n, 100000n), { nonce: 7, gas: 1000000n, gasPrice: 2n });
   assert.deepEqual(await module.rabdiTxParams(reader, address, 3200000n, 800000n), { nonce: 7, gas: 1600000n, gasPrice: 2n });
@@ -113,7 +121,7 @@ test('expiration helpers enforce the measured forward window and explicit extens
   const module = await documentationModule('skills/arkiv-entity-expiration/SKILL.md');
   const entityKey = '0x' + '22'.repeat(32), txHash = '0x' + '33'.repeat(32);
   let expiresAt = 100n + 7884000n - 20n, sends = 0, captured;
-  const reader = { getEntity: async () => ({ $expiresAt: expiresAt }), getBlockNumber: async () => 100n,
+  const reader = { getBlock: async()=>({gasLimit:30000000n}), getEntity: async () => ({ $expiresAt: expiresAt }), getBlockNumber: async () => 100n,
     getTransactionCount: async () => 2, request: async ({ method }) => { assert.equal(method, 'eth_gasPrice'); return '0x3'; },
     getTransactionReceipt: async () => ({ status: 'success' }) };
   const wallet = { account: { address: '0x' + '11'.repeat(20) }, extendEntity: async (operation, params) => {

@@ -27,6 +27,15 @@ async function fixture(t, files={}) {
   return {directory,put};
 }
 const reference='Any transaction retry must satisfy every condition of the [write-safety retry contract](../arkiv-write-safety/SKILL.md#reconcile-before-another-submission); no other retry or resend is allowed.';
+test('nested canonical link destinations remain a single classified sentence',async t=>{
+  const text=reference.replace('../arkiv-write-safety/','../../arkiv-write-safety/');
+  const f=await fixture(t,{'skills/new/references/recovery.md':text});
+  const result=await checkRetryPolicy(f.directory);
+  assert.equal(result.passed,true,JSON.stringify(result.failures));
+  assert.equal(result.inventory.filter(x=>x.file==='skills/new/references/recovery.md').length,1);
+  await f.put('skills/new/references/recovery.md',text+' Resend after any revert.');
+  assert.equal((await checkRetryPolicy(f.directory)).passed,false);
+});
 test('automatic discovery includes new and nested SKILL, reference and AGENTS resources without a file catalog',async t=>{
   const f=await fixture(t,{'new/SKILL.md':'No automatic retry.','nested/references/deep/recovery.md':'The helpers do not retry.','nested/AGENTS.local.md':'No automatic retry.','AGENTS.md':'The helpers do not retry.'});
   const result=await checkRetryPolicy(f.directory);
