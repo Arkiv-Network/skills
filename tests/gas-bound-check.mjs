@@ -127,15 +127,34 @@ export async function inspectGasBounds(root,workspace) {
      if(functionLike(scope)&&scope.parameters.some(p=>binds(p.name,name)))return;
      if(!ts.isBlock(scope)&&!ts.isSourceFile(scope))continue;
      for(const statement of scope.statements) {
-      if(ts.isFunctionDeclaration(statement)&&statement.name?.text===name)return statement;
+      if(ts.isFunctionDeclaration(statement)&&statement.name?.text===name)return stableBinding(scope,name,statement)?statement:undefined;
       if(ts.isVariableStatement(statement))for(const declaration of statement.declarationList.declarations)if(binds(declaration.name,name)) {
        if(!ts.isIdentifier(declaration.name))return;
+       if(!(statement.declarationList.flags&ts.NodeFlags.Const)||!stableBinding(scope,name,declaration))return;
        if(declaration.pos>call.pos)return;
        const initializer=declaration.initializer&&unwrap(declaration.initializer);
        return initializer&&(ts.isArrowFunction(initializer)||ts.isFunctionExpression(initializer))?initializer:undefined;
       }
      }
     }
+   }
+   function stableBinding(scope,name,original) {
+    let stable=true;
+    const mentions=node=>{let found=false;visit(node,part=>{if(ts.isIdentifier(part)&&part.text===name)found=true;});return found;};
+    visit(scope,node=>{
+     if(node===original)return;
+     if((ts.isVariableDeclaration(node)||ts.isParameter(node)||ts.isBindingElement(node))&&binds(node.name,name))stable=false;
+     if((ts.isFunctionDeclaration(node)||ts.isClassDeclaration(node))&&node.name?.text===name)stable=false;
+     if(ts.isBinaryExpression(node)&&node.operatorToken.kind>=ts.SyntaxKind.FirstAssignment&&node.operatorToken.kind<=ts.SyntaxKind.LastAssignment&&mentions(node.left))stable=false;
+     if((ts.isPrefixUnaryExpression(node)||ts.isPostfixUnaryExpression(node))&&[ts.SyntaxKind.PlusPlusToken,ts.SyntaxKind.MinusMinusToken].includes(node.operator)&&mentions(node.operand))stable=false;
+     if(ts.isDeleteExpression(node)&&mentions(node.expression))stable=false;
+     if((ts.isForOfStatement(node)||ts.isForInStatement(node))&&mentions(node.initializer))stable=false;
+     // Only declaration names and direct invocations preserve custody. Treat
+     // aliases, arguments and property access as escapes. A direct invocation
+     // inside a callback is still an invocation, not a transfer of the binding.
+     if(ts.isIdentifier(node)&&node.text===name&&node!==original.name&&!(ts.isCallExpression(node.parent)&&node.parent.expression===node))stable=false;
+    });
+    return stable;
    }
    function executableAssertion(call,awaited) {
     const fn=functionAt(call);if(!fn?.body||!ts.isBlock(fn.body)||fn.asteriskToken||!fn.parameters.length||!ts.isIdentifier(fn.parameters[0].name))return false;
@@ -206,6 +225,7 @@ export async function inspectGasBounds(root,workspace) {
     if(calculated||frozen)computed.push(node);
    });
    // Pure arithmetic is not a send boundary: callers choosing a cap guard it.
+   for(const [name,fn] of functions)if(fn.parameters.some(p=>ts.isIdentifier(p.name)&&p.name.text==='gas')&&fn.body?.getText(source).includes('.getBlock('))inventory.push({file,function:name,kind:'delegated-guard',guarded:Boolean(blocked(fn.body,'gas'))});
    for(const [name,fn] of functions)if(fn.body&&fn.parameters.some(x=>x.name.getText(source)==='estimate')&&!computed.some(d=>ownFunction(d)===name)&&/estimate\*2n/.test(code(fn.body))) {
     const sites=computed.filter(d=>ts.isCallExpression(d.initializer)&&d.initializer.expression.getText(source)===name);
     inventory.push({file,function:name,line:text.slice(0,fence.index).split('\n').length+source.getLineAndCharacterOfPosition(fn.getStart(source)).line+1,kind:'pure-formula',guarded:sites.length>0&&sites.every(d=>Boolean(guardFor(d)))});
@@ -224,4 +244,13 @@ export async function inspectGasBounds(root,workspace) {
   }
  }
  return {passed:inventory.every(x=>x.guarded),inventory,failures:inventory.filter(x=>!x.guarded)};
+}
+
+// The static inspector is a unit-testable second layer. The repository gate
+// also requires every discovered point to pass its exact-body execution probe.
+export async function verifyGasBounds(root,workspace) {
+ const structural=await inspectGasBounds(root,workspace);
+ const {executeGasBounds}=await import('./gas-bound-execution.mjs');
+ const behavioral=await executeGasBounds(root,workspace,structural.inventory);
+ return {...structural,staticPassed:structural.passed,behavioral,passed:structural.passed&&behavioral.passed};
 }

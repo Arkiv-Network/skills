@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {test} from 'node:test';
 import {pathToFileURL} from 'node:url';
-import {inspectGasBounds} from '../gas-bound-check.mjs';
+import {verifyGasBounds} from '../gas-bound-check.mjs';
 
 const workspace=process.env.ARKIV_SNIPPET_WORKSPACE;
 assert.ok(workspace);
@@ -13,6 +13,27 @@ const direct='skills/arkiv-first-write/SKILL.md';
 const originals=new Map(await Promise.all([importer,direct].map(async file=>[file,await fs.readFile(file,'utf8')])));
 function replaceOnce(text,needle,replacement) {assert.equal(text.split(needle).length,2,'Mutation must target the exact published code');return text.replace(needle,replacement);}
 const noOp='const check = (ok, why) => { /* if (!ok) throw safeError(why); */ };';
+test('Turn 11 exact reassigned assertion cannot borrow its initializer',async t=>{
+ const result=await inspectFixture(t,importer,text=>replaceOnce(replaceOnce(text,'const check = (ok, why) =>','let check = (ok, why) =>'),
+  'async function checkHalfBlock(reader, gas) {','async function checkHalfBlock(reader, gas) {\n  check = (_ok, _why) => {};'));
+ assert.equal(result.passed,false);
+ assert.equal(result.staticPassed,false);
+ assert.equal(result.behavioral.passed,false);
+ const guard=result.behavioral.results.find(x=>x.function==='checkHalfBlock');assert.ok(guard);
+ assert.equal(guard.cases.find(x=>x.above).rejected,false,'The exact reassigned guard resolves oversized gas');
+});
+for(const declaration of ['let','var'])test('Turn 11 refuses a mutable assertion even without reassignment: '+declaration,async t=>{
+ const result=await inspectFixture(t,importer,text=>replaceOnce(text,'const check = (ok, why) =>',declaration+' check = (ok, why) =>'));
+ assert.equal(result.staticPassed,false);assert.equal(result.behavioral.passed,true);
+});
+for(const mutation of ['check.extra = true;','Object.assign(check, { extra: true });'])test('Turn 11 refuses mutation of an assertion: '+mutation,async t=>{
+ const result=await inspectFixture(t,importer,text=>replaceOnce(text,'async function checkHalfBlock(reader, gas) {','async function checkHalfBlock(reader, gas) {\n'+mutation));
+ assert.equal(result.staticPassed,false);
+});
+test('Turn 11 refuses reassignment of a function declaration',async t=>{
+ const result=await inspectFixture(t,importer,text=>replaceOnce(text,'async function checkHalfBlock(reader, gas) {','async function checkHalfBlock(reader, gas) {\n checkHalfBlock = async () => {};'));
+ assert.equal(result.staticPassed,false);assert.equal(result.behavioral.passed,false);
+});
 function earlyReturn(file,text) {
  const needle=file===importer?'async function checkHalfBlock(reader, gas) {':'operations = 1): Promise<TxParams> {';
  return replaceOnce(text,needle,needle+'\n  return;');
@@ -28,8 +49,35 @@ async function inspectFixture(t,file,mutate) {
  t.after(async()=>{assert.equal(path.dirname(directory),os.tmpdir());assert.ok(path.basename(directory).startsWith('arkiv-gas-reachability-'));await fs.rm(directory,{recursive:true});});
  const target=path.join(directory,file);await fs.mkdir(path.dirname(target),{recursive:true});
  await fs.writeFile(target,mutate(originals.get(file)),'utf8');
- return inspectGasBounds(directory,workspace);
+ const result=await verifyGasBounds(directory,workspace);
+ console.log(JSON.stringify({gasMutation:{name:t.name,file,static:result.staticPassed,behavioral:result.behavioral.passed,
+  executions:result.behavioral.results.map(x=>({function:x.function,passed:x.passed,error:x.error,cases:x.cases}))}}));
+ return result;
 }
+const directBound="if (gas > block.gasLimit / 2n) throw safeError('Gas exceeds half the latest block limit; split unprepared work');";
+for(const [name,mutate] of [
+ ['removed guard',text=>replaceOnce(text,directBound,'')],
+ ['wrong comparison',text=>replaceOnce(text,'gas > block.gasLimit','gas < block.gasLimit')],
+ ['full-block divisor',text=>replaceOnce(text,'block.gasLimit / 2n','block.gasLimit / 1n')],
+ ['historical selector',text=>replaceOnce(text,"reader.getBlock({ blockTag: 'latest' })","reader.getBlock({ blockTag: 'safe' })")],
+ ['bound after return',text=>replaceOnce(replaceOnce(text,directBound,''),'return await { nonce: latest, gas, gasPrice };','return await { nonce: latest, gas, gasPrice };\n'+directBound)],
+ ['comment-only direct throw',text=>replaceOnce(text,directBound,'// '+directBound)],
+])test('Turn 11 earlier formula mutation executes the published helper: '+name,async t=>{
+ const result=await inspectFixture(t,direct,mutate);assert.equal(result.staticPassed,false);assert.equal(result.behavioral.passed,false);assert.equal(result.passed,false);
+});
+test('Turn 11 an assertion parameter cannot shadow the immutable binding',async t=>{
+ const result=await inspectFixture(t,importer,text=>replaceOnce(text,'async function checkHalfBlock(reader, gas) {','async function checkHalfBlock(reader, gas, check = (_ok, _why) => {}) {'));
+ assert.equal(result.staticPassed,false);assert.equal(result.behavioral.passed,false);
+});
+test('Turn 11 unawaited delegation cannot admit a write',async t=>{
+ const result=await inspectFixture(t,importer,text=>text.replaceAll('await checkHalfBlock(reader, gas);','checkHalfBlock(reader, gas);'));
+ assert.equal(result.staticPassed,false);assert.equal(result.behavioral.passed,false);
+});
+test('Turn 11 execution requires a clean worker exit after its result',async t=>{
+ const result=await inspectFixture(t,direct,text=>replaceOnce(text,'operations = 1): Promise<TxParams> {',
+  'operations = 1): Promise<TxParams> {\n setImmediate(() => { throw new Error("Late execution failure"); });'));
+ assert.equal(result.staticPassed,true);assert.equal(result.behavioral.passed,false);assert.equal(result.passed,false);
+});
 for(const file of [importer,direct])for(const [name,mutate] of [['early return',earlyReturn],['comment-only no-op assertion',commentOnly]]) {
  test('published '+file+' rejects '+name,async t=>{
   const result=await inspectFixture(t,file,text=>mutate(file,text));

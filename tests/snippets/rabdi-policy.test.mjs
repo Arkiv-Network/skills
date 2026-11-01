@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { makeFixture } from './fixtures/importer-rpc-fixture.mjs';
-import {inspectGasBounds} from '../gas-bound-check.mjs';
+import {verifyGasBounds} from '../gas-bound-check.mjs';
 const workspace = process.env.ARKIV_SNIPPET_WORKSPACE;
 assert.ok(workspace);
 const root = path.resolve('skills');
@@ -15,10 +15,12 @@ const viem = await import(pathToFileURL(path.join(workspace, 'node_modules/viem/
 const accounts = await import(pathToFileURL(path.join(workspace, 'node_modules/viem/_esm/accounts/index.js')));
 
 test('every executable gas calculation enforces the latest half-block bound',async()=>{
-  const result=await inspectGasBounds(process.cwd(),workspace);
+  const result=await verifyGasBounds(process.cwd(),workspace);
   console.log(JSON.stringify({gasBoundInventory:result}));
   assert.ok(result.inventory.length>0);
   assert.deepEqual(result.failures,[]);
+  assert.equal(result.behavioral.passed,true,JSON.stringify(result.behavioral.failures));
+  assert.equal(result.passed,true);
 });
 
 function validateRetentionGuidance(markdown) {

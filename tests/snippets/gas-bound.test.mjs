@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {inspect} from 'node:util';
 import {pathToFileURL} from 'node:url';
 import {before,after,test} from 'node:test';
-import {inspectGasBounds} from '../gas-bound-check.mjs';
+import {inspectGasBounds,verifyGasBounds} from '../gas-bound-check.mjs';
 
 const workspace=process.env.ARKIV_SNIPPET_WORKSPACE;
 assert.ok(workspace);
@@ -100,6 +100,13 @@ test('unsigned estimator sanitizes latest-block RPC failures',async()=>{
 });
 
 const checkedSource="export async function newHelper(reader, estimate) {\nconst gas = estimate * 2n;\nconst block = await reader.getBlock({ blockTag: 'latest' });\nif (gas > block.gasLimit / 2n) throw new Error('Stopped');\nreturn gas;\n}";
+test('Turn 11 a discovered helper without execution coverage fails the repository gate',async()=>{
+ const root=await fs.mkdtemp(path.join(directory,'unregistered-guide-'));await fs.mkdir(path.join(root,'new'));
+ await fs.writeFile(path.join(root,'new/SKILL.md'),'```typescript\n'+checkedSource+'\n```\n');
+ const result=await verifyGasBounds(root,workspace);assert.equal(result.staticPassed,true);
+ assert.equal(result.behavioral.passed,false);assert.equal(result.passed,false);
+ assert.match(result.behavioral.failures[0].error,/Missing execution adapter/);
+});
 const checkerMutations=[
  ['positive',text=>text,true],
  ['removed guard',text=>text.replace("if (gas > block.gasLimit / 2n) throw new Error('Stopped');",''),false],
@@ -132,6 +139,6 @@ test('automatic gas checker requires awaiting an asynchronous delegated bound be
   const guard="async function bounded(reader, gas) { const block = await reader.getBlock({ blockTag: 'latest' }); if (gas > block.gasLimit / 2n) throw new Error('Stopped'); }";
   const source=guard+'\nexport async function newHelper(reader, estimate) { const gas = estimate * 2n; '+(awaited?'await ':'')+'bounded(reader, gas); return gas; }';
   await fs.writeFile(path.join(root,'new/SKILL.md'),'```typescript\n'+source+'\n```\n');
-  const result=await inspectGasBounds(root,workspace);assert.equal(result.inventory.length,1);assert.equal(result.passed,awaited);
+  const result=await inspectGasBounds(root,workspace);assert.ok(result.inventory.some(x=>x.function==='newHelper'));assert.equal(result.passed,awaited);
  }
 });
