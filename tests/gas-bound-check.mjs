@@ -15,24 +15,131 @@ export async function inspectGasBounds(root,workspace) {
    visit(source,node=>{if(ts.isFunctionDeclaration(node)&&node.name)functions.set(node.name.text,node);});
    const code=node=>node.getText(source).replace(/\s+/g,'');
    const ownFunction=node=>{for(let p=node.parent;p;p=p.parent)if(ts.isFunctionDeclaration(p))return p.name.text;};
+   const unwrap=node=>{while(node&&ts.isParenthesizedExpression(node))node=node.expression;return node;};
+   const functionLike=node=>ts.isFunctionDeclaration(node)||ts.isFunctionExpression(node)||ts.isArrowFunction(node)||ts.isMethodDeclaration(node)||ts.isGetAccessorDeclaration(node)||ts.isSetAccessorDeclaration(node);
+   function truth(node) {
+    node=unwrap(node);
+    if(node.kind===ts.SyntaxKind.TrueKeyword)return true;
+    if(node.kind===ts.SyntaxKind.FalseKeyword||node.kind===ts.SyntaxKind.NullKeyword)return false;
+    if(ts.isNumericLiteral(node))return Number(node.text)!==0;
+    if(ts.isBigIntLiteral(node))return BigInt(node.text.slice(0,-1))!==0n;
+    if(ts.isStringLiteral(node))return node.text.length>0;
+    if(ts.isPrefixUnaryExpression(node)&&node.operator===ts.SyntaxKind.ExclamationToken){const value=truth(node.operand);return value===undefined?undefined:!value;}
+    if(ts.isBinaryExpression(node)) {
+     const left=truth(node.left),op=node.operatorToken.kind;
+     if(op===ts.SyntaxKind.AmpersandAmpersandToken)return left===false?false:left===true?truth(node.right):undefined;
+     if(op===ts.SyntaxKind.BarBarToken)return left===true?true:left===false?truth(node.right):undefined;
+    }
+   }
+   const union=(...sets)=>new Set(sets.flatMap(set=>[...set]));
+   function sequence(statements) {
+    let result=new Set(['next']);
+    for(const statement of statements)if(result.has('next')){result.delete('next');result=union(result,flow(statement));}
+    return result;
+   }
+   function flow(statement) {
+    if(ts.isReturnStatement(statement))return new Set(['return']);
+    if(ts.isThrowStatement(statement))return new Set(['throw']);
+    if(ts.isBreakStatement(statement))return new Set(['break']);
+    if(ts.isContinueStatement(statement))return new Set(['continue']);
+    if(ts.isBlock(statement))return sequence(statement.statements);
+    if(ts.isIfStatement(statement)) {
+     const value=truth(statement.expression),yes=flow(statement.thenStatement),no=statement.elseStatement?flow(statement.elseStatement):new Set(['next']);
+     return value===true?yes:value===false?no:union(yes,no);
+    }
+    if(ts.isTryStatement(statement)) {
+     let result=flow(statement.tryBlock);
+     if(statement.catchClause){result.delete('throw');result=union(result,flow(statement.catchClause.block));}
+     if(statement.finallyBlock){const final=flow(statement.finallyBlock);if(!final.has('next'))return final;final.delete('next');result=union(result,final);}
+     return result;
+    }
+    if(ts.isForStatement(statement)||ts.isForOfStatement(statement)||ts.isForInStatement(statement)||ts.isWhileStatement(statement)||ts.isDoStatement(statement)) {
+     const body=flow(statement.statement),value=ts.isForStatement(statement)&&!statement.condition?true:ts.isForStatement(statement)?truth(statement.condition):statement.expression&&!ts.isForOfStatement(statement)&&!ts.isForInStatement(statement)?truth(statement.expression):undefined;
+     if(value===false&&!ts.isDoStatement(statement))return new Set(['next']);
+     const result=union(body);result.delete('continue');result.delete('next');
+     if(body.has('break')||(!ts.isDoStatement(statement)&&value!==true)||(ts.isDoStatement(statement)&&value!==true&&(body.has('next')||body.has('continue'))))result.add('next');result.delete('break');return result;
+    }
+    if(ts.isSwitchStatement(statement)) {
+     const clauses=statement.caseBlock.clauses,result=new Set();
+     for(let i=0;i<clauses.length;i++)for(const outcome of sequence(clauses.slice(i).flatMap(c=>[...c.statements])))result.add(outcome==='break'?'next':outcome);
+     if(!clauses.some(c=>ts.isDefaultClause(c)))result.add('next');return result;
+    }
+    if(ts.isLabeledStatement(statement)||ts.isWithStatement(statement))return flow(statement.statement);
+    // Definitions/callbacks are not executed by declaring them. In particular,
+    // never mistake a nested function's return for a return from this guard.
+    return new Set(['next']);
+   }
+   function reachable(node) {
+    for(let child=node,parent=node.parent;parent;child=parent,parent=parent.parent) {
+     if((ts.isBlock(parent)||ts.isSourceFile(parent))&&parent.statements.includes(child)) {
+      const prefix=sequence(parent.statements.slice(0,parent.statements.indexOf(child)));
+      if(!prefix.has('next')||prefix.has('return'))return false;
+     }
+     if(ts.isIfStatement(parent)) {
+      const value=truth(parent.expression);
+      if((child===parent.thenStatement&&value===false)||(child===parent.elseStatement&&value===true))return false;
+     }
+     if((ts.isWhileStatement(parent)||ts.isForStatement(parent))&&child===parent.statement) {
+      const condition=ts.isForStatement(parent)?parent.condition:parent.expression;
+      if(condition&&truth(condition)===false)return false;
+     }
+     if(functionLike(parent))return true;
+    }
+    return true;
+   }
+   function comparison(node,gasName,blockName,operator) {
+    node=unwrap(node);if(!node||!ts.isBinaryExpression(node)||node.operatorToken.kind!==operator)return false;
+    const left=unwrap(node.left),right=unwrap(node.right);
+    if(!ts.isIdentifier(left)||left.text!==gasName||!ts.isBinaryExpression(right)||right.operatorToken.kind!==ts.SyntaxKind.SlashToken)return false;
+    const limit=unwrap(right.left),divisor=unwrap(right.right);
+    return ts.isPropertyAccessExpression(limit)&&!limit.questionDotToken&&ts.isIdentifier(limit.expression)&&limit.expression.text===blockName&&limit.name.text==='gasLimit'&&ts.isBigIntLiteral(divisor)&&divisor.text==='2n';
+   }
+   const throwsOnEveryPath=statement=>{const outcomes=flow(statement);return outcomes.size===1&&outcomes.has('throw');};
+   function binds(binding,name) {
+    if(ts.isIdentifier(binding))return binding.text===name;
+    return (ts.isObjectBindingPattern(binding)||ts.isArrayBindingPattern(binding))&&binding.elements.some(e=>ts.isBindingElement(e)&&binds(e.name,name));
+   }
+   function functionAt(call) {
+    if(!ts.isIdentifier(call.expression)||call.questionDotToken)return;
+    const name=call.expression.text;
+    for(let scope=call.parent;scope;scope=scope.parent) {
+     if(functionLike(scope)&&scope.parameters.some(p=>binds(p.name,name)))return;
+     if(!ts.isBlock(scope)&&!ts.isSourceFile(scope))continue;
+     for(const statement of scope.statements) {
+      if(ts.isFunctionDeclaration(statement)&&statement.name?.text===name)return statement;
+      if(ts.isVariableStatement(statement))for(const declaration of statement.declarationList.declarations)if(binds(declaration.name,name)) {
+       if(!ts.isIdentifier(declaration.name))return;
+       if(declaration.pos>call.pos)return;
+       const initializer=declaration.initializer&&unwrap(declaration.initializer);
+       return initializer&&(ts.isArrowFunction(initializer)||ts.isFunctionExpression(initializer))?initializer:undefined;
+      }
+     }
+    }
+   }
+   function executableAssertion(call,awaited) {
+    const fn=functionAt(call);if(!fn?.body||!ts.isBlock(fn.body)||fn.asteriskToken||!fn.parameters.length||!ts.isIdentifier(fn.parameters[0].name))return false;
+    if(fn.modifiers?.some(m=>m.kind===ts.SyntaxKind.AsyncKeyword)&&!awaited)return false;
+    const parameter=fn.parameters[0].name.text;
+    return fn.body.statements.some(statement=>{
+     if(!ts.isIfStatement(statement)||!reachable(statement))return false;
+     const predicate=unwrap(statement.expression);
+     return ts.isPrefixUnaryExpression(predicate)&&predicate.operator===ts.SyntaxKind.ExclamationToken&&ts.isIdentifier(unwrap(predicate.operand))&&unwrap(predicate.operand).text===parameter&&throwsOnEveryPath(statement.thenStatement);
+    });
+   }
    function blocked(block,gasName,after=-1) {
     if(!block||!ts.isBlock(block))return false;
     const statements=block.statements,reads=[];
     for(const statement of statements)if(ts.isVariableStatement(statement))for(const d of statement.declarationList.declarations) {
-     if(d.pos<=after||!d.initializer||!ts.isAwaitExpression(d.initializer))continue;
+     if(d.pos<=after||!ts.isIdentifier(d.name)||!d.initializer||!ts.isAwaitExpression(d.initializer)||!reachable(statement))continue;
      const call=d.initializer.expression;
-     if(ts.isCallExpression(call)&&ts.isPropertyAccessExpression(call.expression)&&call.expression.name.text==='getBlock'&&call.arguments.some(arg=>ts.isObjectLiteralExpression(arg)&&arg.properties.some(p=>ts.isPropertyAssignment(p)&&p.name.getText(source)==='blockTag'&&ts.isStringLiteral(p.initializer)&&p.initializer.text==='latest')))reads.push(d);
+     if(ts.isCallExpression(call)&&!call.questionDotToken&&ts.isPropertyAccessExpression(call.expression)&&!call.expression.questionDotToken&&call.expression.name.text==='getBlock'&&call.arguments.some(arg=>ts.isObjectLiteralExpression(arg)&&arg.properties.some(p=>ts.isPropertyAssignment(p)&&(ts.isIdentifier(p.name)||ts.isStringLiteral(p.name))&&p.name.text==='blockTag'&&ts.isStringLiteral(p.initializer)&&p.initializer.text==='latest')))reads.push(d);
     }
     for(const read of reads)for(const statement of statements) {
-     if(statement.pos<read.end)continue;
-     const half=read.name.getText(source)+'.gasLimit/2n';
-     if(ts.isIfStatement(statement)&&code(statement.expression)===gasName+'>'+half&&ts.isThrowStatement(statement.thenStatement))return {position:statement.end,kind:'direct'};
-     if(ts.isExpressionStatement(statement)&&ts.isCallExpression(statement.expression)) {
-      const call=statement.expression,checkFn=call.expression.getText(source);
-      if(checkFn!=='check'||!call.arguments.length||code(call.arguments[0])!==gasName+'<='+half)continue;
-      // This boolean assertion must really throw on false; a same-name stub is insufficient.
-      const assertion=source.statements.find(s=>ts.isVariableStatement(s)&&s.declarationList.declarations.some(d=>d.name.getText(source)==='check'));
-      if(assertion&&/if\(!ok\)throwsafeError\(why\)/.test(code(assertion)))return {position:statement.end,kind:'assertion'};
+     if(statement.pos<read.end||!reachable(statement))continue;
+     if(ts.isIfStatement(statement)&&comparison(statement.expression,gasName,read.name.text,ts.SyntaxKind.GreaterThanToken)&&throwsOnEveryPath(statement.thenStatement))return {position:statement.end,kind:'direct'};
+     if(ts.isExpressionStatement(statement)) {
+      const awaited=ts.isAwaitExpression(statement.expression),call=awaited?statement.expression.expression:statement.expression;
+      if(ts.isCallExpression(call)&&call.arguments.length&&comparison(call.arguments[0],gasName,read.name.text,ts.SyntaxKind.LessThanEqualsToken)&&executableAssertion(call,awaited))return {position:statement.end,kind:'assertion'};
      }
     }
     return false;
@@ -42,14 +149,14 @@ export async function inspectGasBounds(root,workspace) {
     if(!ts.isBlock(block))return false;
     const direct=blocked(block,gas,declaration.end);if(direct)return direct;
     for(const statement of block.statements) {
-     if(statement.pos<declaration.end||!ts.isExpressionStatement(statement))continue;
+     if(statement.pos<declaration.end||!ts.isExpressionStatement(statement)||!reachable(statement))continue;
      const expression=ts.isAwaitExpression(statement.expression)?statement.expression.expression:statement.expression;
-     if(!ts.isCallExpression(expression)||!expression.arguments.some(x=>x.getText(source)===gas))continue;
-     const target=functions.get(expression.expression.getText(source));
+     if(!ts.isCallExpression(expression)||expression.questionDotToken||!expression.arguments.some(x=>x.getText(source)===gas))continue;
+     const target=functionAt(expression);
      if(target&&target.parameters.length===expression.arguments.length) {
       if(target.modifiers?.some(x=>x.kind===ts.SyntaxKind.AsyncKeyword)&&!ts.isAwaitExpression(statement.expression))continue;
       const index=expression.arguments.findIndex(x=>x.getText(source)===gas),checked=blocked(target.body,target.parameters[index].name.getText(source));
-      if(checked)return {position:statement.end,kind:'checked-delegation',target:target.name.text};
+      if(checked)return {position:statement.end,kind:'checked-delegation',target:expression.expression.getText(source)};
      }
     }
     return false;
