@@ -98,11 +98,12 @@ async function loadExactHelper(harness) {
   return module.namespace;
 }
 
-async function withImport(count, action, { batchSize = 2, fees = { gasPrice: 1n }, estimatedGas = 100000n } = {}) {
+async function withImport(count, action, { batchSize = 2, fees = { gasPrice: 1n }, estimatedGas = 100000n, blockGasLimit = 30000000n } = {}) {
   const directory = await filesystem.mkdtemp(path.join(scratchRoot, 'arkiv-import-regression-'));
   const signer = accounts.privateKeyToAccount(accounts.generatePrivateKey()); // Synthetic key stays in memory.
   const fixture = makeFixture(signer.address, { sdk, viem, chains, attr });
   fixture.estimatedGas = estimatedGas;
+  fixture.blockGasLimit = blockGasLimit;
   const harness = { fixture, synced: [], signatures: 0, walletEntries: 0, fault: null };
   const account = { ...signer, signTransaction: async transaction => {
     harness.signatures++;
@@ -421,6 +422,100 @@ test('computed gas above the approved cap is refused before signing or submissio
 test('Rabdi batch gas floor scales by actual operation count, with one-operation floor on the tail', () => withImport(3, async h => {
   assert.deepEqual(h.plan.batches.map(batch => batch.gas), ['1400000', '1000000']);
   assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 2);
+}));
+
+async function frozenFiles(h) {
+  return Promise.all([h.options.planPath, h.options.journalPath].map(file => filesystem.readFile(file, 'utf8')));
+}
+async function refusesNewSignature(h, message) {
+  const before = await frozenFiles(h);
+  await assert.rejects(h.helper.runImport(h.options), message);
+  assert.equal(h.signatures, 0);
+  assert.equal(h.walletEntries, 0);
+  assert.equal(h.fixture.sends.length, 0);
+  assert.deepEqual(await frozenFiles(h), before, 'Neither frozen plan nor journal may change on policy refusal');
+}
+
+test('A1 rising latest estimate refuses a frozen cap that lost its two-times headroom', () => withImport(1, async h => {
+  assert.equal(h.plan.batches[0].gas, '1000000');
+  h.fixture.estimatedGas = 800000n;
+  await refusesNewSignature(h, /Frozen gas no longer meets latest headroom/);
+}, { estimatedGas: 400000n }));
+
+test('A1 current headroom exactly equal to the frozen cap may sign once', () => withImport(1, async h => {
+  h.fixture.estimatedGas = 500000n;
+  assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 1);
+  assert.equal(h.signatures, 1);
+  assert.equal(h.fixture.sends.length, 1);
+}, { estimatedGas: 400000n }));
+
+test('A2 preparation refuses a batch whose operation floor exceeds half the latest block', async () => {
+  await assert.rejects(withImport(2, async () => assert.fail('Preparation must enforce the half-block bound'),
+    { blockGasLimit: 1500000n }), /Gas exceeds half the latest block limit/);
+});
+
+test('A2 preparation refuses a padded estimate one gas above half the latest block', async () => {
+  await assert.rejects(withImport(1, async () => assert.fail('Preparation must enforce the padded estimate'),
+    { estimatedGas: 800000n, blockGasLimit: 3199999n }), /Gas exceeds half the latest block limit/);
+});
+
+test('A2 a smaller latest block stops new signing and preserves the original plan and journal', () => withImport(1, async h => {
+  h.fixture.blockGasLimit = 1999999n;
+  await refusesNewSignature(h, /Gas exceeds half the latest block limit/);
+}));
+
+test('A2 equality at half the latest block is allowed at preparation and signing', () => withImport(2, async h => {
+  assert.equal(h.plan.batches[0].gas, '1400000');
+  assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 1);
+  assert.equal(h.signatures, 1);
+}, { blockGasLimit: 2800000n }));
+
+test('A2 rechecks latest block before signing each later batch', () => withImport(2, async h => {
+  const planText = await filesystem.readFile(h.options.planPath, 'utf8');
+  const beforeSend = h.fixture.beforeSend;
+  h.fixture.beforeSend = async input => {
+    await beforeSend(input);
+    h.fixture.blockGasLimit = 1999999n;
+  };
+  await assert.rejects(h.helper.runImport(h.options), /Gas exceeds half the latest block limit/);
+  assert.equal(h.signatures, 1);
+  assert.equal(h.fixture.sends.length, 1);
+  assert.equal((await h.journal()).at(-1).state, 'verified');
+  assert.equal((await h.journal()).at(-1).index, 0);
+  assert.equal(await filesystem.readFile(h.options.planPath, 'utf8'), planText);
+}, { batchSize: 1 }));
+
+test('A2 a latest-block RPC failure is sanitized and stops before signing without changing intent', () => withImport(1, async h => {
+  const request = h.options.request;
+  h.options.request = async input => {
+    if (input.method === 'eth_getBlockByNumber' && input.params[0] === 'latest') {
+      throw new Error(syntheticUrl, { cause: new Error(syntheticUrl) });
+    }
+    return request(input);
+  };
+  await refusesNewSignature(h, noPrivateDiagnostics);
+}));
+
+test('A2 historical signed intent reconciles despite changed headroom and block bound', () => withImport(1, async h => {
+  const text = await historicalFixture(h, true);
+  h.fixture.estimatedGas = 800000n;
+  h.fixture.blockGasLimit = 1500000n;
+  const signatures = h.signatures, sends = h.fixture.sends.length;
+  assert.equal((await h.helper.runImport(h.options)).verifiedBatches, 1);
+  assert.equal(h.signatures, signatures);
+  assert.equal(h.fixture.sends.length, sends);
+  assert.equal(await filesystem.readFile(h.options.planPath, 'utf8'), text);
+}));
+
+for (const exhausted of [false, true]) test(`A3 SDK success followed by ${exhausted ? 'gas-exhausted' : 'non-gas'} reverted receipt never admits a retry`, () => withImport(1, async h => {
+  await historicalFixture(h, true);
+  const receipt = h.fixture.receipts.get(h.fixture.sends[0].txHash);
+  receipt.status = '0x0';
+  receipt.gasUsed = exhausted ? '0x' + BigInt(h.plan.batches[0].gas).toString(16) : '0x1';
+  const signatures = h.signatures, sends = h.fixture.sends.length;
+  for (let click = 0; click < 2; click++) await assert.rejects(h.helper.runImport(h.options), /successful inclusion/);
+  assert.equal(h.signatures, signatures);
+  assert.equal(h.fixture.sends.length, sends);
 }));
 
 

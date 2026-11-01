@@ -74,7 +74,7 @@ async function txParams(reader: Reader, wallet: Wallet, estimate: bigint): Promi
 }
 async function checked<T extends { txHash: Hex }>(reader: Reader, result: T): Promise<T> {
   const receipt = await reader.getTransactionReceipt({ hash: result.txHash });
-  if (receipt.status !== 'success') throw safeError('Reverted write; inspect cause before any retry', { txHash: result.txHash });
+  if (receipt.status !== 'success') throw safeError('Receipt disagrees after SDK success; reconcile without resending', { txHash: result.txHash });
   return result;
 }
 export async function publish(reader: Reader, wallet: Wallet, expiration: Expiry, salt: bigint, estimateLatest: EstimateLatest) {
@@ -136,7 +136,7 @@ Create uses `(schema, values, { expiration, flags?, salt? }, txParams?)`. Batche
 
 For Rabdi, explicit nonce/gas/gasPrice is the recommended default for every operation. Before these helpers, authorize the exact mutation, estimate it unsigned and compare the chosen gas × current gasPrice with the approved spend and balance. Single-operation floor: 1,000,000; N-operation batch floor: `1,000,000 + 400,000 × (N − 1)`. Large bytes require at least twice the measured maximum gas as well. Fresh latest/pending nonce checks require exclusive signer custody; they do not reserve a nonce across processes.
 
-The helpers do not retry. At most one retry is allowed after a confirmed reverted receipt and a corrected cause; never retry successful or uncertain writes. A revert consuming the entire gas limit needs a larger approved cap. A successful receipt followed by failed decoding/readback is a reconciliation case, not a reverted write.
+The helpers do not retry. Allow at most one retry per operation, only after an authoritative reverted receipt proves gas exhaustion (`gasUsed === gasLimit`) and the SDK did not report success. Obtain a fresh unsigned estimate at `latest`; require the corrected gas to meet the operation floor and `2 × estimate`, at least double the previous gas cap, and satisfy `gas <= latestBlock.gasLimit / 2`. Use a fresh nonce and current network gasPrice, exclusive signer custody and approved balance/spend. Never resend after SDK success or an uncertain submission, even if a later receipt lookup is missing or disagrees. Non-gas reverts are terminal under this policy.
 
 ## Corrections and identity
 

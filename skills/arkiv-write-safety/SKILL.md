@@ -15,6 +15,7 @@ One authorized account writer submits bounded batches and preserves every known 
 ## Choose and prepare the write
 
 - Validate stable row IDs, typed column values and duplicate IDs before any wallet call. Freeze input order and intended fields so receipt keys and readback can be matched to the prepared rows.
+- At preparation and before every new signature, require the transaction or batch gas to be at most half the latest block gasLimit (`gas <= latestBlock.gasLimit / 2`). Re-estimate at `latest` and require gas to meet the operation floor and `2 × estimate`. If a frozen plan no longer fits either bound, stop and retain its plan and journal for reconciliation; never mutate or replace it automatically. Split unprepared work into smaller batches when necessary.
 - For importing 5,000 rows, use multiple `executeBatch({ creates })` transactions with durable per-batch progress. Choose batch sizes from encoded size, gas estimates, provider limits, and an approved spend budget; there is no verified universal 1,000-operation cap.
 - One native batch is atomic. The SDK applies creates, patches, deletes, extensions, then ownership changes; property order in the input object does not reorder them. Multiple batches are separate transactions and can leave partial progress.
 - Use `arkiv-entity-lifecycle` for permissions and relationship ordering, `arkiv-entity-expiration` for renewal calculations, and `arkiv-security-trust` for signer custody.
@@ -43,12 +44,12 @@ SDK 1.0.0 `executeBatch` returns created keys but no expiration deadlines. Decod
 | Raw bytes/hash were durably captured but forwarding may not have begun | Retain the original bytes/hash and nonce; reconcile first. Never re-sign or allocate a replacement nonce automatically. |
 | Known hash; receipt unavailable | Keep the hash and wait/reconcile. An RPC lookup error does not mean the transaction disappeared. |
 | Receipt successful; SDK event decoding/count failed | The batch applied. `EntityMutationError.txHash` preserves the hash. Recover identities from receipt logs and matching input order; never recreate automatically. |
-| Receipt reverted | Entity operations did not apply; gas may still have been spent. Inspect the reason, fix it, and retry only under the remaining authorization. |
+| Receipt reverted | Stop and preserve the hash. Non-gas reverts are terminal under this policy. Only authoritative gas exhaustion before any SDK success may qualify for the single bounded retry described below. |
 | Authenticated canonical receipt; later read/checkpoint failed | Preserve receipt-confirmed keys/hash separately from verified progress. Repair this batch's verification or checkpoint without resending; block the next batch. |
 
 RPC transport retries and submitting a new transaction are different actions. Do not convert a transport retry policy into application retries around `createEntity()` or `executeBatch()`. An application `row_id` helps reconciliation but is not protocol uniqueness or automatic idempotency.
 
-Check `receipt.status === 'success'`. A reverted receipt consuming the entire gas limit supports gas exhaustion; increase the approved cap for the corrected attempt. Permit at most one retry only after an authoritative reverted receipt, refreshing nonce/fees and budget. This durable importer stops on a revert for operator reconciliation and never retries automatically. Successful/uncertain writes must never be submitted again.
+Allow at most one retry per operation, only after an authoritative reverted receipt proves gas exhaustion (`gasUsed === gasLimit`) and the SDK did not report success. Obtain a fresh unsigned estimate at `latest`; require the corrected gas to meet the operation floor and `2 × estimate`, at least double the previous gas cap, and satisfy `gas <= latestBlock.gasLimit / 2`. Use a fresh nonce and current network gasPrice, exclusive signer custody and approved balance/spend. Never resend after SDK success or an uncertain submission, even if a later receipt lookup is missing or disagrees. Non-gas reverts are terminal under this policy. The durable importer stops on every revert for operator reconciliation and never retries automatically.
 
 ## Durable batch progress
 
@@ -70,7 +71,7 @@ Use [the resumable Node importer](references/resumable-import.md) for a complete
 4. Restart with the original plan hash and files. Load durable state, authenticate every captured hash before continuing, repair incomplete verification, and skip resubmission of verified batches. This conservative helper also rechecks their fresh fields. Do not infer batch numbers from the current result-array length or restart the original rows.
 5. Save `receipt_confirmed` after matching sender, nonce, native address, input, fee fields, canonical receipt block/provenance, event order and predicted keys. Then read this batch's entities and save `verified` only after matching fields. A failed receipt save leaves `submitting` available; a failed readback or verified save leaves `receipt_confirmed` available. The helper writes journal version 3 and fails closed on older journals; retain them and reconcile with the original importer rather than renaming their combined `confirmed` state.
 
-The helper refuses automatic rebroadcast. An operator may consider resending the **same signed bytes** only after explicit reconciliation; signing new bytes while the previous nonce can still land risks replacement or duplicate application work. Expired or changed entities cause this conservative example to stop, never recreate.
+The helper never rebroadcasts or retries. Preserve signed bytes/hash and nonce for reconciliation; a successful or uncertain submission never authorizes another send, including the same signed bytes. Expired or changed entities cause this conservative example to stop, never recreate.
 
 `EntityMutationError` without a hash, including "Execution error without revert data", can follow a lost send response. Classify recovery by observed phase and durable admission evidence, not the exception class or message. A reverted receipt establishes failure; an unsigned estimate rejection does not establish a mined revert. Supplying explicit gas can bypass estimation and produce a paid revert.
 

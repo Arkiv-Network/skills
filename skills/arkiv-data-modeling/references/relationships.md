@@ -57,10 +57,10 @@ export async function createRelated(reader: ReturnType<typeof createPublicClient
     if (estimate <= 0n) throw safeError('Unsigned estimate required');
     const gas = 2n * estimate > 1400000n ? 2n * estimate : 1400000n;
     const result = await wallet.executeBatch(batch, { nonce: latest, gas, gasPrice });
-    if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Reverted batch; inspect before any retry');
+    if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Receipt disagrees after SDK success; reconcile without resending');
     if (result.createdEntities.length !== 2 || result.createdEntities[0] !== parent.key || result.createdEntities[1] !== child.key ||
       result.patchedEntities.length || result.deletedEntities.length || result.extendedEntities.length || result.ownershipChanges.length) {
-      throw safeError('Confirmed batch prediction mismatch; reconcile before retrying', { txHash: result.txHash });
+      throw safeError('Confirmed batch prediction mismatch; reconcile without resending', { txHash: result.txHash });
     }
     return await result;
   } catch (error) {
@@ -71,7 +71,7 @@ export async function createRelated(reader: ReturnType<typeof createPublicClient
 
 Only the creating wallet's creates consume that entity nonce. Incoming transfers do not. Random predicted salts are the default; `NO_SALT` makes a key predictable but does not remove nonce dependence. A key reference does not enforce target existence, foreign keys or cascade behavior.
 
-Precondition: an exact unsigned estimate and approved balance/spend check for these two small creates. Increase the gas cap for larger operations using first-write guidance; explicit nonce/gas/gasPrice is the Rabdi default. There is no automatic retry; at most one corrected attempt only after a confirmed revert, preserving salts and reconciling identity first.
+Precondition: an exact unsigned estimate and approved balance/spend check for these two small creates. Increase the gas cap for larger operations using first-write guidance; explicit nonce/gas/gasPrice is the Rabdi default. There is no automatic retry; preserve salts and reconcile identity first. Allow at most one retry per operation, only after an authoritative reverted receipt proves gas exhaustion (`gasUsed === gasLimit`) and the SDK did not report success. Obtain a fresh unsigned estimate at `latest`; require the corrected gas to meet the operation floor and `2 × estimate`, at least double the previous gas cap, and satisfy `gas <= latestBlock.gasLimit / 2`. Use a fresh nonce and current network gasPrice, exclusive signer custody and approved balance/spend. Never resend after SDK success or an uncertain submission, even if a later receipt lookup is missing or disagrees. Non-gas reverts are terminal under this policy.
 
 Equal relative lifetimes in one batch share inclusion; later child transactions resolve relative life later. To prevent a later child outliving a parent, use the parent's observed `$expiresAt` with `ExpirationTime.atBlock(...)` and no relative floor, check remaining-life margin and verify the result. Batch results carry keys rather than deadlines; read the successful receipt and current entities.
 

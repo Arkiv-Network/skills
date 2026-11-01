@@ -73,7 +73,7 @@ async function params(reader: Reader, wallet: Wallet, estimate: bigint): Promise
   return { nonce: latest, gas, gasPrice: await getGasPrice(reader) };
 }
 async function confirmed<T extends { txHash: Hex }>(reader: Reader, result: T): Promise<T> {
-  if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Reverted extension; inspect before any retry');
+  if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Receipt disagrees after SDK success; reconcile without resending');
   return result;
 }
 // maxLifetime comes from current network configuration: a published getter, or dated measured fallback.
@@ -108,7 +108,7 @@ export async function ensureOneHourRemains(reader: Reader, wallet: Wallet, entit
 
 The first helper adds to the observed deadline; a concurrent extension can race it. The second ensures a floor from inclusion and skips already sufficient life. It does not automatically add an hour after an uncertain send. Use low-water/refill thresholds for heartbeats rather than paying to renew every block. Re-read actual receipt-derived deadlines and verify fresh entity state.
 
-Before these helpers, apply first-write's exact unsigned estimate, balance/spend approval and exclusive signer custody. Explicit nonce/gas/gasPrice is the Rabdi default; these single-operation examples use the measured 1,000,000 gas starting cap. They do not retry. At most one corrected attempt is permitted only after an authoritative reverted receipt; successful/uncertain writes require reconciliation.
+Before these helpers, apply first-write's exact unsigned estimate, balance/spend approval and exclusive signer custody. Explicit nonce/gas/gasPrice is the Rabdi default; these single-operation examples use the measured 1,000,000 gas starting cap. They do not retry. Allow at most one retry per operation, only after an authoritative reverted receipt proves gas exhaustion (`gasUsed === gasLimit`) and the SDK did not report success. Obtain a fresh unsigned estimate at `latest`; require the corrected gas to meet the operation floor and `2 × estimate`, at least double the previous gas cap, and satisfy `gas <= latestBlock.gasLimit / 2`. Use a fresh nonce and current network gasPrice, exclusive signer custody and approved balance/spend. Never resend after SDK success or an uncertain submission, even if a later receipt lookup is missing or disagrees. Non-gas reverts are terminal under this policy.
 
 An extension sets a target, not a delta. A shorter effective target is rejected; an equal target need not add lifetime. Do not infer receipt status from equality alone. Owner or immutable permissionless-extension policy determines who can renew. Expired entities cannot be revived; create a new identity only under the authorized recovery policy.
 

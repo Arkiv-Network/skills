@@ -1,6 +1,6 @@
 # A resumable Node importer
 
-Explicit transaction nonce, gas and fees are required for funded Rabdi writes. This importer preflights the exact batch unsigned at latest, stops on errors, then computes `gas = max(1,000,000 + 400,000 × (N − 1), 2 × estimate)` for N creates. This cap must fit `gasCeiling`, balance and the frozen total spend cap; otherwise stop before signing. The former minimumGas override is refused rather than silently changing this formula. Previously signed plans retain their original intent and must only be reconciled, never recalculated or resubmitted automatically.
+Explicit transaction nonce, gas and fees are required for funded Rabdi writes. This importer preflights the exact batch unsigned at latest, stops on errors, then computes `gas = max(1,000,000 + 400,000 × (N − 1), 2 × estimate)` for N creates. This cap must fit `gasCeiling`, balance, the frozen total spend cap and half the latest block's gasLimit. Before every new signature, re-estimate the exact batch at latest and require the frozen gas to still meet that formula and `gas <= latestBlock.gasLimit / 2`. If either bound fails, stop and retain the original plan and journal for reconciliation; never mutate or replace the plan automatically. The former minimumGas override is refused rather than silently changing this formula. Previously signed plans retain their original intent and must only be reconciled, never recalculated or resubmitted automatically.
 
 Copy the JavaScript block to `resumable-import.mjs` in your application. It uses public SDK 1.0.0 APIs and Node built-ins. Supply a local account from your existing signer custody and a provider `request({ method, params })` configured without automatic retries. Neither entrypoint reads keys, creates an HTTP transport, or runs on import.
 
@@ -149,6 +149,16 @@ async function append(path, entries, planSha256, event) {
   entries.push(record);
 }
 const feesFrom = (f) => Object.fromEntries(Object.entries(f).map(([n, v]) => [n, BigInt(v)]));
+function requiredGas(estimate, operations, chainId) {
+  check(typeof estimate === "bigint" && estimate > 0n, "Positive unsigned estimate required");
+  const floor = chainId === 7794095 ? 1000000n + 400000n * BigInt(operations - 1) : 0n;
+  return estimate * 2n > floor ? estimate * 2n : floor;
+}
+async function checkHalfBlock(reader, gas) {
+  const block = await reader.getBlock({ blockTag: "latest" });
+  check(typeof block.gasLimit === "bigint" && block.gasLimit > 0n, "Latest block gas limit required");
+  check(gas <= block.gasLimit / 2n, "Gas exceeds half the latest block limit; retain intent and reconcile");
+}
 async function sdkCalldata(account, chain, read, creates, nonce, gas, fees) {
   let captured;
   const unsignedAccount = { ...account, signTransaction: async (r) => { captured = r; throw safeError("Unsigned SDK capture complete"); } };
@@ -193,10 +203,9 @@ export async function prepareImport(options) {
         const creates = slice.map(hydrate);
         const input = await sdkCalldata(account, chain, read, creates, nonce, gasCeiling, fees);
         const estimate = await reader.estimateGas({ account: account.address, to: NATIVE, data: input, blockTag: "latest", ...fees });
-        const padded = estimate * 2n;
-        const rabdiFloor = chain.id === 7794095 ? 1000000n + 400000n * BigInt(slice.length - 1) : 0n;
-        const gas = padded > rabdiFloor ? padded : rabdiFloor;
+        const gas = requiredGas(estimate, slice.length, chain.id);
         check(gas <= gasCeiling, "Estimated gas exceeds approved ceiling");
+        await checkHalfBlock(reader, gas);
         totalCap += gas * feeCap;
         batches.push({ index, nonce, gas: gas.toString(), input, rows: slice });
       }
@@ -352,7 +361,9 @@ export async function runImport({ account, chain, request, planPath, journalPath
         check(await reader.getBalance({ address: account.address }) >= gas * (fees.gasPrice ?? fees.maxFeePerGas), "Insufficient balance before submission");
         const creates = batch.rows.map(hydrate);
         check(await sdkCalldata(account, chain, read, creates, batch.nonce, gas, fees) === batch.input, "Current SDK encoding differs from frozen plan");
-        check(await reader.estimateGas({ account: account.address, to: NATIVE, data: batch.input, ...fees }) <= gas, "Current estimate exceeds frozen gas");
+        const estimate = await reader.estimateGas({ account: account.address, to: NATIVE, data: batch.input, blockTag: "latest", ...fees });
+        check(gas >= requiredGas(estimate, batch.rows.length, chain.id), "Frozen gas no longer meets latest headroom; retain intent and reconcile");
+        await checkHalfBlock(reader, gas);
         await append(journalPath, entries, planSha256, { index: batch.index, state: "prepared" });
         const guarded = async (r) => {
           if (r.method !== "eth_sendRawTransaction") return read(r);

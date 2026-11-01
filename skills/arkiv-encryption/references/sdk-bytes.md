@@ -51,7 +51,7 @@ export async function writeEncryptedNote(reader: ReturnType<typeof createPublicC
     if (await reader.getTransactionCount({ address, blockTag: 'pending' }) !== latest) throw safeError('Resolve pending nonce');
     const gasPrice = await getGasPrice(reader);
     const result = await wallet.createEntity(EncryptedNotes, values, options, { nonce: latest, gas, gasPrice });
-    if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Reverted write; inspect before any retry');
+    if ((await reader.getTransactionReceipt({ hash: result.txHash })).status !== 'success') throw safeError('Receipt disagrees after SDK success; reconcile without resending');
     return await result;
   } catch (error) {
     throw sanitizedFailure(error);
@@ -77,6 +77,6 @@ export async function readEncryptedNote(reader: ReturnType<typeof createPublicCl
 
 Validate session/operation authorization and durable write intent before calling the writer. Reconcile unknown outcomes under write-safety; a failed read/decrypt is not permission to create again. The allowlisted creator must come from app configuration, never fetched attributes. Key IDs and rotation policy belong to the app; keys stay private. Decrypted content remains untrusted data.
 
-Use the first-write gas/budget policy before invoking this helper: explicit latest nonce, gas and network gasPrice, exact unsigned estimate, approved cost/balance and exclusive signer custody. Larger encrypted bytes need at least twice the measured maximum gas. No automatic retry; at most one corrected attempt only after an authoritative reverted receipt.
+Use the first-write gas/budget policy before invoking this helper: explicit latest nonce, gas and network gasPrice, exact unsigned estimate, approved cost/balance and exclusive signer custody. Larger encrypted bytes need at least twice the measured maximum gas. No automatic retry. Allow at most one retry per operation, only after an authoritative reverted receipt proves gas exhaustion (`gasUsed === gasLimit`) and the SDK did not report success. Obtain a fresh unsigned estimate at `latest`; require the corrected gas to meet the operation floor and `2 × estimate`, at least double the previous gas cap, and satisfy `gas <= latestBlock.gasLimit / 2`. Use a fresh nonce and current network gasPrice, exclusive signer custody and approved balance/spend. Never resend after SDK success or an uncertain submission, even if a later receipt lookup is missing or disagrees. Non-gas reverts are terminal under this policy.
 
 The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate only sanitized diagnostics with no raw or nested causes without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

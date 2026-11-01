@@ -44,7 +44,7 @@ export function makeFixture(owner, { sdk, viem, chains, attr }) {
       const number = params[0] === 'latest' ? fixture.head : BigInt(params[0]);
       return {
         number: hex(number), hash: number === 0n ? '0x' + 'ab'.repeat(32) : blockHash,
-        baseFeePerGas: '0x1', gasLimit: '0x1c9c380', gasUsed: '0x1', timestamp: '0x6553f100',
+        baseFeePerGas: '0x1', gasLimit: hex(fixture.blockGasLimit ?? 30000000n), gasUsed: '0x1', timestamp: '0x6553f100',
         transactions: [...fixture.transactions.values()].filter(tx => BigInt(tx.blockNumber) === number).map(tx => tx.hash),
       };
     }
