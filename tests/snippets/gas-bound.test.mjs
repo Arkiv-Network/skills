@@ -125,3 +125,13 @@ test('automatic gas checker attributes nested callback arithmetic to the compute
   const result=await inspectGasBounds(root,workspace);assert.equal(result.inventory.length,1);assert.equal(result.inventory[0].variable,'gas');assert.equal(result.passed,valid);
  }
 });
+
+test('automatic gas checker requires awaiting an asynchronous delegated bound before return',async()=>{
+ for(const awaited of [true,false]) {
+  const root=await fs.mkdtemp(path.join(directory,'delegate-guide-'));await fs.mkdir(path.join(root,'new'));
+  const guard="async function bounded(reader, gas) { const block = await reader.getBlock({ blockTag: 'latest' }); if (gas > block.gasLimit / 2n) throw new Error('Stopped'); }";
+  const source=guard+'\nexport async function newHelper(reader, estimate) { const gas = estimate * 2n; '+(awaited?'await ':'')+'bounded(reader, gas); return gas; }';
+  await fs.writeFile(path.join(root,'new/SKILL.md'),'```typescript\n'+source+'\n```\n');
+  const result=await inspectGasBounds(root,workspace);assert.equal(result.inventory.length,1);assert.equal(result.passed,awaited);
+ }
+});

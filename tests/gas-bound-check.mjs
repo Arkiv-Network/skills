@@ -47,6 +47,7 @@ export async function inspectGasBounds(root,workspace) {
      if(!ts.isCallExpression(expression)||!expression.arguments.some(x=>x.getText(source)===gas))continue;
      const target=functions.get(expression.expression.getText(source));
      if(target&&target.parameters.length===expression.arguments.length) {
+      if(target.modifiers?.some(x=>x.kind===ts.SyntaxKind.AsyncKeyword)&&!ts.isAwaitExpression(statement.expression))continue;
       const index=expression.arguments.findIndex(x=>x.getText(source)===gas),checked=blocked(target.body,target.parameters[index].name.getText(source));
       if(checked)return {position:statement.end,kind:'checked-delegation',target:target.name.text};
      }
