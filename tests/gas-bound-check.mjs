@@ -49,6 +49,8 @@ export async function inspectGasBounds(root,workspace) {
     }
     if(ts.isTryStatement(statement)) {
      let result=flow(statement.tryBlock);
+     // Calls/property reads may throw even without an explicit ThrowStatement.
+     // Include the handler conservatively rather than certify a hidden return.
      if(statement.catchClause){result.delete('throw');result=union(result,flow(statement.catchClause.block));}
      if(statement.finallyBlock){const final=flow(statement.finallyBlock);if(!final.has('next'))return final;final.delete('next');result=union(result,final);}
      return result;
@@ -95,6 +97,25 @@ export async function inspectGasBounds(root,workspace) {
     return ts.isPropertyAccessExpression(limit)&&!limit.questionDotToken&&ts.isIdentifier(limit.expression)&&limit.expression.text===blockName&&limit.name.text==='gasLimit'&&ts.isBigIntLiteral(divisor)&&divisor.text==='2n';
    }
    const throwsOnEveryPath=statement=>{const outcomes=flow(statement);return outcomes.size===1&&outcomes.has('throw');};
+   function rejectsCaller(node) {
+    // Start at the known rejecting branch/call, then follow its exceptional
+    // completion outwards. A local throw is not proof if an enclosing handler
+    // converts it to a normal completion or a finally block overrides it.
+    let outcomes=new Set(['throw']);
+    for(let child=node,parent=node.parent;parent;child=parent,parent=parent.parent) {
+     if(functionLike(parent))return outcomes.size===1&&outcomes.has('throw');
+     if(!ts.isTryStatement(parent))continue;
+     if(child===parent.tryBlock&&parent.catchClause&&outcomes.has('throw')) {
+      outcomes.delete('throw');outcomes=union(outcomes,flow(parent.catchClause.block));
+     }
+     if(parent.finallyBlock&&child!==parent.finallyBlock) {
+      const final=flow(parent.finallyBlock);
+      if(!final.has('next'))outcomes=final;
+      else {final.delete('next');outcomes=union(outcomes,final);}
+     }
+    }
+    return false;
+   }
    function binds(binding,name) {
     if(ts.isIdentifier(binding))return binding.text===name;
     return (ts.isObjectBindingPattern(binding)||ts.isArrayBindingPattern(binding))&&binding.elements.some(e=>ts.isBindingElement(e)&&binds(e.name,name));
@@ -123,7 +144,7 @@ export async function inspectGasBounds(root,workspace) {
     return fn.body.statements.some(statement=>{
      if(!ts.isIfStatement(statement)||!reachable(statement))return false;
      const predicate=unwrap(statement.expression);
-     return ts.isPrefixUnaryExpression(predicate)&&predicate.operator===ts.SyntaxKind.ExclamationToken&&ts.isIdentifier(unwrap(predicate.operand))&&unwrap(predicate.operand).text===parameter&&throwsOnEveryPath(statement.thenStatement);
+     return ts.isPrefixUnaryExpression(predicate)&&predicate.operator===ts.SyntaxKind.ExclamationToken&&ts.isIdentifier(unwrap(predicate.operand))&&unwrap(predicate.operand).text===parameter&&throwsOnEveryPath(statement.thenStatement)&&rejectsCaller(statement);
     });
    }
    function blocked(block,gasName,after=-1) {
@@ -136,10 +157,10 @@ export async function inspectGasBounds(root,workspace) {
     }
     for(const read of reads)for(const statement of statements) {
      if(statement.pos<read.end||!reachable(statement))continue;
-     if(ts.isIfStatement(statement)&&comparison(statement.expression,gasName,read.name.text,ts.SyntaxKind.GreaterThanToken)&&throwsOnEveryPath(statement.thenStatement))return {position:statement.end,kind:'direct'};
+     if(ts.isIfStatement(statement)&&comparison(statement.expression,gasName,read.name.text,ts.SyntaxKind.GreaterThanToken)&&throwsOnEveryPath(statement.thenStatement)&&rejectsCaller(statement))return {position:statement.end,kind:'direct'};
      if(ts.isExpressionStatement(statement)) {
       const awaited=ts.isAwaitExpression(statement.expression),call=awaited?statement.expression.expression:statement.expression;
-      if(ts.isCallExpression(call)&&call.arguments.length&&comparison(call.arguments[0],gasName,read.name.text,ts.SyntaxKind.LessThanEqualsToken)&&executableAssertion(call,awaited))return {position:statement.end,kind:'assertion'};
+      if(ts.isCallExpression(call)&&call.arguments.length&&comparison(call.arguments[0],gasName,read.name.text,ts.SyntaxKind.LessThanEqualsToken)&&executableAssertion(call,awaited)&&rejectsCaller(statement))return {position:statement.end,kind:'assertion'};
      }
     }
     return false;
@@ -148,7 +169,13 @@ export async function inspectGasBounds(root,workspace) {
     const block=declaration.parent.parent.parent,gas=declaration.name.getText(source);
     if(!ts.isBlock(block))return false;
     const direct=blocked(block,gas,declaration.end);if(direct)return direct;
-    for(const statement of block.statements) {
+    // Descend only through unconditional try bodies, never conditional branches
+    // or handlers that run only after another error. Keep caller-side catch and
+    // finally scopes visible when validating an awaited delegated guard.
+    function callStatements(body) {
+     return body.statements.flatMap(statement=>ts.isTryStatement(statement)?callStatements(statement.tryBlock):[statement]);
+    }
+    for(const statement of callStatements(block)) {
      if(statement.pos<declaration.end||!ts.isExpressionStatement(statement)||!reachable(statement))continue;
      const expression=ts.isAwaitExpression(statement.expression)?statement.expression.expression:statement.expression;
      if(!ts.isCallExpression(expression)||expression.questionDotToken||!expression.arguments.some(x=>x.getText(source)===gas))continue;
@@ -156,7 +183,7 @@ export async function inspectGasBounds(root,workspace) {
      if(target&&target.parameters.length===expression.arguments.length) {
       if(target.modifiers?.some(x=>x.kind===ts.SyntaxKind.AsyncKeyword)&&!ts.isAwaitExpression(statement.expression))continue;
       const index=expression.arguments.findIndex(x=>x.getText(source)===gas),checked=blocked(target.body,target.parameters[index].name.getText(source));
-      if(checked)return {position:statement.end,kind:'checked-delegation',target:expression.expression.getText(source)};
+      if(checked&&rejectsCaller(statement))return {position:statement.end,kind:'checked-delegation',target:expression.expression.getText(source)};
      }
     }
     return false;
