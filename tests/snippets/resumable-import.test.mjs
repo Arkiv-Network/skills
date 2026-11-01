@@ -76,10 +76,12 @@ async function loadExactHelper(harness) {
       if (options.account !== harness.options.account) return wallet;
       return {
         ...wallet,
-        executeBatch: (...arguments_) => {
+        executeBatch: async (...arguments_) => {
           harness.walletEntries++;
           assert.equal(harness.synced.at(-1), 'prepared', 'Prepared intent must be durable before funded wallet entry');
-          return wallet.executeBatch(...arguments_);
+          const result = await wallet.executeBatch(...arguments_);
+          if (harness.afterSdkSuccess) await harness.afterSdkSuccess(result);
+          return result;
         },
       };
     },
@@ -508,14 +510,19 @@ test('A2 historical signed intent reconciles despite changed headroom and block 
 }));
 
 for (const exhausted of [false, true]) test(`A3 SDK success followed by ${exhausted ? 'gas-exhausted' : 'non-gas'} reverted receipt never admits a retry`, () => withImport(1, async h => {
-  await historicalFixture(h, true);
-  const receipt = h.fixture.receipts.get(h.fixture.sends[0].txHash);
-  receipt.status = '0x0';
-  receipt.gasUsed = exhausted ? '0x' + BigInt(h.plan.batches[0].gas).toString(16) : '0x1';
-  const signatures = h.signatures, sends = h.fixture.sends.length;
+  let successes = 0;
+  h.afterSdkSuccess = async result => {
+    successes++;
+    assert.equal(result.txHash, h.fixture.sends[0].txHash, 'Real SDK success precedes the disagreeing lookup');
+    const receipt = h.fixture.receipts.get(result.txHash);
+    receipt.status = '0x0';
+    receipt.gasUsed = exhausted ? '0x' + BigInt(h.plan.batches[0].gas).toString(16) : '0x1';
+  };
   for (let click = 0; click < 2; click++) await assert.rejects(h.helper.runImport(h.options), /successful inclusion/);
-  assert.equal(h.signatures, signatures);
-  assert.equal(h.fixture.sends.length, sends);
+  assert.equal(successes, 1);
+  assert.equal(h.signatures, 1);
+  assert.equal(h.fixture.sends.length, 1);
+  assert.equal(h.walletEntries, 1);
 }));
 
 
