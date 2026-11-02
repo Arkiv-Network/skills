@@ -50,3 +50,14 @@ test('range guidance for a source EVM chain does not become a Rabdi recovery rul
  const f=await fixture(t);await f.put('skills/source/SKILL.md','For the source EVM chain, split the eth_getLogs range.\n');
  assert.equal((await checkRabdiLogWindow(f.directory)).passed,true);
 });
+test('nested recovery headings retain the parent error context',async t=>{
+ const f=await fixture(t),file='skills/new/references/recovery.md';
+ for(const introduction of ['# segment_range_of(transactions): NotImplemented','# Rabdi troubleshooting\n\nAn eth_getLogs call fails with segment_range_of(transactions): NotImplemented.']) {
+  await f.put(file,introduction+'\n\n## Recovery\n\n'+rangeProhibition+'\n');assert.equal((await checkRabdiLogWindow(f.directory)).passed,true);
+  await f.put(file,introduction+'\n\n## Recovery\n\nRetry the range.\n');assert.equal((await checkRabdiLogWindow(f.directory)).passed,false);
+ }
+});
+test('a sibling source-chain section leaves the Rabdi error context',async t=>{
+ const f=await fixture(t);await f.put('skills/new/SKILL.md','# segment_range_of(transactions): NotImplemented\n\n'+rangeProhibition+'\n\n# Source EVM chain\n\nSplit the eth_getLogs range.\n');
+ assert.equal((await checkRabdiLogWindow(f.directory)).passed,true);
+});

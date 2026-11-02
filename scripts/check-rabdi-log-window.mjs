@@ -17,7 +17,7 @@ export async function checkRabdiLogWindow(root) {
   if(!row||!row.includes(rangeProhibition)||required.some(pattern=>!pattern.test(row)))failures.push({file,line:row?contents.get(file).split(/\r?\n/).indexOf(row)+1:1,reason:'Distinct log-window row and its bounded recovery guidance are required'});
  }
  for(const [file,text] of contents) {
-  let paragraph=[],start=1,context=false,headingContext=false;
+  let paragraph=[],start=1,context=false,headingContext=false;const headings=[];
   const inspect=(body,line,carry=true)=>{
    const relevant=headingContext||context||related.test(body);
    if(relevant&&action.test(body.replaceAll(rangeProhibition,'')))failures.push({file,line,reason:'Unclassified split/range-retry wording for the Rabdi log-window error',text:body});
@@ -25,7 +25,13 @@ export async function checkRabdiLogWindow(root) {
   };
   const flush=()=>{if(paragraph.length)inspect(paragraph.join(' '),start);paragraph=[];};
   for(const [index,line] of text.split(/\r?\n/).entries()) {
-   if(/^#{1,6}\s/.test(line)){flush();context=false;headingContext=related.test(line);continue;}
+   const heading=/^(#{1,6})\s/.exec(line);
+   if(heading){
+    flush();const level=heading[1].length;
+    if(context&&headings.length&&level>headings.at(-1).level)headings.at(-1).related=true;
+    while(headings.length&&headings.at(-1).level>=level)headings.pop();
+    headings.push({level,related:related.test(line)});context=false;headingContext=headings.some(x=>x.related);continue;
+   }
    if(/^\s*\|/.test(line)){flush();inspect(line,index+1,false);continue;}
    if(!line.trim()){flush();continue;}
    if(!paragraph.length)start=index+1;paragraph.push(line.trim());
