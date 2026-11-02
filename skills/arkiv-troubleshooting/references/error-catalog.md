@@ -2,6 +2,8 @@
 
 This catalog describes inspected source, not a claim that every error was reproduced on a live node. Use fixed allowlisted diagnostics and validated local transaction identifiers. Never expose or persist raw provider errors or nested causes: the RPC URL path contains a credential. Outer viem or EntityMutationError objects can include that URL in multiple fields.
 
+Native/RPC rows describe observed Rabdi behavior; they are not additional SDK error classes.
+
 | Class | Correction |
 | --- | --- |
 | MissingAccessKeyError | rabdi requires an options.accessKey string; explicitly empty keys use the heavily limited endpoint |
@@ -23,6 +25,7 @@ This catalog describes inspected source, not a claim that every error was reprod
 | NoEntityFoundError | No current live key; reason may be never-created, deleted, expired, reset or wrong chain |
 | EntityMutationError | Preserve txHash if present; reconcile observed send phase and receipt before retrying |
 | Head-only state / -32603 | `arkiv serves state at the chain head only`: use latest/pending instead of safe/finalized or old block-hash state selectors |
+| `golemdb segment_range_of(transactions): NotImplemented` / -32603 on `eth_getLogs` | Rabdi fails for blocks with logs about 1,000 blocks (~30 min) behind head. Do not split or retry the range. A live tail at head works; stop the failed watcher, recreate the watcher at head and reconcile current state with an `arkiv_query` or SDK query. No log backfill or catch-up is available across that gap. For a known old transaction, use per-transaction `eth_getTransactionReceipt`. See [arkiv#283](https://github.com/Arkiv-Network/arkiv/issues/283). |
 | Revert consuming the gas limit | Use explicit latest nonce/gas/network gasPrice; raise the approved gas cap above the measured Rabdi floor and exact-operation need |
 
 There are no SDK 1.0.0 query cursor/block error kinds. HTTP access/quota failures and invalid raw params are separate from those four query errors. Every arkiv_query, including a filtered count, costs 10 units under current provider policy; other methods cost zero and each access key starts with 100,000,000 units. Honor actual Retry-After/reset policy; avoid retry storms or alternate-key quota bypass.

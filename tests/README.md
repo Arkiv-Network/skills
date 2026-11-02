@@ -7,6 +7,7 @@ export ARKIV_SNIPPET_WORKSPACE=/absolute/sdk-workspace
 export ARKIV_IMPORT_TEST_SCRATCH=/absolute/owned-scratch
 node scripts/check-skill-references.mjs
 node scripts/check-vocabulary.mjs
+node scripts/check-rabdi-log-window.mjs
 node tests/check-snippets.mjs
 node --experimental-vm-modules --test tests/snippets/*.test.mjs
 node tests/snippets/published-imports.mjs
@@ -15,6 +16,8 @@ node tests/snippets/published-imports.mjs
 `check-snippets` compiles every TypeScript skill/reference fence with strict and noUncheckedIndexedAccess, syntax-checks JavaScript, and writes a source/line/hash manifest inside the SDK workspace. It does not execute writes. The deterministic importer suite evaluates the exact published JavaScript fence with real SDK 1.0.0 encoding, synthetic transport/receipts and in-memory ephemeral test keys. Network fetches are forbidden in that suite. Preserve failing evidence; do not substitute deterministic results for live/provider/wallet behavior.
 
 The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance requires `arkiv-encryption` 1.1.0 or newer; verify its named bytes exports before consuming it.
+
+The Rabdi log-window guard discovers skill, reference and AGENTS resources, requires distinct troubleshooting rows for `segment_range_of(transactions): NotImplemented`, and rejects split/range-retry advice for that error. Omission and newly introduced guidance mutations run through the checker and CLI. GitHub's Guidance checks workflow runs these dependency-free checks plus vocabulary, references and retry-policy checks; the complete SDK-backed suite and half-block gas gate remain in `node tests/run-checks.mjs` using the existing workspace above.
 
 The gas-bound repository gate requires both conservative AST validation and execution of each discovered helper's complete documentation fence. `verifyGasBounds` runs real helper bodies with synthetic above-bound and within-bound inputs in bounded workers; any missing adapter, execution error, timeout or missing result fails the gate. The importer's arithmetic-only formula is executed with its actual admission guard, while preparation, resume and the private guard also execute independently. `inspectGasBounds` remains the static unit-test layer. A passing structural result alone cannot certify a helper. No funded signer or provider is used.
 
