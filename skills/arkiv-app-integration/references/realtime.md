@@ -54,7 +54,7 @@ export function watchSerially(client: Pick<PublicArkivClient, 'watchEntityEvents
 }
 ```
 
-Start the listener before the initial current query and tolerate overlap. It becomes active on its first poll, so starting it is not an acknowledgment of complete coverage. Periodically reconcile scope and mark freshness unavailable after errors/gaps. No historical replay parameter exists on this watcher.
+Start the listener before the initial current query and tolerate overlap. A live tail at head works, but the listener becomes active only on its first poll, so starting it is not an acknowledgment of complete coverage. On Rabdi, a watcher more than about 1,000 blocks (~30 min) behind fails on every poll when its range contains an older block with logs; it cannot backfill or catch up across that gap. After any watcher error, stop it, recreate the watcher at head and reconcile current state with a query. Do not split or retry the range. Periodically reconcile scope and mark freshness unavailable after errors/gaps. No historical replay parameter exists on this watcher. See [arkiv#283](https://github.com/Arkiv-Network/arkiv/issues/283).
 
 For EntityCreated a creator allowlist may prefilter the event's creation owner before a read. For EntityPatched fetch unknown keys as well; the new values can move them into scope. For OwnershipTransferred fetch unknown keys only when the new owner matches the selected owner, but always invalidate known keys' prior scope. Verify actual schema/publication/liveness filters before caching. Deletion needs prior membership because current lookup no longer returns the entity.
 

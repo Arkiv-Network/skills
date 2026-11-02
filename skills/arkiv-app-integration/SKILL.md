@@ -32,7 +32,7 @@ Recheck account/chain before each write. On accountsChanged, chainChanged or dis
 
 ## Live cache behavior
 
-SDK events are EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred and EntityDeleted. They carry operation/key context rather than full values. The watcher follows head and starts on its first poll; startup/disconnected intervals need current-state reconciliation. Natural expiration has no event.
+SDK events are EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred and EntityDeleted. They carry operation/key context rather than full values. A live tail at head works; the watcher starts on its first poll, so startup intervals need current-state reconciliation. On Rabdi, a watcher more than about 1,000 blocks (~30 min) behind fails on every poll when its range contains an older block with logs; it cannot backfill or catch up across that gap. After any watcher error, stop it, recreate the watcher at head and reconcile current state with a query. Do not split or retry the range. Natural expiration has no event. See [arkiv#283](https://github.com/Arkiv-Network/arkiv/issues/283).
 
 Fetch unknown patched keys because updates can move them into scope. For owner-filtered collections, fetch unknown incoming transfer keys whose newOwner matches; known keys need prior-scope invalidation for any destination. Re-evaluate all schema, creator/publication, namespace, liveness and collection filters before inclusion. Incoming ownership is not trusted authorship.
 

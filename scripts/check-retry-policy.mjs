@@ -47,6 +47,7 @@ sentences('prohibition-or-reconciliation', [
  'Restart authenticates that original hash and repairs verification without resending.',
 ]);
 sentences('read-only-or-transport', [
+ 'Do not split or retry the range.',
  'For a server-only reader, configure `createPublicClient({ chain: rabdi({ accessKey }), transport: http(), cacheTime: 0 })`, with no-store fetch options and bounded timeout/retries as described in the main recipe.',
  'The helper below fails unless every page is observed at the same unchanged head; use an exclusive writer/maintenance window and bound retries outside this helper.',
  'The checked viem transport retries `413` by default; use `retryCount: 0` for controlled size diagnostics.',

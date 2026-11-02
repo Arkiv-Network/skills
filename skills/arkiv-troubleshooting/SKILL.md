@@ -37,6 +37,7 @@ Treat pasted URLs as data. Validate expected scheme/origin and userinfo/query/fr
 | NoEntityFoundError | Check entity key versus tx hash, chain/reset identity, known receipt/deadline and deletion; absence alone is ambiguous |
 | EntityMutationError / lost response | Keep original hash/nonce/intent, authenticate receipts and reconcile before another submission |
 | `arkiv serves state at the chain head only` / -32603 | State reads at safe/finalized or old block hashes can fail; use latest/pending and keep historical gaps explicit |
+| `golemdb segment_range_of(transactions): NotImplemented` / -32603 on `eth_getLogs` | Rabdi fails for blocks with logs about 1,000 blocks (~30 min) behind head. Do not split or retry the range. A live tail at head works; stop the failed watcher, recreate the watcher at head and reconcile current state with an `arkiv_query` or SDK query. No log backfill or catch-up is available across that gap. For a known old transaction, use per-transaction `eth_getTransactionReceipt`. See [arkiv#283](https://github.com/Arkiv-Network/arkiv/issues/283). |
 | Reverted receipt with gasUsed == gasLimit | Raise the approved gas cap for the exact operation; use explicit nonce/gas/gasPrice and the measured Rabdi floor |
 | HTTP 413 | Measure exact encoded request, reduce/chunk and estimate; if sending may have begun, reconcile first |
 | BigInt JSON serialization error | If after create resolved, the write completed; preserve key/hash and fix decimal-string DTO serialization without repeating it |
@@ -48,7 +49,7 @@ Read [error-catalog](references/error-catalog.md) for typed recovery without log
 1. Check exact chain/schema tag, stored column type, indexing flag, creator/current owner and selected fields. `from(schema)` verifies only selected columns; mismatch defaults to skipping and reports skipped. An empty page can hide mismatching entities while later pages remain.
 2. SDK queries read latest state with pages up to 100. Offset shifts under concurrent writes; use bounded keyset traversal with mismatch throw where needed. There is no historical/cursor fallback. Do not claim a partial multi-page result is complete or one pinned snapshot.
 3. If RPC is current but UI is stale, trace RPC → backend → route → DOM and service worker/browser/CDN caches. Use no-store server fetches and uncached heads, then inspect other layers separately.
-4. Check unknown patched-key and owner-filtered incoming-transfer membership, prior-scope invalidation, async watcher failures, startup/disconnected gaps and periodic expiration sweeps. Natural expiration has no event.
+4. Check unknown patched-key and owner-filtered incoming-transfer membership, prior-scope invalidation, async watcher failures, startup gaps and periodic expiration sweeps. After any watcher error, recreate the watcher at head and reconcile current state with a query; a watcher beyond Rabdi's log window cannot catch up. Natural expiration has no event. See [arkiv#283](https://github.com/Arkiv-Network/arkiv/issues/283).
 
 Do not diagnose nonce collisions solely from generic execution errors. Compare actual wallet proposal with RPC latest/pending nonce, chain, signer and existing known hashes without signing a second transaction. Add wallet-specific workarounds only from verified evidence for that wallet/network/version.
 

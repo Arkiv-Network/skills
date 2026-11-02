@@ -1,0 +1,28 @@
+name: Guidance checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  guidance:
+    name: Guidance checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the exact candidate without installing dependencies
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$CANDIDATE_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - name: Validate guidance and mutation regressions
+        run: |
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 20) throw new Error("Node 20 or newer required")'
+          node scripts/check-vocabulary.mjs
+          node scripts/check-skill-references.mjs
+          node scripts/check-retry-policy.mjs
+          node scripts/check-rabdi-log-window.mjs
+          node --test tests/snippets/vocabulary.test.mjs tests/snippets/skill-references.test.mjs tests/snippets/retry-policy.test.mjs tests/snippets/rabdi-log-window.test.mjs
