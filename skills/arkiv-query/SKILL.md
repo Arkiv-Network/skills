@@ -123,4 +123,4 @@ SDK rendering escapes apostrophes by doubling them. Build expressions through co
 
 Every `arkiv_query`, including a count, costs 10 quota units under current provider policy; each access key has 100,000,000 units. Missing keys fail SDK construction unless explicitly empty; keyless calls can return HTTP 429. Preserve HTTP status and honor Retry-After; do not return empty results or loop through keys to bypass quota. Never log keyed URLs or raw provider errors.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

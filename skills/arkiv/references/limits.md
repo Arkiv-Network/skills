@@ -24,4 +24,4 @@ In SDK 1.0.1, a duration above `MAX_LIFETIME` (for example `ExpirationTime.fromY
 
 For SDK 1.0.0 compatibility, `max()` and `MAX_LIFETIME` are unavailable; retain the dated measured bound and a conservative below-maximum choice such as `fromBlocks(7_883_970)`. Do not carry that manual margin advice over to `max()` on SDK 1.0.1. Longer-lived data requires successful Lifetime Extension before expiry, recurring monitoring and an available authorized payer. There is no unlimited lifetime or `permanent()` helper. A deadline is not a wall-clock guarantee or secure-erasure mechanism; resets can invalidate existing entity keys.
 
-Sources: [versioned schema](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/schema/), [query engine](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/query/engine.ts).
+Sources: [versioned schema](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/schema/), [query engine](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/query/engine.ts).

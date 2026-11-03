@@ -72,4 +72,4 @@ Choose an explicit product retention policy and pass `{ expiration: ExpirationTi
 
 Read [PostgreSQL mapping](references/postgres-to-entity.md) for SQL constraints and [limits](../arkiv/references/limits.md) for runtime budgets. Validate bytes length and decoded JSON before use; all public values remain untrusted.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

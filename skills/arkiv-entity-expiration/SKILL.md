@@ -33,6 +33,8 @@ In SDK 1.0.1, a duration above `MAX_LIFETIME` (for example `ExpirationTime.fromY
 
 For SDK 1.0.0 compatibility, `max()` and `MAX_LIFETIME` are unavailable; retain the dated measured bound and a conservative below-maximum choice such as `fromBlocks(7_883_970)`. Do not carry that manual margin advice over to `max()` on SDK 1.0.1. Longer-lived data requires successful Lifetime Extension before expiry, recurring monitoring and an available authorized payer. There is no unlimited lifetime or `permanent()` helper.
 
+Historical SDK 1.0.0 behavior: [SDK 1.0.0 behavior: expiration helpers](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/expirationTime.ts) and [SDK 1.0.0 behavior: expiry resolution](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/entity/expiry.ts) support the compatibility fallback above.
+
 ## Add time versus ensure remaining life
 
 These absolute-deadline examples retain a conservative SDK 1.0.0 compatibility margin. It is not required by `ExpirationTime.max()` on SDK 1.0.1+, which needs no manual subtraction.

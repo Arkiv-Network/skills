@@ -30,4 +30,4 @@ After decryption, validate UTF-8, JSON and app schema with fixed safe errors; do
 
 Verify local byte roundtrip, fresh IV envelopes, wrong key, tamper, bounds, lost-key handling, readonly/provenance rejection and actual Rabdi byte readback separately. HMAC equality indexes still leak equality/frequency and are an app-owned design, not a library query feature; see security/privacy guidance.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

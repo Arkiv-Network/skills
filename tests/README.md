@@ -9,6 +9,7 @@ node scripts/check-skill-references.mjs
 node scripts/check-vocabulary.mjs
 node scripts/check-rabdi-log-window.mjs
 node scripts/check-lifetime-margins.mjs
+node scripts/check-sdk-101-guidance.mjs
 node tests/check-snippets.mjs
 node --experimental-vm-modules --test tests/snippets/*.test.mjs
 node tests/snippets/published-imports.mjs
@@ -30,9 +31,11 @@ Provider facades and raw/formatted return values are deeply frozen. Execution us
 
 If only the SDK needs upgrading, `node tests/prepare-sdk.mjs <viem-workspace> <typescript-workspace> <node-types-workspace>` verifies the official 1.0.1 tarball and prepares `.checks`, reusing existing peers without installing or executing package scripts. It creates symlinks to those existing peers; their lifecycle remains the contributor's responsibility.
 
+The SDK guidance guard checks current source/install citations and labels against the verified 1.0.1 baseline. Historical SDK 1.0.0 behavior and compatible ranges remain valid. The check also inspects generated catalog metadata, source-map strings/keys and code setup pins; regression fixtures run through the checker and CLI in CI and the full suite.
+
 ## Authorized Rabdi smoke and seed
 
-The existing seed/live scripts remain bound to their original SDK 1.0.0 workspace and durable journals; they are not the SDK 1.0.1 verification runner. Keep that workspace separate from the 1.0.1 contributor checks above. Do not replace a signed plan or run the historical negative probe as an SDK upgrade check.
+The historical seed/live scripts remain bound to their original SDK 1.0.0 workspace and durable journals; they are not the SDK 1.0.1 verification runner. Keep that workspace separate from the 1.0.1 contributor checks above. Do not replace a signed plan or run the historical negative probe as an SDK upgrade check.
 
 Supply `ARKIV_ACCESS_KEY_A`, `TEST_SKILLS_ADDRESS` and `TEST_SKILLS_PRIVATE_KEY` through the local secret store. Never put them in argv, source, public env or output. Supply an existing absolute private `ARKIV_SEED_STATE_DIR` and optional `ARKIV_EVIDENCE_DIR` outside Git. Keep durable state across restarts; signed transaction journals must remain private. Do not delete journals to repeat a test.
 

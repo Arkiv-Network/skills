@@ -35,4 +35,4 @@ Use a signed snapshot/version policy for trusted history, retain canonical ident
 
 A projection may retain public values after source deletion/expiration. Apply app access/retention policy; neither a namespace nor a shared signer is app-user authorization. Verify reset recovery, skipped schema rows, duplicate events, changed owner, unknown patched-key membership, expiration-only removal and failure before atomic commit. Controlled fixtures do not certify natural chain reorganizations or production persistence.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

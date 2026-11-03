@@ -72,4 +72,4 @@ Events identify operations and keys; refresh state rather than treating events a
 - [Disambiguation](references/disambiguation.md): keys, hashes, owners, nonces and schema fields.
 - [Known issues](references/known-issues.md): measured capabilities and limits.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

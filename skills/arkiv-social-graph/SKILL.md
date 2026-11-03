@@ -30,4 +30,4 @@ Events invalidate projections, and natural expiration requires periodic sweeps. 
 
 Verify direction, duplicates, self-links, missing endpoints, stable-ID collisions, truncation, empty/error states, transfer, reset and expiration. Browser rendering needs its own loading/error/partial/ghost and wallet-rejection checks. Optional delete/extension callbacks require exact entity and spending authorization; graph display grants no mutation permission.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

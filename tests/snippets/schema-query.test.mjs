@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { makeFixture } from './fixtures/importer-rpc-fixture.mjs';
 const workspace = process.env.ARKIV_SNIPPET_WORKSPACE;
-assert.ok(workspace, 'Set ARKIV_SNIPPET_WORKSPACE to the installed SDK 1.0.0 workspace');
+assert.ok(workspace, 'Set ARKIV_SNIPPET_WORKSPACE to the installed SDK 1.0.1 workspace');
 const load = name => import(pathToFileURL(path.join(workspace, 'node_modules/@arkiv-network/sdk/dist', name, 'index.js')));
 const sdk = await import(pathToFileURL(path.join(workspace, 'node_modules/@arkiv-network/sdk/dist/index.js')));
 const chains = await load('chains'), query = await load('query'), attr = await load('schema');

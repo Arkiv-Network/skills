@@ -42,4 +42,4 @@ Use a bounded serial processing queue, catch async failures, mark the cache unhe
 
 Test authorization/CSRF, invalid and oversized requests, attempt versus write quotas, duplicate/conflicting operation IDs, uncertain receipts and response failures after confirmation without a second create. Verify creator/readonly policy, malformed bytes/JSON, exact bigint DTOs, wallet rejection, account/chain changes, unknown patched/transfer-in membership and listener cleanup. Trace current RPC → API → DOM and every intervening cache; deterministic fixtures do not certify actual wallets, persistence or provider limits.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

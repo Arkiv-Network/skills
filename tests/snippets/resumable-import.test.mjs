@@ -1,3 +1,4 @@
+// Historical compatibility baseline includes SDK 1.0.0; the current full suite runs with 1.0.1.
 import assert from 'node:assert/strict';
 import {inspect} from 'node:util';
 import { createHash } from 'node:crypto';

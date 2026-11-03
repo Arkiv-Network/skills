@@ -1,3 +1,4 @@
+// Historical SDK 1.0.0 runner retained on 2026-11-03 for original journal reconciliation, not current SDK setup.
 import {safeProviderError,safeProviderDiagnostic} from './safe-rpc-error.mjs';
 // Explicitly authorized negative probe: one create, never automatically retried or repeated after reset.
 import fs from 'node:fs/promises';

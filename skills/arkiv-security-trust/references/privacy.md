@@ -47,4 +47,4 @@ Rabdi has no expiration-free option. SDK 1.0.1 exports `MAX_LIFETIME = 7_884_000
 
 If a third party must not prolong live query access, do not enable `permissionlessExtension`. Readonly preserves attribute values but still permits eligible extension, transfer or deletion. Decide whether publishing even encrypted metadata is acceptable before writing it.
 
-Sources: [Arkiv mutation calldata](https://docs.arkiv.network/json-rpc/mutating-entities/), [encryption 0.1.0 guide](https://github.com/SantiagoDevRel/arkiv-encrypted-entities/blob/arkiv-encryption-v0.1.0/README.md), [SDK 1.0.0 creation flags](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/entity/flags.ts).
+Sources: [Arkiv mutation calldata](https://docs.arkiv.network/json-rpc/mutating-entities/), [encryption 0.1.0 guide](https://github.com/SantiagoDevRel/arkiv-encrypted-entities/blob/arkiv-encryption-v0.1.0/README.md), [SDK 1.0.1 creation flags](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/entity/flags.ts).

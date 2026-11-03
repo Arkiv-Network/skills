@@ -1,3 +1,4 @@
+// Historical compatibility comparison includes SDK 1.0.0; current setup and checks use 1.0.1.
 // Explicit network reproduction, separate from offline tests and production hooks.
 import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';import assert from 'node:assert/strict';
 import {checkFile} from '../../skills/arkiv/scripts/check-imports.mjs';

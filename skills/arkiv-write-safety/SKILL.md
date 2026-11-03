@@ -87,14 +87,14 @@ For older uninstrumented jobs, use the saved start block and pinned signer/nonce
 
 The repository's controlled regressions exercise SDK 1.0.x encoding/receipt decoding, a lost raw-send response, failed durable appends/checkpoints, authenticated input/receipt/key order, typed readback and refusal of incompatible journals. Journal-version-3 cases require receipt confirmation before reads, batch-local verification, and recovery without resubmission. These checks do not certify real provider limits, distributed custody, cross-process crashes or machine power-loss durability. The separate authorized Rabdi smoke supplies actual network write/readback evidence.
 
-- [SDK 1.0.0 native encoding, send and receipt handling](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/arkivTransactions.ts).
-- [SDK 1.0.0 executeBatch result](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/wallet/executeBatch.ts), [TxParams](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/types/txParams.ts), and [entity-key prediction](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/predictEntityKeys.ts).
+- [SDK 1.0.1 native encoding, send and receipt handling](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/utils/arkivTransactions.ts).
+- [SDK 1.0.1 executeBatch result](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/wallet/executeBatch.ts), [TxParams](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/types/txParams.ts), and [entity-key prediction](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/public/predictEntityKeys.ts).
 - [Native mutations, events, and reverts](https://docs.arkiv.network/json-rpc/mutating-entities/).
 
 ## SDK 1.0.x schema inputs
 
 Each batch create is `{ schema, values, expiration, flags?, salt? }`; each patch is `{ schema, entityKey, set?, unset? }`. Use typed constructors/defineSchema from the schema subpath and explicit per-column indexing. Only indexed scalars filter; bytes columns are never indexed. Current readback uses `$key`, `$owner`, `$creator`, `$expiresAt`, `$attributes` and `$attributeSchema`, without historical block options. The importer freezes schema/indexing choices in plan version 2, writes journal version 3 and refuses incompatible earlier files.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.
 
 SDK 1.0.1 changes: [gas and out-of-gas handling](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/utils/arkivTransactions.ts), [expiry validation](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/entity/expiry.ts).

@@ -40,4 +40,4 @@ Inspect actual signer endpoints, auth/CSRF/rate limits, client bundles, keyed RP
 
 Test copied tags, unsolicited transfers, mutable transfer-away/edit/back, malicious text and late stale responses at the real boundary. A substring check or successful JSON parse does not establish security. Keep tool authorization outside content-controlled model output. Verify fixes through backend → API → DOM and caches before closing findings.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.
