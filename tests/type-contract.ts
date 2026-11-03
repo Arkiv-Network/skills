@@ -1,7 +1,12 @@
-import { createPublicClient, createWalletClient, ExpirationTime, type TxParams } from '@arkiv-network/sdk';
+import { createPublicClient, createWalletClient, ExpirationTime, MAX_LIFETIME, type TxParams } from '@arkiv-network/sdk';
 import { defineSchema, str, bytes, dec } from '@arkiv-network/sdk/schema';
 import { asc, eq } from '@arkiv-network/sdk/query';
 import type { LocalAccount } from 'viem';
+import { MAX_LIFETIME as entityMaximum } from '@arkiv-network/sdk/entity';
+const maximumLifetime: bigint = MAX_LIFETIME;
+const sameMaximum: bigint = entityMaximum;
+const maximumExpiry = ExpirationTime.max();
+void [maximumLifetime, sameMaximum, maximumExpiry];
 // This contract is copied beside compiled fences by check-snippets.mjs.
 import { ensureFirstNote } from './skills__arkiv-first-write__SKILL.md-0.js';
 import { estimateWrite } from './skills__arkiv-first-write__references__estimate.md-0.js';
@@ -16,7 +21,7 @@ declare const reader: ReturnType<typeof createPublicClient>;
 declare const wallet: ReturnType<typeof createWalletClient>;
 declare const entityKey: `0x${string}`;
 declare const txParams: TxParams;
-// @ts-expect-error SDK 1.0.0 exposes no permanent expiration helper.
+// @ts-expect-error SDK 1.0.1 exposes no expiration-free helper.
 ExpirationTime.permanent();
 reader.select({ $key: true, body: true }).from(Model).where(eq('amount', dec('1.5'))).orderBy(asc('title'));
 // @ts-expect-error A stored unindexed column is not a filter.

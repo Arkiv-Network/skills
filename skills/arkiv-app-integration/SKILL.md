@@ -1,6 +1,6 @@
 ---
 name: arkiv-app-integration
-description: Integrate SDK 1.0.0 into authenticated server APIs, read proxies, injected-wallet apps and event-driven caches on Rabdi. Use indexing for persistent projections and lifecycle for entity operations.
+description: Integrate SDK 1.0.x into authenticated server APIs, read proxies, injected-wallet apps and event-driven caches on Rabdi. Use indexing for persistent projections and lifecycle for entity operations.
 license: MIT
 metadata:
   arkiv-sdk: ">=1.0.0 <2"
@@ -10,7 +10,7 @@ metadata:
 
 # Arkiv application integration
 
-Choose the signing boundary before adding endpoints. Target SDK 1.0.0 on Rabdi. An RPC access key neither authorizes app users nor pays transaction gas. Read the installed declarations before generating code.
+Choose the signing boundary before adding endpoints. Target SDK 1.0.x on Rabdi. An RPC access key neither authorizes app users nor pays transaction gas. Read the installed declarations before generating code.
 
 ## Server boundary
 
@@ -36,10 +36,10 @@ SDK events are EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferre
 
 Fetch unknown patched keys because updates can move them into scope. For owner-filtered collections, fetch unknown incoming transfer keys whose newOwner matches; known keys need prior-scope invalidation for any destination. Re-evaluate all schema, creator/publication, namespace, liveness and collection filters before inclusion. Incoming ownership is not trusted authorship.
 
-Use a bounded serial processing queue, catch async failures, mark the cache unhealthy on overflow/disconnect and stop listeners during cleanup. A late active handler also needs a scope token/abort guard. Sweep expiration and reconcile full current scope periodically. Read [realtime](references/realtime.md) and indexing for persistent projections; do not promise historical replay from SDK 1.0.0.
+Use a bounded serial processing queue, catch async failures, mark the cache unhealthy on overflow/disconnect and stop listeners during cleanup. A late active handler also needs a scope token/abort guard. Sweep expiration and reconcile full current scope periodically. Read [realtime](references/realtime.md) and indexing for persistent projections; do not promise historical replay from SDK 1.0.x.
 
 ## Verify the whole path
 
 Test authorization/CSRF, invalid and oversized requests, attempt versus write quotas, duplicate/conflicting operation IDs, uncertain receipts and response failures after confirmation without a second create. Verify creator/readonly policy, malformed bytes/JSON, exact bigint DTOs, wallet rejection, account/chain changes, unknown patched/transfer-in membership and listener cleanup. Trace current RPC → API → DOM and every intervening cache; deterministic fixtures do not certify actual wallets, persistence or provider limits.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

@@ -62,4 +62,4 @@ If a connected feedback tool is available, inspect its current schema. Both `sub
 
 Sources checked on 2026-10-08: [bug YAML](https://raw.githubusercontent.com/Arkiv-Network/reported-issues/main/.github/ISSUE_TEMPLATE/1-bug.yml), [feature YAML](https://raw.githubusercontent.com/Arkiv-Network/reported-issues/main/.github/ISSUE_TEMPLATE/2-feature-request.yml), [contact YAML](https://raw.githubusercontent.com/Arkiv-Network/reported-issues/main/.github/ISSUE_TEMPLATE/config.yml). No issue was submitted to verify this guidance. Diagnose Arkiv SDK usage with the installed Arkiv guidance before filing.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

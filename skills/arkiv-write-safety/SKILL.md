@@ -23,6 +23,12 @@ One authorized account writer submits bounded batches and preserves every known 
 - Represent media type as an application column when needed; binary/JSON data lives in named bytes columns. The SDK sorts attribute cells by their encoded names; raw ABI callers must do so themselves. An empty batch throws `Error("No operations to perform")`; an empty patch throws `EmptyPatchError`. Skip empty work.
 - Keep bytes-column data limits separate from total encoded transaction limits: ABI framing, attributes, and every operation add bytes. Do not present a bytes-column data limit as the transaction limit.
 
+## SDK 1.0.1 gas behavior
+
+SDK 1.0.1 behavior when `gas` is omitted: estimate the exact operation, then use `min(floor(estimate × 125 / 100), 2^24)` when the estimate is at most `2^24`. An estimate already above that cap is left unchanged, so padding does not make oversized work valid. Caller-supplied `gas` is used as is, without the 25% headroom. This is SDK behavior, not the stronger admission policy in these recipes: funded examples keep explicit nonce/current gasPrice/gas, the per-operation floor, `2 × estimate`, approved budget and latest half-block bound. The SDK default does not enforce that half-block bound or the recipe floor. The dedicated small-entity 1.0.1 smoke passed without explicit gas; that single result does not establish safety for larger writes, batches or browser wallets.
+
+SDK 1.0.1 reports an out-of-gas reverted receipt as `EntityMutationError` with an explicit out-of-gas diagnostic. The diagnostic does not authorize another signature; keep it sanitized and apply the exact receipt-based write-safety contract below. An uncertain submission or prior SDK success still blocks another send.
+
 ## Nonces, fees, and predictions
 
 Serialize all writes for an account. `Promise.all` over wallet writes can collide on transaction nonces; a queue in one process cannot coordinate another tab, server, wallet application, or process. Use an account-wide coordinator or exclusive custody when correctness depends on ordering.
@@ -33,7 +39,7 @@ Pass `TxParams` last: fourth after `createEntity(schema, values, options)` or `p
 
 On Rabdi, always pass explicit `gas` to the funded write. First run an exact unsigned `eth_estimateGas` or simulation at `latest`, using the guarded estimator below. If it errors, stop before signing and surface only fixed sanitized diagnostics, without raw or nested causes. Otherwise use `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, subject to approved cost/balance ceilings. An explicit cap skips automatic estimation; it never replaces this unsigned preflight. See [rendered funding/permission errors](../arkiv-troubleshooting/references/error-catalog.md); neither their message nor a missing hash proves the send phase.
 
-SDK 1.0.0 `executeBatch` returns created keys but no expiration deadlines. Decode each canonical `EntityCreated` log's `entityKey`/`expiresAt`, or read current entity state and retain its observation block. The durable importer below validates those event fields against its frozen plan; do not infer expiries from the batch result.
+SDK 1.0.x `executeBatch` returns created keys but no expiration deadlines. Decode each canonical `EntityCreated` log's `entityKey`/`expiresAt`, or read current entity state and retain its observation block. The durable importer below validates those event fields against its frozen plan; do not infer expiries from the batch result.
 
 ## Reconcile before another submission
 
@@ -79,14 +85,16 @@ For older uninstrumented jobs, use the saved start block and pinned signer/nonce
 
 ## Verification and sources
 
-The repository's controlled regressions exercise SDK 1.0.0 encoding/receipt decoding, a lost raw-send response, failed durable appends/checkpoints, authenticated input/receipt/key order, typed readback and refusal of incompatible journals. Journal-version-3 cases require receipt confirmation before reads, batch-local verification, and recovery without resubmission. These checks do not certify real provider limits, distributed custody, cross-process crashes or machine power-loss durability. The separate authorized Rabdi smoke supplies actual network write/readback evidence.
+The repository's controlled regressions exercise SDK 1.0.x encoding/receipt decoding, a lost raw-send response, failed durable appends/checkpoints, authenticated input/receipt/key order, typed readback and refusal of incompatible journals. Journal-version-3 cases require receipt confirmation before reads, batch-local verification, and recovery without resubmission. These checks do not certify real provider limits, distributed custody, cross-process crashes or machine power-loss durability. The separate authorized Rabdi smoke supplies actual network write/readback evidence.
 
-- [SDK 1.0.0 native encoding, send and receipt handling](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/arkivTransactions.ts).
-- [SDK 1.0.0 executeBatch result](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/wallet/executeBatch.ts), [TxParams](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/types/txParams.ts), and [entity-key prediction](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/predictEntityKeys.ts).
+- [SDK 1.0.1 native encoding, send and receipt handling](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/utils/arkivTransactions.ts).
+- [SDK 1.0.1 executeBatch result](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/wallet/executeBatch.ts), [TxParams](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/types/txParams.ts), and [entity-key prediction](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/public/predictEntityKeys.ts).
 - [Native mutations, events, and reverts](https://docs.arkiv.network/json-rpc/mutating-entities/).
 
-## SDK 1.0.0 schema inputs
+## SDK 1.0.x schema inputs
 
 Each batch create is `{ schema, values, expiration, flags?, salt? }`; each patch is `{ schema, entityKey, set?, unset? }`. Use typed constructors/defineSchema from the schema subpath and explicit per-column indexing. Only indexed scalars filter; bytes columns are never indexed. Current readback uses `$key`, `$owner`, `$creator`, `$expiresAt`, `$attributes` and `$attributeSchema`, without historical block options. The importer freezes schema/indexing choices in plan version 2, writes journal version 3 and refuses incompatible earlier files.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.
+
+SDK 1.0.1 changes: [gas and out-of-gas handling](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/utils/arkivTransactions.ts), [expiry validation](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/entity/expiry.ts).

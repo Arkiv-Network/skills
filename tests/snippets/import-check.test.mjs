@@ -6,7 +6,7 @@ import path from 'node:path';
 import {checkFile,hook} from '../../skills/arkiv/scripts/check-imports.mjs';
 async function fixture(t){const dir=await fs.mkdtemp(path.join(os.tmpdir(),'arkiv-import-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
  const put=async(p,v)=>{await fs.mkdir(path.dirname(path.join(dir,p)),{recursive:true});await fs.writeFile(path.join(dir,p),typeof v==='string'?v:JSON.stringify(v));};
- await put('node_modules/@arkiv-network/sdk/package.json',{name:'@arkiv-network/sdk',version:'1.0.0',exports:{'.':{types:'./index.d.ts'},'./chains':{types:'./chains.d.ts'}}});
+ await put('node_modules/@arkiv-network/sdk/package.json',{name:'@arkiv-network/sdk',version:'1.0.1',exports:{'.':{types:'./index.d.ts'},'./chains':{types:'./chains.d.ts'}}});
  await put('node_modules/@arkiv-network/sdk/index.d.ts',"export { createPublicClient } from './client.js';");
  await put('node_modules/@arkiv-network/sdk/chains.d.ts','export declare const localhost: unknown; export declare const otherChain: unknown;');
  return {dir,put};}

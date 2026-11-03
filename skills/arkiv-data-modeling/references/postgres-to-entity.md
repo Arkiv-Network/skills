@@ -2,7 +2,7 @@
 
 Use schema-only DDL and actual query requirements. Do not request database credentials for a model. The mapping does not import entities, enforce SQL constraints or authorize writes.
 
-| PostgreSQL concept | SDK 1.0.0 mapping | Required decision |
+| PostgreSQL concept | SDK 1.0.x mapping | Required decision |
 | --- | --- | --- |
 | Table | Named `defineSchema` | Creator scope, public fields, lifetime |
 | Primary/foreign key | Indexed str source ID or resolved key column | Uniqueness, missing targets and remapping |
@@ -24,4 +24,4 @@ Preserve source-to-destination mapping and explicit Entity Expiration for every 
 
 If using `postgres-to-entity`, inspect the installed version, README, generated schema and SDK compatibility. Its model-only converter is distinct from importing SQL data; never infer current method names or package versions from this guide. Preserve `needs-input` and `blocked` outcomes. A schema model cannot certify SQL constraints, data privacy or a live migration.
 
-Source: [SDK 1.0.0 schemas](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/schema/), [converter](https://github.com/SantiagoDevRel/postgres-to-entity).
+Source: [SDK 1.0.1 schemas](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/schema/), [converter](https://github.com/SantiagoDevRel/postgres-to-entity).

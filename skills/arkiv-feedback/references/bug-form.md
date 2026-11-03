@@ -16,7 +16,7 @@ Title prefix: `[Bug]: `. The web form prefills it; paste only the summary. Upstr
 | Transaction hash or entity ID (if any) | No |
 | Anything else we should know? | No |
 
-Surface options: `SDK (@arkiv-network/sdk)`, `CLI / tooling`, `Block explorer`, `Entity Explorer (data.arkiv.network)`, `Documentation`, `Website`, `Other`. These are literal option values; formatting backticks are not part of the submitted value. Example current SDK version: `@arkiv-network/sdk@1.0.0`. Contact information will be public: let the user omit it.
+Surface options: `SDK (@arkiv-network/sdk)`, `CLI / tooling`, `Block explorer`, `Entity Explorer (data.arkiv.network)`, `Documentation`, `Website`, `Other`. These are literal option values; formatting backticks are not part of the submitted value. Example current SDK version: `@arkiv-network/sdk@1.0.1`. Contact information will be public: let the user omit it.
 
 ```markdown
 ### How can we reach you?

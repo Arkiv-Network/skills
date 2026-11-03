@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 const workspace = path.resolve(process.env.ARKIV_SNIPPET_WORKSPACE ?? '.checks');
 const sdk = JSON.parse(await fs.readFile(path.join(workspace, 'node_modules/@arkiv-network/sdk/package.json'), 'utf8'));
-assert.equal(sdk.version, '1.0.0');
+assert.equal(sdk.version, '1.0.1', 'Compile the current examples against the verified SDK');
 const generated = path.join(workspace, 'fences');
 await fs.mkdir(generated, { recursive: true });
 await fs.writeFile(path.join(workspace, 'package.json'), '{"type":"module"}\n');

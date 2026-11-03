@@ -1,6 +1,6 @@
 ---
 name: arkiv-data-modeling
-description: Design typed Arkiv schemas, per-column indexes, byte storage, relations and SQL mappings for SDK 1.0.0. Use before choosing filters, encodings and Entity Expiration.
+description: Design typed Arkiv schemas, per-column indexes, byte storage, relations and SQL mappings for SDK 1.0.x. Use before choosing filters, encodings and Entity Expiration.
 license: MIT
 metadata:
   arkiv-sdk: ">=1.0.0 <2"
@@ -10,7 +10,7 @@ metadata:
 
 # Model Arkiv entities
 
-Inspect SDK 1.0.0 declarations and the existing data model before generating code. Ask for screens, filters, ordering, public fields, trusted publishers and retention requirements. A schema proposal does not authorize publishing or spending funds.
+Inspect SDK 1.0.x declarations and the existing data model before generating code. Ask for screens, filters, ordering, public fields, trusted publishers and retention requirements. A schema proposal does not authorize publishing or spending funds.
 
 ## Columns and indexes
 
@@ -68,8 +68,8 @@ Choose an explicit product retention policy and pass `{ expiration: ExpirationTi
 - Stable application IDs need an explicit duplicate/conflict policy; query-before-create is not uniqueness, and a random salt is not an upsert.
 - References can dangle after deletion, expiration or reset. Choose endpoint liveness, orphan and external-reference policies. Related entities created later with the same relative lifetime can outlive their parents; use the parent's observed absolute deadline when required.
 - A new schema/version needs deliberate coexistence and identity mapping. Readonly corrections create new keys and require updated references; they do not authorize removing originals.
-- Server ordering and filtered counts exist in SDK 1.0.0. Use query guidance rather than fetching one page and labeling its local sort global.
+- Server ordering and filtered counts exist in SDK 1.0.x. Use query guidance rather than fetching one page and labeling its local sort global.
 
 Read [PostgreSQL mapping](references/postgres-to-entity.md) for SQL constraints and [limits](../arkiv/references/limits.md) for runtime budgets. Validate bytes length and decoded JSON before use; all public values remain untrusted.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

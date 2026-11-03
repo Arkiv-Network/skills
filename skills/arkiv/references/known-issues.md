@@ -1,6 +1,6 @@
 # Versioned capability boundaries
 
-Checked against published SDK 1.0.0 source on 2026-10-30. Source inspection is distinct from a funded or wallet-specific test.
+Rechecked against the published SDK 1.0.1 source on 2026-11-03: schema/query semantics, watcher parameters, Rabdi client configuration, and transaction returns/expiry. These are source checks, not new funded or wallet-specific tests. The dedicated Rabdi create/extension/delete smoke from 2026-11-03 remains prior evidence; the dated 2026-11-02 log-limit observations below were not repeated for this citation update.
 
 - Queries read current state. The exported API has no historical snapshot, opaque query cursor or historical entity version parameter. Do not present head observations as old block-end state.
 - Server ordering and filtered counts are available. A sort takes one key; bytes cannot be sorted. A count includes schema-mismatching matches.
@@ -12,4 +12,4 @@ Checked against published SDK 1.0.0 source on 2026-10-30. Source inspection is d
 - SDK `createEntity` and `extendEntity` return receipt-derived expiration blocks. A later read failure does not undo a confirmed write. Batches return ordered keys without deadlines; inspect authenticated receipts and read back.
 - Library APIs must pass their own installed SDK 1.0 compatibility gate. Never widen peers, downgrade the SDK or invent a release to make examples appear compatible.
 
-Sources: [query implementation](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/query/queryBuilder.ts), [watcher](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/watchEntityEvents.ts), [chain](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/chains/rabdi.ts).
+Sources: [query implementation](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/query/queryBuilder.ts), [watcher](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/public/watchEntityEvents.ts), [chain](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/chains/rabdi.ts), [query page semantics](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/query/queryResult.ts), [ordering](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/query/order.ts), and [write/receipt handling](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/utils/arkivTransactions.ts).

@@ -1,6 +1,6 @@
 # Projection generations and progress
 
-SDK 1.0.0 provides current queries and head-following event invalidation. This is a design contract for an application-owned adapter, not a historical-replay implementation.
+SDK 1.0.x provides current queries and head-following event invalidation. This is a design contract for an application-owned adapter, not a historical-replay implementation.
 
 Persist a generation with chain ID, genesis/reset identity, schema/indexing version, trusted publisher scope, observed blocks, last successful full reconciliation, row deadlines and gaps. Store exact bigints as decimal strings. A number-only checkpoint cannot authenticate old state or distinguish a reset.
 
@@ -18,4 +18,4 @@ Verify each fetched row against schema/publication policy and observed liveness 
 
 Atomically commit rows, identities, health state and progress in the application's real transactional store. On reset or unverified lineage freeze the prior generation, build a separate verified current generation, then explicitly switch readers. Do not drop old tables or rewrite prior provenance as a shortcut. Never replay unresolved funded writes to repair a read projection.
 
-Source: [SDK watcher](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/watchEntityEvents.ts), [query result semantics](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/query/queryResult.ts).
+Source: [SDK watcher](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/public/watchEntityEvents.ts), [query result semantics](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/query/queryResult.ts).

@@ -1,6 +1,6 @@
 # Verify a first write
 
-Check installed SDK 1.0.0 version/declarations first. Deterministic transport tests exercise actual schema encoding and receipt decoding; they cannot prove funding, provider limits or wallet UI.
+Check installed SDK 1.0.x version/declarations first. Deterministic transport tests exercise actual schema encoding and receipt decoding; they cannot prove funding, provider limits or wallet UI.
 
 Before a funded Rabdi test, authorize the dedicated signer, operation and spend budget. Read access/signing keys from a local secret store; never print them or raw transport errors. Confirm chain 7794095, genesis/reset identity, balance and an exact unsigned estimate. Keep a durable intent/signed-hash journal before forwarding a write.
 

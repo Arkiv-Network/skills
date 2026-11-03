@@ -10,7 +10,7 @@ metadata:
 
 # Entity Expiration and Lifetime Extension
 
-SDK 1.0.0 uses **`expiration`** in create/extension inputs; flat entity reads expose **`$expiresAt`**. Returned create/extend results expose receipt-derived **`expiresAt`**. Deadlines are block heights, separate from application milliseconds.
+SDK 1.0.x uses **`expiration`** in create/extension inputs; flat entity reads expose **`$expiresAt`**. Returned create/extend results expose receipt-derived **`expiresAt`**. Deadlines are block heights, separate from application milliseconds.
 
 | Helper | Meaning |
 | --- | --- |
@@ -20,17 +20,24 @@ SDK 1.0.0 uses **`expiration`** in create/extension inputs; flat entity reads ex
 | `atBlock(n)` | Absolute block deadline |
 | `atDate(date)` | Deadline resolved using the SDK's clock/head conversion |
 | `atBlock/atDate` with `{ atLeast }` | Absolute deadline plus a relative minimum floor |
-| `permanent()` | Unavailable in SDK 1.0.0; Rabdi rejects the equivalent maximum-u64 deadline |
+| `max()` (SDK 1.0.1+) | Maximum relative lifetime from inclusion; also valid for Lifetime Extension |
+| `permanent()` | Unavailable; no unlimited lifetime |
 
 Nominal conversion uses two seconds per block; converted seconds must be positive whole multiples of two. These are SDK conversion rules, not a wall-clock service promise. The engine resolves `max(absolute, inclusion + floor)`; an absolute target can become dead before inclusion.
 
 ## Rabdi maximum lifetime
 
-Rabdi does not offer an expiration-free option. A live maximum-u64 create on 2026-10-30 UTC reverted with `ExpiryBeyondMaxLifetime(18446744073709551615, 9547, 7884000)`: the target exceeded the current block plus **7,884,000 blocks**, approximately 182.5 days at the nominal block interval. The revert was independently confirmed by its receipt; decoding at latest observes the then-current block, not historical state.
+SDK 1.0.1 adds `ExpirationTime.max()` at the package root. Its `MAX_LIFETIME = 7_884_000n` constant is exported from both `@arkiv-network/sdk/entity` and the package root. The maximum is counted from the block the create or extension lands in, not from the observed head or the existing deadline. `max()` needs no manually subtracted inclusion margin: a successful create expires at `landingBlock + MAX_LIFETIME`, and a successful extension with `max()` sets expiry to its new inclusion block plus `MAX_LIFETIME`. Revalidate network compatibility after a reset or upgrade; this exported SDK constant is not a live node-parameter getter.
 
-Read maxLifetime from a published SDK/node parameter getter when one is available. The inspected SDK 1.0.0 public actions/native ABI expose no such getter; use the dated measured value above as network configuration, not a timeless protocol constant, and revalidate after reset/upgrade. Every helper, including fromMonths/fromYears and atLeast floors, is subject to this bound. Keep the target below `currentBlock + maxLifetime` with an inclusion margin; a near-maximum relative choice for the measured value is `fromBlocks(7_883_970)`. Longer-lived data requires successful Lifetime Extension before expiry, recurring monitoring and an available authorized payer. No single write guarantees indefinite availability.
+In SDK 1.0.1, a duration above `MAX_LIFETIME` (for example `ExpirationTime.fromYears(1)`) or an absolute deadline beyond the SDK's allowed maximum throws `InvalidExpiryError` before sending. Constructing `fromYears(1)` alone does not send or validate a transaction; the write path resolves and rejects it. Rabdi still rejects excessive lifetime from older SDK/raw callers with `ExpiryBeyondMaxLifetime`.
+
+For SDK 1.0.0 compatibility, `max()` and `MAX_LIFETIME` are unavailable; retain the dated measured bound and a conservative below-maximum choice such as `fromBlocks(7_883_970)`. Do not carry that manual margin advice over to `max()` on SDK 1.0.1. Longer-lived data requires successful Lifetime Extension before expiry, recurring monitoring and an available authorized payer. There is no unlimited lifetime or `permanent()` helper.
+
+Historical SDK 1.0.0 behavior: [SDK 1.0.0 behavior: expiration helpers](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/expirationTime.ts) and [SDK 1.0.0 behavior: expiry resolution](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/entity/expiry.ts) support the compatibility fallback above.
 
 ## Add time versus ensure remaining life
+
+These absolute-deadline examples retain a conservative SDK 1.0.0 compatibility margin. It is not required by `ExpirationTime.max()` on SDK 1.0.1+, which needs no manual subtraction.
 
 ```typescript
 import { createPublicClient, createWalletClient, ExpirationTime, type TxParams } from '@arkiv-network/sdk';
@@ -119,12 +126,12 @@ An extension sets a target, not a delta. A shorter effective target is rejected;
 
 Use an indexed system predicate such as `lte('$expiresAt', u64(cutoff))` with explicit schema/creator scope, bounded pages and current-state pagination from query guidance. Natural expiration emits no event; sweep prior known deadlines against a fresh head and refetch extensions before acting on cached liveness.
 
-`NoEntityFoundError` alone cannot distinguish never-created, deleted, expired, wrong chain or reset. Check known creation/extension receipts, correct key and network/reset identity. SDK 1.0.0 cannot query old state or recover complete missed history; preserve gaps explicitly rather than substituting head as a historical answer.
+`NoEntityFoundError` alone cannot distinguish never-created, deleted, expired, wrong chain or reset. Check known creation/extension receipts, correct key and network/reset identity. SDK 1.0.x cannot query old state or recover complete missed history; preserve gaps explicitly rather than substituting head as a historical answer.
 
 A lifetime is neither a mutex nor an app authorization lease. A coordination protocol needs a writer/fencing policy and must reject expired state before its protected action. Permissionless extension can prolong data availability. Deletion or expiration cannot retract already read copies.
 
 Read write-safety for `EntityMutationError`, nonce uncertainty or readback failure after confirmation. No absent hash or unchanged nonce proves a send never occurred.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 expiry validation](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/entity/expiry.ts), [expiration helpers](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/utils/expirationTime.ts), [SDK diff](https://github.com/Arkiv-Network/arkiv-sdk-js/compare/v1.0.0...v1.0.1). Inspect the installed declarations before adapting executable examples.
 
 The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate only sanitized diagnostics with no raw or nested causes without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

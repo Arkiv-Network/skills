@@ -26,8 +26,8 @@ Prefer entity keys for endpoints. Business IDs need type-specific matching, uniq
 
 Keep exact bigint metadata for liveness/transactions; display-number conversions and approximate dates are not authoritative deadlines. Do not report whole-network or unique follower counts from a truncated graph. Namespace/schema tags locate public data but do not authenticate publishers. Apply security/trust policy before privileged use and render labels as escaped text.
 
-Events invalidate projections, and natural expiration requires periodic sweeps. Fetch unknown patched keys and owner-filtered incoming transfers; invalidate old scopes for known keys. SDK 1.0.0 has no historical entity queries, so missed transient edges cannot be reconstructed from head. Persistent projections must expose gaps/reset generations under indexing guidance.
+Events invalidate projections, and natural expiration requires periodic sweeps. Fetch unknown patched keys and owner-filtered incoming transfers; invalidate old scopes for known keys. SDK 1.0.x has no historical entity queries, so missed transient edges cannot be reconstructed from head. Persistent projections must expose gaps/reset generations under indexing guidance.
 
 Verify direction, duplicates, self-links, missing endpoints, stable-ID collisions, truncation, empty/error states, transfer, reset and expiration. Browser rendering needs its own loading/error/partial/ghost and wallet-rejection checks. Optional delete/extension callbacks require exact entity and spending authorization; graph display grants no mutation permission.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

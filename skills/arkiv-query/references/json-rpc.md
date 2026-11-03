@@ -1,4 +1,4 @@
-# SDK 1.0.0 wire protocol
+# SDK 1.0.x wire protocol
 
 Use the versioned source for non-TypeScript clients. Rabdi is chain 7794095 (`0x76edaf`); HTTP is `https://rpc.rabdi.db-chain.testnet.arkiv.network/<accessKey>` and WSS uses the same host/path. Put actual keys in a local secret store; redact URLs and never interpolate untrusted configuration into shell source.
 
@@ -8,7 +8,7 @@ Use the versioned source for non-TypeScript clients. Rabdi is chain 7794095 (`0x
 
 The response contains `data`, hex `blockNumber` and optional hex `count`. Options are `select`, hex `limit` (1–100) and hex `offset`. Selection wire names omit `$`: `key`, `owner`, `creator`, `createdAt`, `updatedAt`, `expiresAt`, `creationFlags`, `attributes`, `attributeSchema`. SDK flat-row names add `$` only for system fields. `attributes` can be true or a map of selected names. `attributeSchema` is a list of name/type/indexed entries without values.
 
-For count only, use `select: {count:true}`; SDK `count()` uses that projection. Counts include all filter matches, regardless of page size or schema mismatch. `arkiv_getEntity` takes `[entityKey]` and returns a live entity or null. There is no historical block/cursor option in the SDK 1.0.0 RPC schema. Do not invent an old-state fallback.
+For count only, use `select: {count:true}`; SDK `count()` uses that projection. Counts include all filter matches, regardless of page size or schema mismatch. `arkiv_getEntity` takes `[entityKey]` and returns a live entity or null. There is no historical block/cursor option in the SDK 1.0.x RPC schema. Do not invent an old-state fallback.
 
 Attributes return name/type/value. i32 is a JSON number, u64/u256 a hex quantity, dec a decimal string, bytes/key/address hex and str a string. Preserve the tag, exact integers and indexing metadata. Bytes values are never indexed. Raw names and literals must follow the source grammar; strings escape apostrophes by doubling them. Build expressions with the SDK where possible.
 
@@ -24,4 +24,4 @@ The attribute type byte combines the type ID and bit `0x80` for indexed. Current
 
 Native events are EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred, EntityDeleted. Validate address, receipt success and provenance before decoding; events do not contain full attribute values. Natural expiration has no event. Raw access does not establish historical retention or missing-event recovery.
 
-Sources: [RPC types](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/types/rpcSchema.ts), [rendering](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/query/expression.ts), [ordering](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/query/order.ts), [codec](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/schema/codec.ts), [operations](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/entity/operations.ts).
+Sources: [RPC types](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/types/rpcSchema.ts), [rendering](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/query/expression.ts), [ordering](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/query/order.ts), [codec](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/schema/codec.ts), [operations](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/entity/operations.ts).

@@ -10,7 +10,7 @@ metadata:
 
 # Query Arkiv entities on Rabdi
 
-Inspect the installed SDK 1.0.0 declarations and the write schema. Use modeling when encodings/indexes are undecided and troubleshooting for an existing error. Only indexed columns support predicates; bytes columns are selectable but cannot be filtered or sorted.
+Inspect the installed SDK 1.0.x declarations and the write schema. Use modeling when encodings/indexes are undecided and troubleshooting for an existing error. Only indexed columns support predicates; bytes columns are selectable but cannot be filtered or sorted.
 
 ## Typed filters and flat rows
 
@@ -111,7 +111,7 @@ Write selection objects inline or `as const`; widened boolean fields make result
 
 ## Predicate behavior
 
-Use `eq`, `gt/gte/lt/lte`, `between`, `startsWith`, `exists`, `hasType`, `and` and `or` from the query subpath. SDK 1.0.0 does not export `not` or `ne`. Ordered comparisons work on every indexable type; `startsWith` requires `str`. `between` requires both bounds with the same type. Match write constructors; a bare timestamp becomes an invalid i32, and a bigint predicate defaults to u256 rather than u64.
+Use `eq`, `gt/gte/lt/lte`, `between`, `startsWith`, `exists`, `hasType`, `and` and `or` from the query subpath. SDK 1.0.x does not export `not` or `ne`. Ordered comparisons work on every indexable type; `startsWith` requires `str`. `between` requires both bounds with the same type. Match write constructors; a bare timestamp becomes an invalid i32, and a bigint predicate defaults to u256 rather than u64.
 
 System predicates cover `$key: key`, `$owner: addr`, `$creator: addr`, `$expiresAt: u64`. Selection is broader than filtering. A named schema supplies its own tag filter; an unnamed schema still needs a deliberate `where`, `ownedBy` or `createdBy`. Repeated owner/creator scopes replace their respective scope; use an explicit `or(eq('$creator', addr(a)), ...)` for alternatives. Namespaces/schema tags are not authentication.
 
@@ -123,4 +123,4 @@ SDK rendering escapes apostrophes by doubling them. Build expressions through co
 
 Every `arkiv_query`, including a count, costs 10 quota units under current provider policy; each access key has 100,000,000 units. Missing keys fail SDK construction unless explicitly empty; keyless calls can return HTTP 429. Preserve HTTP status and honor Retry-After; do not return empty results or loop through keys to bypass quota. Never log keyed URLs or raw provider errors.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

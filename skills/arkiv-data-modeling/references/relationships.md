@@ -78,6 +78,6 @@ Precondition: an exact unsigned estimate and approved balance/spend check for th
 
 Equal relative lifetimes in one batch share inclusion; later child transactions resolve relative life later. To prevent a later child outliving a parent, use the parent's observed `$expiresAt` with `ExpirationTime.atBlock(...)` and no relative floor, check remaining-life margin and verify the result. Batch results carry keys rather than deadlines; read the successful receipt and current entities.
 
-Source: [SDK 1.0.0 prediction](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/predictEntityKeys.ts), [batch](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/wallet/executeBatch.ts).
+Source: [SDK 1.0.1 prediction](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/public/predictEntityKeys.ts), [batch](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/wallet/executeBatch.ts).
 
 The required `estimateLatest` callback is bound to the guarded unsigned estimator in `arkiv-first-write/references/estimate.md`: `prepare => estimateWrite(account, accessKey, prepare)`. It must estimate the supplied exact operation at latest, return its positive gas estimate, and propagate only sanitized diagnostics with no raw or nested causes without signing/sending. If preflight errors, stop. Funded writes always pass explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)`, current gasPrice and latest nonce; approve the resulting cost before admission.

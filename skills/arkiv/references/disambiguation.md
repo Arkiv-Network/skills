@@ -20,4 +20,4 @@ Use `getEntity(entityKey, Schema)` for a typed flat row; `getEntity(entityKey)` 
 
 Rabdi is chain 7794095 (`0x76edaf`). `rabdi({ accessKey })` is a function, not a chain object constant. Its access key is encoded in HTTP/WSS URL paths. Redact those URLs in diagnostics.
 
-Source: [SDK 1.0.0 README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md).
+Source: [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md).

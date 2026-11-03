@@ -1,6 +1,6 @@
 # Events and current cache reconciliation
 
-`watchEntityEvents` in SDK 1.0.0 exposes EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred and EntityDeleted, plus onEvent/onError. Context contains blockNumber, transactionHash and logIndex; it is not a historical state snapshot or checkpoint hash. Extension owner is not necessarily the extender.
+`watchEntityEvents` in SDK 1.0.x exposes EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred and EntityDeleted, plus onEvent/onError. Context contains blockNumber, transactionHash and logIndex; it is not a historical state snapshot or checkpoint hash. Extension owner is not necessarily the extender.
 
 This bounded queue is for UI invalidation. It does not establish durable replay or guarantee delivery during startup/disconnection.
 
@@ -62,4 +62,4 @@ Invalidate detail plus affected collection caches. Keep cache keys scoped by cha
 
 Natural Entity Expiration emits no event. Sweep exact block deadlines against a fresh head and refetch extensions. A current query can repair current membership but cannot recover deleted/expired intermediate versions. A persistent mirror must expose gaps and follow [projection generation guidance](../../arkiv-indexing/references/checkpoint-mirror.md).
 
-Source: [SDK watcher implementation](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/actions/public/watchEntityEvents.ts).
+Source: [SDK watcher implementation](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/actions/public/watchEntityEvents.ts).

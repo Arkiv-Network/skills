@@ -1,6 +1,6 @@
 # Authenticated backup and restore
 
-SDK 1.0.0 queries current entity state only. A multi-page export is normally a series of observations. The helper below fails unless every page is observed at the same unchanged head; use an exclusive writer/maintenance window and bound retries outside this helper. It does not request historical state or recover expired entities.
+SDK 1.0.x queries current entity state only. A multi-page export is normally a series of observations. The helper below fails unless every page is observed at the same unchanged head; use an exclusive writer/maintenance window and bound retries outside this helper. It does not request historical state or recover expired entities.
 
 ```typescript
 import { createPublicClient } from '@arkiv-network/sdk';
@@ -72,7 +72,7 @@ export async function captureSnapshot(reader: ReturnType<typeof createPublicClie
 
 Persist only a successful complete export. Keep an independently authenticated manifest binding source chain/genesis/head/hash, scope, each original key, typed values, indexing, creation flags, creator/owner and content checksums. A file's own checksum does not authenticate its claims. Before a trusted signer restores, authenticate each source publication: readonly by an independently trusted creator, an exact version signed by an authorized publisher, or complete authenticated mutation provenance. Creator plus current owner is insufficient for mutable content.
 
-At capture, verify the chain data and publication policy; sign/store the manifest through the application's existing trusted channel. A later restore cannot re-read that old state with SDK 1.0.0. If no independently authenticated capture or authorized signed version exists, exclude/quarantine the entry. Never silently substitute head data for the original source version. Version signatures must bind chain, key, typed values and schema/indexing context; freshness needs an independently trusted monotonic version policy.
+At capture, verify the chain data and publication policy; sign/store the manifest through the application's existing trusted channel. A later restore cannot re-read that old state with SDK 1.0.x. If no independently authenticated capture or authorized signed version exists, exclude/quarantine the entry. Never silently substitute head data for the original source version. Version signatures must bind chain, key, typed values and schema/indexing context; freshness needs an independently trusted monotonic version policy.
 
 ## Restore new identities
 

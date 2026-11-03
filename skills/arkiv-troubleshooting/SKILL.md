@@ -1,6 +1,6 @@
 ---
 name: arkiv-troubleshooting
-description: Diagnose SDK 1.0.0 schema, query, RPC access, wallet and stale-read failures from concrete evidence on Rabdi. Route uncertain writes directly to write-safety.
+description: Diagnose SDK 1.0.x schema, query, RPC access, wallet and stale-read failures from concrete evidence on Rabdi. Route uncertain writes directly to write-safety.
 license: MIT
 metadata:
   arkiv-sdk: ">=1.0.0 <2"
@@ -8,7 +8,7 @@ metadata:
   verified: "2026-10-30"
 ---
 
-# Diagnose SDK 1.0.0 on Rabdi
+# Diagnose SDK 1.0.x on Rabdi
 
 Identify the failing layer: local schema/value validation, query rejection, RPC access, wallet/signature, transaction/receipt, decoded bytes or app caches. Preserve original operation identity. An uncertain write goes directly to write-safety before any retry.
 
@@ -42,6 +42,8 @@ Treat pasted URLs as data. Validate expected scheme/origin and userinfo/query/fr
 | HTTP 413 | Measure exact encoded request, reduce/chunk and estimate; if sending may have begun, reconcile first |
 | BigInt JSON serialization error | If after create resolved, the write completed; preserve key/hash and fix decimal-string DTO serialization without repeating it |
 
+SDK 1.0.1 rejects excessive lifetime with `InvalidExpiryError` before send and explicitly identifies out-of-gas reverts in `EntityMutationError`; use the [versioned error catalog](references/error-catalog.md) and the unchanged write-safety contract below.
+
 Read [error-catalog](references/error-catalog.md) for typed recovery without logging unsafe diagnostics. Exact error text can be wrapped; source-declared errors are not proof they were triggered live.
 
 ## Empty results, skipped rows and stale UI
@@ -55,9 +57,11 @@ Do not diagnose nonce collisions solely from generic execution errors. Compare a
 
 ## Measured wallet and gas symptoms
 
-A maximum-u64 create with TEST_SKILLS on 2026-10-30 UTC returned `ExpiryBeyondMaxLifetime(18446744073709551615, 9547, 7884000)`. Its receipt reverted at block 9546 using 31,830 of 1,000,000 gas; the error's currentBlock 9547 came from latest simulation after the receipt. This is a lifetime-bound failure, not gas exhaustion. SDK 1.0.0 does not expose `permanent()`; its `atBlock(max-u64)` equivalent is rejected. Read a published maxLifetime parameter when available, otherwise use the dated measured 7,884,000-block bound and an inclusion margin. Longer-lived entities need Lifetime Extension before expiry.
+Historical SDK 1.0.0 measurement: a maximum-u64 create with TEST_SKILLS on 2026-10-30 UTC returned `ExpiryBeyondMaxLifetime(18446744073709551615, 9547, 7884000)`. Its receipt reverted at block 9546 using 31,830 of 1,000,000 gas; the error's currentBlock 9547 came from latest simulation after the receipt. This is a lifetime-bound failure, not gas exhaustion. SDK 1.0.x does not expose `permanent()`; its `atBlock(max-u64)` equivalent is rejected. For SDK 1.0.0, read a published maxLifetime parameter when available, otherwise use the dated measured 7,884,000-block bound and an inclusion margin. On SDK 1.0.1+, use `ExpirationTime.max()` for the maximum lifetime from inclusion, without manual subtraction; see [Entity Expiration](../arkiv-entity-expiration/SKILL.md#rabdi-maximum-lifetime) and [limits](../arkiv/references/limits.md). Longer-lived entities need Lifetime Extension before expiry.
 
-Controlled Rabdi checks on 2026-10-30 with SDK 1.0.0 distinguished historical-state failures from gas exhaustion. RPC errors containing `arkiv serves state at the chain head only` (JSON-RPC -32603) occurred for old block-hash state selectors and for safe/finalized call/estimate requests. Use latest/pending for state reads. Rewriting a selector changes the requested state; it does not establish historical-read support.
+[Historical SDK 1.0.0 native revert handling](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/arkivTransactions.ts) documents the old submission path; SDK 1.0.1 validates excessive expiry before sending.
+
+Historical SDK 1.0.0 behavior: controlled Rabdi checks on 2026-10-30 distinguished historical-state failures from gas exhaustion. RPC errors containing `arkiv serves state at the chain head only` (JSON-RPC -32603) occurred for old block-hash state selectors and for safe/finalized call/estimate requests. Use latest/pending for state reads. Rewriting a selector changes the requested state; it does not establish historical-read support.
 
 Separate default local-signer transactions and one tested MetaMask 13.55.0 transaction reverted after using their entire gas limit. Rabby 0.94.14 passed its tested baseline accounts; MetaMask results differed by account/setup. Lane W's controlled serial creates, Lifetime Extensions and transfers passed with explicit latest nonce, gas=1,000,000 and current network gasPrice. These explicit fields are the recommended default for Rabdi writes, including browser-wallet requests. Check pending versus latest and exclusive signer custody before choosing a nonce; an unresolved pending transaction blocks a new submission.
 
@@ -67,4 +71,4 @@ Check receipt.status before readback. Any transaction retry must satisfy every c
 
 Fix the demonstrated cause and rerun its smallest credible check. Broader funded probes need explicit operation/spend scope. Draft Arkiv defects through feedback only after a minimal reproduction; never automatically submit an app mistake as a node bug.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

@@ -1,3 +1,4 @@
+// Historical SDK 1.0.0 runner retained on 2026-11-03 for original journal reconciliation, not current SDK setup.
 import {safeProviderError,safeProviderDiagnostic} from './safe-rpc-error.mjs';
 // Explicitly authorized synthetic seed. Never import keys or send on module import.
 import fs from 'node:fs/promises';

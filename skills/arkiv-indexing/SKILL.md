@@ -10,7 +10,7 @@ metadata:
 
 # Current-state Arkiv projections
 
-Use SDK 1.0.0 on Rabdi for an owned application projection. The SDK reads current entity state and its watcher follows the head; it does not reconstruct historical values. Distinguish a current-state mirror from an archive before choosing a design. Query access does not authorize deleting source entities, dropping user tables or deploying a worker.
+Use SDK 1.0.x on Rabdi for an owned application projection. The SDK reads current entity state and its watcher follows the head; it does not reconstruct historical values. Distinguish a current-state mirror from an archive before choosing a design. Query access does not authorize deleting source entities, dropping user tables or deploying a worker.
 
 ## Choose the direction and compatibility
 
@@ -29,10 +29,10 @@ Read [checkpoint-mirror](references/checkpoint-mirror.md) for generation persist
 
 ## Historical requirements
 
-If an application needs exact block-end or mutation-version history, it must capture authenticated state while available or use a separately verified archival service. Event logs alone lack column values. SDK 1.0.0 has no historical entity query; do not synthesize a historical implementation by attaching head values to an old checkpoint. Reorganizations, missed operations, disappearance between reads and network resets need explicit product semantics.
+If an application needs exact block-end or mutation-version history, it must capture authenticated state while available or use a separately verified archival service. Event logs alone lack column values. SDK 1.0.x has no historical entity query; do not synthesize a historical implementation by attaching head values to an old checkpoint. Reorganizations, missed operations, disappearance between reads and network resets need explicit product semantics.
 
 Use a signed snapshot/version policy for trusted history, retain canonical identity where independently available, and scope rollback/rebuild to the consumer's owned projection. A timeout or missing old block is not proof of a fork. A number-only legacy checkpoint has no authenticated lineage; preserve it and bootstrap a separate generation rather than inventing an ancestor.
 
 A projection may retain public values after source deletion/expiration. Apply app access/retention policy; neither a namespace nor a shared signer is app-user authorization. Verify reset recovery, skipped schema rows, duplicate events, changed owner, unknown patched-key membership, expiration-only removal and failure before atomic commit. Controlled fixtures do not certify natural chain reorganizations or production persistence.
 
-Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.
