@@ -16,6 +16,10 @@ Store searchable scalar columns with explicit indexes and binary data in named b
 
 Inspect installed `arkiv-chunking` / `arkiv-images` versions, peer ranges, public declarations, consumer AGENTS.md and Rabdi admission. Choose only a source-verified SDK 1.0-compatible release. Do not force peers, downgrade SDK, copy private schema constants or claim another lane's unpublished candidate is ready. Registry metadata, local fixtures, funded byte roundtrips and browser decoding are separate evidence.
 
+Use `arkiv-chunking` 1.1.4 for its published `splitFile`, `hashFile`, `reconstructFile`, `uploadFile` and `downloadFile` exports; its SDK peer is `^1.0.0`, verified by the package with 1.0.1. This does not certify an independently installed image wrapper or browser integration.
+
+Use `arkiv-images` 1.0.5 for its published `inspectImage`, `planImage`, `storeImage` and `retrieveImage` exports. It depends on `arkiv-chunking` 1.1.4 exactly and declares SDK `^1.0.0`, verified by the package with 1.0.1. Its PNG/JPEG container inspection does not replace full browser pixel decoding.
+
 Until package compatibility is verified, design with native schema operations and an explicit manifest contract. No generic upload-resume, cleanup, deduplication or whole-file atomicity is implied. Read installed public APIs before giving package-specific executable code.
 
 ## Representation and recovery
@@ -57,4 +61,4 @@ This prepares a descriptor and uploads nothing. Verify blob retrieval first, the
 
 Verify the installed package's actual accepted formats and preprocessing. Do not assume EXIF/GPS removal, resizing, encryption or malware scanning. Decode allowed PNG/JPEG bytes before upload and after retrieval in the browser, handle decoder failures, render only approved raster MIME, revoke owned Blob URLs and treat filenames as text. Return no partial file/image as success. A core fixture or container inspection is not browser pixel decoding.
 
-Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [arkiv-chunking 1.1.4 release guide](https://unpkg.com/arkiv-chunking@1.1.4/README.md), [chunking declarations](https://unpkg.com/arkiv-chunking@1.1.4/dist/index.d.ts), [arkiv-images 1.0.5 release guide](https://unpkg.com/arkiv-images@1.0.5/README.md), [image declarations](https://unpkg.com/arkiv-images@1.0.5/dist/index.d.ts), [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

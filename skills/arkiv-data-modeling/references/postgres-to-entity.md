@@ -22,6 +22,8 @@ Index scalar columns used in predicates. Bytes cannot be filtered or sorted. A n
 
 Preserve source-to-destination mapping and explicit Entity Expiration for every type. Nullable optional values retain `0`, `false` and empty strings. Arrays needing membership queries require separate indexed relationships, with an ordinal when order or duplicates matter.
 
-If using `postgres-to-entity`, inspect the installed version, README, generated schema and SDK compatibility. Its model-only converter is distinct from importing SQL data; never infer current method names or package versions from this guide. Preserve `needs-input` and `blocked` outcomes. A schema model cannot certify SQL constraints, data privacy or a live migration.
+Use `postgres-to-entity` 1.0.2; its SDK peer is `^1.0.0`, verified by the package with 1.0.1. Inspect the installed README, public declarations and generated schema before integrating. Its model-only converter is distinct from importing SQL data. Preserve `needs-input` and `blocked` outcomes. A schema model cannot certify SQL constraints, data privacy or a live migration.
 
-Source: [SDK 1.0.1 schemas](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/schema/), [converter](https://github.com/SantiagoDevRel/postgres-to-entity).
+postgres-to-entity keeps format `arkiv-entity-model/3` with `sdkVersion: "1.0.0"` as the format's minimum compatible SDK baseline (not the installed or latest SDK). Format /3's 7,883,970-block cap is its own lifetime policy, distinct from the SDK/chain maximum of 7,884,000 blocks.
+
+Sources: [SDK 1.0.1 schemas](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/schema/), [postgres-to-entity 1.0.2 release guide](https://unpkg.com/postgres-to-entity@1.0.2/README.md), [converter declarations](https://unpkg.com/postgres-to-entity@1.0.2/dist/postgres.d.ts).

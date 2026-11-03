@@ -27,4 +27,4 @@ jobs:
           node scripts/check-rabdi-log-window.mjs
           node scripts/check-lifetime-margins.mjs
           node scripts/check-sdk-101-guidance.mjs
-          node --test tests/snippets/vocabulary.test.mjs tests/snippets/skill-references.test.mjs tests/snippets/retry-policy.test.mjs tests/snippets/rabdi-log-window.test.mjs tests/snippets/lifetime-margins.test.mjs tests/snippets/sdk-guidance-version.test.mjs
+          node --test tests/snippets/vocabulary.test.mjs tests/snippets/skill-references.test.mjs tests/snippets/retry-policy.test.mjs tests/snippets/rabdi-log-window.test.mjs tests/snippets/lifetime-margins.test.mjs tests/snippets/sdk-guidance-version.test.mjs tests/snippets/package-versions.test.mjs

@@ -17,7 +17,7 @@ node tests/snippets/published-imports.mjs
 
 `check-snippets` compiles every TypeScript skill/reference fence with strict and noUncheckedIndexedAccess, syntax-checks JavaScript, and writes a source/line/hash manifest inside the SDK workspace. It does not execute writes. The deterministic importer suite evaluates the exact published JavaScript fence with real SDK 1.0.1 encoding, synthetic transport/receipts and in-memory ephemeral test keys. Network fetches are forbidden in that suite. Preserve failing evidence; do not substitute deterministic results for live/provider/wallet behavior.
 
-The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance requires `arkiv-encryption` 1.1.0 or newer; verify its named bytes exports before consuming it.
+The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance uses `arkiv-encryption` 1.1.1; verify its named bytes exports before consuming it.
 
 The Rabdi log-window guard discovers skill, reference and AGENTS resources, requires distinct troubleshooting rows for `segment_range_of(transactions): NotImplemented`, and rejects split/range-retry advice for that error. Omission and newly introduced guidance mutations run through the checker and CLI. GitHub's Guidance checks workflow runs these dependency-free checks plus vocabulary, references and retry-policy checks; the complete SDK-backed suite and half-block gas gate remain in `node tests/run-checks.mjs` using the existing workspace above.
 
@@ -32,6 +32,8 @@ Provider facades and raw/formatted return values are deeply frozen. Execution us
 If only the SDK needs upgrading, `node tests/prepare-sdk.mjs <viem-workspace> <typescript-workspace> <node-types-workspace>` verifies the official 1.0.1 tarball and prepares `.checks`, reusing existing peers without installing or executing package scripts. It creates symlinks to those existing peers; their lifecycle remains the contributor's responsibility.
 
 The SDK guidance guard checks current source/install citations and labels against the verified 1.0.1 baseline. Historical SDK 1.0.0 behavior and compatible ranges remain valid. The check also inspects generated catalog metadata, source-map strings/keys and code setup pins; regression fixtures run through the checker and CLI in CI and the full suite.
+
+The same guard checks package install/version/source references against `scripts/package-versions.json`. Update that map only after `npm view <package> dist-tags --json` confirms publication, then verify the published README and exports before changing guidance. Explicit history stays historical; current references to any other exact package version fail with `non_current_package_version`. Package-version mutations run in CI and the full suite.
 
 ## Authorized Rabdi smoke and seed
 
