@@ -18,6 +18,8 @@ Use named schemas and indexed key columns, for example source_key/target_key and
 
 Before adopting `arkiv-graph`, inspect the installed version's public declarations, SDK peer range, consumer guide, Rabdi chain support and flat-row adapter. Use only a source-verified SDK 1.0-compatible release. A package's presence or wider peer text alone does not establish compatibility. Do not bypass peers or invent changed API names. The React entrypoint and dependency tree require separate integration checks; core Node verification does not certify a browser view.
 
+Use `arkiv-graph` 1.1.1; its SDK peer is `^1.0.0`, verified by the package with 1.0.1. The published package provides separate root and `arkiv-graph/react` entrypoints; inspect their declarations before choosing core processing or browser rendering.
+
 Read [fetch-and-refresh](references/fetch-and-refresh.md) for scoped current queries and invalidation. Use explicit field names matching your model rather than relying on a package's type-attribute defaults. Use `https://rabdi.explorer.arkiv.network` for entity links and verify the library's actual URL option before code generation.
 
 ## Missing and changing endpoints
@@ -30,4 +32,4 @@ Events invalidate projections, and natural expiration requires periodic sweeps. 
 
 Verify direction, duplicates, self-links, missing endpoints, stable-ID collisions, truncation, empty/error states, transfer, reset and expiration. Browser rendering needs its own loading/error/partial/ghost and wallet-rejection checks. Optional delete/extension callbacks require exact entity and spending authorization; graph display grants no mutation permission.
 
-Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [arkiv-graph 1.1.1 release guide](https://unpkg.com/arkiv-graph@1.1.1/README.md), [graph declarations](https://unpkg.com/arkiv-graph@1.1.1/dist/index.d.ts), [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

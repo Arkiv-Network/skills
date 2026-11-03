@@ -2,8 +2,8 @@
   "arkiv-chunking": "1.1.4",
   "arkiv-encryption": "1.1.1",
   "arkiv-images": "1.0.5",
-  "arkiv-graph": "1.1.0",
-  "arkiv-sync": "1.0.1",
-  "create-arkiv-sync": "1.0.2",
-  "postgres-to-entity": "1.0.1"
+  "arkiv-graph": "1.1.1",
+  "arkiv-sync": "1.0.2",
+  "create-arkiv-sync": "1.0.3",
+  "postgres-to-entity": "1.0.2"
 }
