@@ -16,6 +16,8 @@ Store searchable scalar columns with explicit indexes and binary data in named b
 
 Inspect installed `arkiv-chunking` / `arkiv-images` versions, peer ranges, public declarations, consumer AGENTS.md and Rabdi admission. Choose only a source-verified SDK 1.0-compatible release. Do not force peers, downgrade SDK, copy private schema constants or claim another lane's unpublished candidate is ready. Registry metadata, local fixtures, funded byte roundtrips and browser decoding are separate evidence.
 
+Use `arkiv-chunking` 1.1.4 for its published `splitFile`, `hashFile`, `reconstructFile`, `uploadFile` and `downloadFile` exports; its SDK peer is `^1.0.0`, verified by the package with 1.0.1. This does not certify an independently installed image wrapper or browser integration.
+
 Until package compatibility is verified, design with native schema operations and an explicit manifest contract. No generic upload-resume, cleanup, deduplication or whole-file atomicity is implied. Read installed public APIs before giving package-specific executable code.
 
 ## Representation and recovery
@@ -57,4 +59,4 @@ This prepares a descriptor and uploads nothing. Verify blob retrieval first, the
 
 Verify the installed package's actual accepted formats and preprocessing. Do not assume EXIF/GPS removal, resizing, encryption or malware scanning. Decode allowed PNG/JPEG bytes before upload and after retrieval in the browser, handle decoder failures, render only approved raster MIME, revoke owned Blob URLs and treat filenames as text. Return no partial file/image as success. A core fixture or container inspection is not browser pixel decoding.
 
-Sources: [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.
+Sources: [arkiv-chunking 1.1.4 release guide](https://unpkg.com/arkiv-chunking@1.1.4/README.md), [public declarations](https://unpkg.com/arkiv-chunking@1.1.4/dist/index.d.ts), [SDK 1.0.1 source](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/), [SDK 1.0.1 README](https://unpkg.com/@arkiv-network/sdk@1.0.1/README.md). Inspect the installed declarations before adapting executable examples.

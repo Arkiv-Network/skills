@@ -8,6 +8,39 @@ const target=/\b(?:targets?|uses?|current|latest|installed|requires)\s+(?:the\s+
 const segmenter=new Intl.Segmenter('en',{granularity:'sentence'});
 const pin=/\b(?:sdk|sdk[_-]?version|version)\s*[:=]\s*['"]1\.0\.0['"]|['"]@arkiv-network\/sdk['"]\s*:\s*['"]1\.0\.0['"]|\bassert\.equal\([^\n]*\.version\s*,\s*['"]1\.0\.0['"]/i;
 
+// Registry-verified releases only. Update this map when a release actually lands.
+export const packageVersions=Object.freeze(JSON.parse(await fs.readFile(new URL('./package-versions.json',import.meta.url),'utf8')));
+const escapeRegex=text=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const packageNames=Object.keys(packageVersions).sort((a,b)=>b.length-a.length);
+const namedPackage=new RegExp('\\b('+packageNames.map(escapeRegex).join('|')+')\\b','gi');
+const packageVersion=new RegExp('\\b('+packageNames.map(escapeRegex).join('|')+'|encryption)(?:[`\\s"\'@:=/_^~<>-]|%40|version\\s+|release\\s+|v){1,12}(\\d+\\.\\d+\\.\\d+)(?!\\d|\\.\\d)','gi');
+
+function packageFailures(body,line,historical=false){
+ const failures=[],names=[...new Set([...body.matchAll(namedPackage)].map(x=>x[1]))];
+ for(const {segment,index} of segmenter.segment(body)){
+  const scoped=historical||(history.test(segment)&&!/\b(?:current|latest)\b/i.test(segment));
+  if(scoped)continue;
+  const matches=[...segment.matchAll(packageVersion)].map(match=>({name:match[1]==='encryption'?'arkiv-encryption':match[1],version:match[2],text:match[0]}));
+  // A package paragraph often introduces the name before "Use version ...".
+  if(names.length===1)for(const match of segment.matchAll(/\b(?:use|install|require|version)\s+(?:version\s+)?[`"']?(\d+\.\d+\.\d+)\b/gi))matches.push({name:names[0],version:match[1],text:match[0]});
+  for(const match of matches)if(match.version!==packageVersions[match.name])failures.push({line:line+body.slice(0,index).split('\n').length-1,rule:'non_current_package_version',package:match.name,expected:packageVersions[match.name],...match});
+ }
+ return failures;
+}
+
+export function inspectPackageGuidance(text,{historical=false}={}){
+ const failures=[],headings=[];let paragraph=[],start=1;
+ const inHistory=()=>{let value=historical;for(const h of headings){if(h.current)value=false;else if(h.history)value=true;}return value;};
+ function flush(){if(paragraph.length)failures.push(...packageFailures(paragraph.join('\n'),start,inHistory()));paragraph=[];}
+ for(const [index,line] of text.split(/\r?\n/).entries()){
+  const heading=/^(#{1,6})\s/.exec(line);
+  if(heading){flush();const level=heading[1].length;while(headings.length&&headings.at(-1).level>=level)headings.pop();headings.push({level,history:history.test(line),current:/\b(?:current|latest)\b/i.test(line)});}
+  if(!line.trim()){flush();continue;}
+  if(!paragraph.length)start=index+1;paragraph.push(line);
+ }
+ flush();return failures;
+}
+
 function blockFailures(body,line,scopedHistory=false){
  const failures=[],links=[];
  const masked=body.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,(whole,label,url,index)=>{links.push({whole,label,url,index});return 'X'.repeat(whole.length);});
@@ -59,7 +92,7 @@ export function inspectSdk101Code(text){
 export function inspectSdk101Json(value,{historical=false}={}){
  const failures=[];
  function visit(node,field='',inHistory=historical){
-  if(typeof node==='string'){for(const failure of inspectSdk101Markdown(node,{historical:inHistory}))failures.push({...failure,field});return;}
+  if(typeof node==='string'){for(const failure of [...inspectSdk101Markdown(node,{historical:inHistory}),...inspectPackageGuidance(node,{historical:inHistory})])failures.push({...failure,field});return;}
   if(Array.isArray(node)){node.forEach((x,i)=>visit(x,field+'['+i+']',inHistory));return;}
   if(!node||typeof node!=='object')return;
   const current=node.current===true||node.scope==='current'||node.status==='current';
@@ -67,6 +100,8 @@ export function inspectSdk101Json(value,{historical=false}={}){
   for(const [key,child] of Object.entries(node)){
    const sdkField=/^(?:sdk|sdk[_-]?version|arkiv-sdk)$/i.test(key)||key==='@arkiv-network/sdk'||(key==='version'&&node.name==='@arkiv-network/sdk');
    if(sdkField&&child==='1.0.0'&&!scoped)failures.push({line:1,field:field+'.'+key,rule:'current-sdk-catalog-pin',text:child});
+   const packageName=packageVersions[key]?key:key==='version'&&packageVersions[node.name]?node.name:undefined;
+   if(packageName&&typeof child==='string'&&!scoped&&child!==packageVersions[packageName])failures.push({line:1,field:field+'.'+key,rule:'non_current_package_version',package:packageName,expected:packageVersions[packageName],version:child});
    visit(key,field+'.<key>',scoped);visit(child,field+'.'+key,scoped);
   }
  }
@@ -86,6 +121,7 @@ export async function checkSdk101Guidance(root){
    else if(/\.jsonl$/i.test(file)){found=text.split(/\r?\n/).filter(Boolean).flatMap(line=>{try{return inspectSdk101Json(JSON.parse(line));}catch{return [{line:1,rule:'invalid-catalog-json'}];}});}
    else if(/\.[cm]?[jt]sx?$/i.test(file))found=inspectSdk101Code(text);
    else found=inspectSdk101Markdown(text,{historical:/^CHANGELOG(?:\.[\w-]+)?\.md$/i.test(entry.name)});
+   if(!/\.(?:jsonl?|map)$/i.test(file))found.push(...inspectPackageGuidance(text,{historical:/^CHANGELOG(?:\.[\w-]+)?\.md$/i.test(entry.name)}));
    for(const failure of found)failures.push({file,...failure});
   }
  }
