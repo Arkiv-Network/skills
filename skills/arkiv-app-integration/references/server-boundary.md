@@ -1,6 +1,6 @@
 # Server boundary and DTOs
 
-This generic TypeScript seam uses SDK 1.0.0. The caller supplies real authentication, authorization, CSRF, rate limits and a durable writer. It exports functions and does not broadcast on import. The required writer contract below is an integration boundary, not an in-memory substitute for crash recovery.
+This generic TypeScript seam uses SDK 1.0.x. The caller supplies real authentication, authorization, CSRF, rate limits and a durable writer. It exports functions and does not broadcast on import. The required writer contract below is an integration boundary, not an in-memory substitute for crash recovery.
 
 ```typescript
 import { createHash } from "node:crypto"

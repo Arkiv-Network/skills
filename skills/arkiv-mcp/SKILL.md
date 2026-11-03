@@ -82,6 +82,6 @@ Sources: [Arkiv gateway](https://mcp.arkiv.network/), [official SDK](https://www
 
 ## SDK/network catalog gate
 
-Current local guidance targets SDK 1.0.0 on Rabdi (7794095). A served catalog or network_status response can lag this repository. Read its actual source pin and warnings; do not treat an old served example as Rabdi-compatible. Configure SDK clients with rabdi({ accessKey }); the RPC key is an encoded URL path segment. Missing keys raise MissingAccessKeyError, and keyless access can return 429. Get free keys/funds through Hub access-keys/faucet. Verify remote tool behavior separately; this documentation change does not deploy a gateway.
+Current local guidance targets SDK 1.0.x on Rabdi (7794095). A served catalog or network_status response can lag this repository. Read its actual source pin and warnings; do not treat an old served example as Rabdi-compatible. Configure SDK clients with rabdi({ accessKey }); the RPC key is an encoded URL path segment. Missing keys raise MissingAccessKeyError, and keyless access can return 429. Get free keys/funds through Hub access-keys/faucet. Verify remote tool behavior separately; this documentation change does not deploy a gateway.
 
 Sources: [SDK 1.0.0 source](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/), [SDK README](https://unpkg.com/@arkiv-network/sdk@1.0.0/README.md). Inspect the installed declarations before adapting executable examples.

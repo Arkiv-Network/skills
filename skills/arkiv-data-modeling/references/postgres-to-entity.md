@@ -2,7 +2,7 @@
 
 Use schema-only DDL and actual query requirements. Do not request database credentials for a model. The mapping does not import entities, enforce SQL constraints or authorize writes.
 
-| PostgreSQL concept | SDK 1.0.0 mapping | Required decision |
+| PostgreSQL concept | SDK 1.0.x mapping | Required decision |
 | --- | --- | --- |
 | Table | Named `defineSchema` | Creator scope, public fields, lifetime |
 | Primary/foreign key | Indexed str source ID or resolved key column | Uniqueness, missing targets and remapping |

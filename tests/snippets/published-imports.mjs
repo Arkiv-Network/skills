@@ -4,7 +4,7 @@ import {checkFile} from '../../skills/arkiv/scripts/check-imports.mjs';
 const root=await fs.mkdtemp(path.join(os.tmpdir(),'arkiv-published-'));
 const receipts=[];
 try{
- for(const version of ['1.0.0']){
+ for(const version of ['1.0.0','1.0.1']){
   const response=await fetch('https://registry.npmjs.org/@arkiv-network%2fsdk/'+version,{signal:AbortSignal.timeout(20000)});assert.ok(response.ok);const meta=await response.json();
   const tar=await fetch(meta.dist.tarball,{signal:AbortSignal.timeout(20000)});assert.ok(tar.ok);const bytes=Buffer.from(await tar.arrayBuffer());
   const integrity='sha512-'+createHash('sha512').update(bytes).digest('base64');assert.equal(integrity,meta.dist.integrity);

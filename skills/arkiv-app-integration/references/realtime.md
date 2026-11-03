@@ -1,6 +1,6 @@
 # Events and current cache reconciliation
 
-`watchEntityEvents` in SDK 1.0.0 exposes EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred and EntityDeleted, plus onEvent/onError. Context contains blockNumber, transactionHash and logIndex; it is not a historical state snapshot or checkpoint hash. Extension owner is not necessarily the extender.
+`watchEntityEvents` in SDK 1.0.x exposes EntityCreated, EntityPatched, ExpiryExtended, OwnershipTransferred and EntityDeleted, plus onEvent/onError. Context contains blockNumber, transactionHash and logIndex; it is not a historical state snapshot or checkpoint hash. Extension owner is not necessarily the extender.
 
 This bounded queue is for UI invalidation. It does not establish durable replay or guarantee delivery during startup/disconnection.
 

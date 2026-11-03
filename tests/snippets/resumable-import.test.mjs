@@ -8,7 +8,7 @@ import { SourceTextModule, SyntheticModule } from 'node:vm';
 import { after, before, test } from 'node:test';
 import { makeFixture } from './fixtures/importer-rpc-fixture.mjs';
 
-// Reuse an existing SDK 1.0.0 test workspace; do not install root dependencies.
+// Reuse an existing verified SDK 1.0.x test workspace; do not install root dependencies.
 // ARKIV_SNIPPET_WORKSPACE only locates installed SDK/viem dependencies.
 // Run: node --experimental-vm-modules --test tests/snippets/resumable-import.test.mjs
 const workspace = process.env.ARKIV_SNIPPET_WORKSPACE;
@@ -19,7 +19,7 @@ assert.ok(scratchRoot && path.isAbsolute(scratchRoot), 'Set ARKIV_IMPORT_TEST_SC
 const sdkRoot = path.join(workspace, 'node_modules', '@arkiv-network/sdk');
 const sdkJsonPath = path.join(sdkRoot, 'package.json');
 const originalSdkJson = await filesystem.readFile(sdkJsonPath, 'utf8');
-assert.equal(JSON.parse(originalSdkJson).version, '1.0.0', 'This deterministic receipt fixture targets SDK 1.0.0');
+assert.ok(['1.0.0', '1.0.1'].includes(JSON.parse(originalSdkJson).version), 'This deterministic receipt fixture targets the verified SDK versions');
 const sdk = await import(pathToFileURL(path.join(sdkRoot, 'dist/index.js')));
 const query = await import(pathToFileURL(path.join(sdkRoot, 'dist/query/index.js')));
 const chains = await import(pathToFileURL(path.join(sdkRoot, 'dist/chains/index.js')));

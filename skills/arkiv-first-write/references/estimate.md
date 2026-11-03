@@ -1,6 +1,6 @@
 # Estimate without signing or broadcasting
 
-Use public SDK 1.0.0 actions only through this guarded wallet. It intercepts gas estimation and also replaces the local account's signer with a refusal. The callback must use only the supplied wallet and let errors propagate. Do not enable raw RPC debugging; its URL contains an access key.
+Use public SDK 1.0.x actions only through this guarded wallet. It intercepts gas estimation and also replaces the local account's signer with a refusal. The callback must use only the supplied wallet and let errors propagate. Do not enable raw RPC debugging; its URL contains an access key.
 
 ```typescript
 import { createWalletClient, createPublicClient } from '@arkiv-network/sdk';
@@ -89,6 +89,8 @@ export function estimateWrite(account: LocalAccount, accessKey: string,
 }
 ```
 
+SDK 1.0.1 also estimates internally when gas is omitted, but its default headroom is not this recipe's admission policy. This unsigned interceptor still stops at the raw estimate before SDK padding or any signature; the funded caller passes its separately approved explicit gas. See [write-safety](../../arkiv-write-safety/SKILL.md#sdk-101-gas-behavior).
+
 Bind an `estimateLatest` callback in the other examples to `prepare => estimateWrite(account, accessKey, prepare)`. Its wallet is unsigned-only: signing and forwarding are blocked, and eth_estimateGas is pinned to latest. It returns the raw estimate only after the single-operation floor and twice the estimate fit half the latest block gasLimit; the funded helper rechecks its actual operation-count floor and that bound before a new signature. Split unprepared work when its cap does not fit. Invoke it with the exact frozen schema/values/options or batch that will be submitted; reuse explicit salts. If estimation fails, stop and display only fixed sanitized diagnostics, without raw or nested causes. The separately authorized funded wallet always sends explicit `gas = max(1,000,000 + 400,000 × (ops − 1), 2 × estimate)` with nonce and current gasPrice. Gas units are not a fee quote. Recompute fees and compare budget/balance before a separately authorized write. Never remove fee fields to manufacture a passing estimate. A successful estimate proves only this exact unsigned request at its observed state.
 
-Source: [SDK transaction path](https://unpkg.com/@arkiv-network/sdk@1.0.0/src/utils/arkivTransactions.ts).
+Source: [SDK transaction path](https://unpkg.com/@arkiv-network/sdk@1.0.1/src/utils/arkivTransactions.ts).

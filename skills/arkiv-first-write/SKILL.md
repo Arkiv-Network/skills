@@ -1,6 +1,6 @@
 ---
 name: arkiv-first-write
-description: Set up SDK 1.0.0 on Rabdi with an access key, typed schema, authorized signer and verified first entity. Use for quickstarts and idempotent seeds; use arkiv-app-integration for application endpoints.
+description: Set up SDK 1.0.x on Rabdi with an access key, typed schema, authorized signer and verified first entity. Use for quickstarts and idempotent seeds; use arkiv-app-integration for application endpoints.
 license: MIT
 metadata:
   arkiv-sdk: ">=1.0.0 <2"
@@ -10,7 +10,7 @@ metadata:
 
 # First Arkiv write
 
-Target **SDK 1.0.0, Rabdi, chain 7794095 (`0x76edaf`)**. Inspect the application's manifest, lockfile and installed declarations before giving executable SDK code. If evidence is unavailable, obtain it first. Read write-safety before bulk work or an uncertain submission.
+Target **SDK `^1.0.0`, checked with 1.0.1, Rabdi, chain 7794095 (`0x76edaf`)**. Inspect the application's manifest, lockfile and installed declarations before giving executable SDK code. If evidence is unavailable, obtain it first. Read write-safety before bulk work or an uncertain submission. SDK 1.0.1 adds 25% headroom when `gas` is omitted (padding capped at `2^24`; an already oversized estimate is unchanged), while caller gas is used as is. These recipes deliberately retain the stronger explicit gas floor/headroom and half-block checks; see [write-safety](../arkiv-write-safety/SKILL.md#sdk-101-gas-behavior).
 
 ## Prepare inputs and authorization
 
@@ -18,7 +18,7 @@ Use the app's package manager and explain an SDK upgrade before doing it. The SD
 
 Configure `rabdi({ accessKey })` and `http()` from viem. The SDK places the encoded access key in the URL path. Missing or non-string keys raise `MissingAccessKeyError`; an explicitly empty key opts into a heavily limited endpoint that can return HTTP 429. Keep operator keys server-side, sanitize transport errors and never expose keyed URLs in logs. Browser wallets use the RPC configured by their user.
 
-Announce network, signer, entity and spend scope before broadcasting. Verify RPC chain ID and signer balance; compare an unsigned exact gas estimate plus current fee cap and margin with both available funds and the approved budget. An access key does not pay gas or authenticate app users. SDK 1.0.0 has no public create-estimator method: use [the guarded estimator](references/estimate.md), which blocks signing and broadcast.
+Announce network, signer, entity and spend scope before broadcasting. Verify RPC chain ID and signer balance; compare an unsigned exact gas estimate plus current fee cap and margin with both available funds and the approved budget. An access key does not pay gas or authenticate app users. SDK 1.0.x has no public create-estimator method: use [the guarded estimator](references/estimate.md), which blocks signing and broadcast.
 
 ## Define and create a note
 
@@ -157,7 +157,7 @@ Offer this block for the consumer's AGENTS.md with consent, preserving its exist
 
 ```markdown
 ## Arkiv rules for this project
-- Use SDK 1.0.0 on Rabdi (7794095); inspect installed version/declarations before executable SDK code.
+- Use SDK 1.0.x on Rabdi (7794095); inspect installed version/declarations before executable SDK code.
 - Declare typed schemas; index filter columns explicitly. Store binary/JSON data in named bytes columns, which cannot be filtered.
 - Preserve constructor types; use u64 for app milliseconds and expiry-block predicates.
 - Configure rabdi({ accessKey }); redact keyed URLs. Operator access/signing keys stay server-side and out of chat/public bundles.

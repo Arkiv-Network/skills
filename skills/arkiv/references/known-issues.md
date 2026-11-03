@@ -1,6 +1,6 @@
 # Versioned capability boundaries
 
-Checked against published SDK 1.0.0 source on 2026-10-30. Source inspection is distinct from a funded or wallet-specific test.
+Checked against published SDK 1.0.0 source on 2026-10-30. Source inspection is distinct from a funded or wallet-specific test. SDK 1.0.1 source and a dedicated Rabdi create/extension/delete smoke were checked on 2026-11-03; see the versioned expiration and write-safety guidance.
 
 - Queries read current state. The exported API has no historical snapshot, opaque query cursor or historical entity version parameter. Do not present head observations as old block-end state.
 - Server ordering and filtered counts are available. A sort takes one key; bytes cannot be sorted. A count includes schema-mismatching matches.

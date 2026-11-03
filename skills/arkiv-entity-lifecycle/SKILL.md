@@ -1,6 +1,6 @@
 ---
 name: arkiv-entity-lifecycle
-description: Create, patch, transfer, replace and delete Arkiv entities with SDK 1.0.0. Use for immutable creation flags, ownership, native batches and restoring references; use write-safety for uncertain submissions.
+description: Create, patch, transfer, replace and delete Arkiv entities with SDK 1.0.x. Use for immutable creation flags, ownership, native batches and restoring references; use write-safety for uncertain submissions.
 license: MIT
 metadata:
   arkiv-sdk: ">=1.0.0 <2"
@@ -10,7 +10,7 @@ metadata:
 
 # Arkiv entity lifecycle
 
-Use installed SDK 1.0.0 declarations and Rabdi. Native operations target `0x4400000000000000000000000000000000000044`; this does not enable arbitrary application contracts. Run mutations only within the user's entity, signer and spending authorization. Read access does not authorize deletion.
+Use installed SDK 1.0.x declarations and Rabdi. Native operations target `0x4400000000000000000000000000000000000044`; this does not enable arbitrary application contracts. Run mutations only within the user's entity, signer and spending authorization. Read access does not authorize deletion. SDK 1.0.1 adds `ExpirationTime.max()` for create and Lifetime Extension, bounded by exported `MAX_LIFETIME`; see [expiration guidance](../arkiv-entity-expiration/SKILL.md) for the versioned limit and pre-send `InvalidExpiryError`.
 
 ## Flags and permissions
 

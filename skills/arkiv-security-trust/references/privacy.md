@@ -43,7 +43,7 @@ Access-gating services, wallet-based recovery and encrypted group sharing requir
 
 ## Retention and publication choice
 
-Rabdi does not offer an expiration-free option. The maximum lifetime measured on 2026-10-30 UTC is 7,884,000 blocks ahead of the current block; maximum-u64 deadlines revert with ExpiryBeyondMaxLifetime. Prefer a published network-parameter getter when available; SDK 1.0.0 has none, so keep the measured bound dated and revalidate after reset/upgrade. Longer-lived ciphertext requires Lifetime Extension before expiry. This live-availability bound does not limit copies already read or guarantee secure erasure.
+Rabdi has no expiration-free option. SDK 1.0.1 exports `MAX_LIFETIME = 7_884_000n`; `ExpirationTime.max()` counts from create/extension inclusion, so it needs no manual inclusion margin. Excessive lifetime is rejected before send with `InvalidExpiryError`; older SDK/raw callers can still receive the native `ExpiryBeyondMaxLifetime` revert. The dated measured fallback and margin apply to SDK 1.0.0 only; see entity-expiration for versioned bounds and revalidation after resets/upgrades. Longer retention needs monitored, authorized Lifetime Extension before expiry, an available payer and recovery planning. Expiration does not limit copies already read or guarantee secure erasure.
 
 If a third party must not prolong live query access, do not enable `permissionlessExtension`. Readonly preserves attribute values but still permits eligible extension, transfer or deletion. Decide whether publishing even encrypted metadata is acceptable before writing it.
 

@@ -18,14 +18,14 @@ for (const [name, workspace] of [['viem', viemWorkspace], ['typescript', typescr
   try { await fs.symlink(source, destination, 'dir'); }
   catch (error) { if (error.code !== 'EEXIST' || await fs.realpath(destination) !== await fs.realpath(source)) throw error; }
 }
-const response = await fetch('https://registry.npmjs.org/@arkiv-network%2fsdk/1.0.0', { signal: AbortSignal.timeout(20000) });
+const response = await fetch('https://registry.npmjs.org/@arkiv-network%2fsdk/1.0.1', { signal: AbortSignal.timeout(20000) });
 assert.ok(response.ok);
 const metadata = await response.json();
 const tar = await fetch(metadata.dist.tarball, { signal: AbortSignal.timeout(20000) });
 assert.ok(tar.ok);
 const bytes = Buffer.from(await tar.arrayBuffer());
 assert.equal('sha512-' + createHash('sha512').update(bytes).digest('base64'), metadata.dist.integrity);
-const archive = path.join(root, 'sdk-1.0.0.tgz');
+const archive = path.join(root, 'sdk-1.0.1.tgz');
 await fs.writeFile(archive, bytes);
 execFileSync('tar', ['-xzf', archive, '--strip-components=1', '-C', path.join(root, 'node_modules/@arkiv-network/sdk')]);
 console.log(JSON.stringify({ sdk: metadata.version, integrity: metadata.dist.integrity, peers: 'reused', workspace: root }));

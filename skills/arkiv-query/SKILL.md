@@ -10,7 +10,7 @@ metadata:
 
 # Query Arkiv entities on Rabdi
 
-Inspect the installed SDK 1.0.0 declarations and the write schema. Use modeling when encodings/indexes are undecided and troubleshooting for an existing error. Only indexed columns support predicates; bytes columns are selectable but cannot be filtered or sorted.
+Inspect the installed SDK 1.0.x declarations and the write schema. Use modeling when encodings/indexes are undecided and troubleshooting for an existing error. Only indexed columns support predicates; bytes columns are selectable but cannot be filtered or sorted.
 
 ## Typed filters and flat rows
 
@@ -111,7 +111,7 @@ Write selection objects inline or `as const`; widened boolean fields make result
 
 ## Predicate behavior
 
-Use `eq`, `gt/gte/lt/lte`, `between`, `startsWith`, `exists`, `hasType`, `and` and `or` from the query subpath. SDK 1.0.0 does not export `not` or `ne`. Ordered comparisons work on every indexable type; `startsWith` requires `str`. `between` requires both bounds with the same type. Match write constructors; a bare timestamp becomes an invalid i32, and a bigint predicate defaults to u256 rather than u64.
+Use `eq`, `gt/gte/lt/lte`, `between`, `startsWith`, `exists`, `hasType`, `and` and `or` from the query subpath. SDK 1.0.x does not export `not` or `ne`. Ordered comparisons work on every indexable type; `startsWith` requires `str`. `between` requires both bounds with the same type. Match write constructors; a bare timestamp becomes an invalid i32, and a bigint predicate defaults to u256 rather than u64.
 
 System predicates cover `$key: key`, `$owner: addr`, `$creator: addr`, `$expiresAt: u64`. Selection is broader than filtering. A named schema supplies its own tag filter; an unnamed schema still needs a deliberate `where`, `ownedBy` or `createdBy`. Repeated owner/creator scopes replace their respective scope; use an explicit `or(eq('$creator', addr(a)), ...)` for alternatives. Namespaces/schema tags are not authentication.
 

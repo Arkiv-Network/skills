@@ -1,6 +1,6 @@
 # Contributor verification
 
-This repository has no root dependency installation or application build. Use an existing workspace with SDK **1.0.0**, its viem peer, TypeScript and Node types. Do not install unrelated dependencies for these checks.
+This repository has no root dependency installation or application build. Use an existing workspace with SDK **1.0.1**, its viem peer, TypeScript and Node types. Do not install unrelated dependencies for these checks.
 
 ```bash
 export ARKIV_SNIPPET_WORKSPACE=/absolute/sdk-workspace
@@ -13,7 +13,7 @@ node --experimental-vm-modules --test tests/snippets/*.test.mjs
 node tests/snippets/published-imports.mjs
 ```
 
-`check-snippets` compiles every TypeScript skill/reference fence with strict and noUncheckedIndexedAccess, syntax-checks JavaScript, and writes a source/line/hash manifest inside the SDK workspace. It does not execute writes. The deterministic importer suite evaluates the exact published JavaScript fence with real SDK 1.0.0 encoding, synthetic transport/receipts and in-memory ephemeral test keys. Network fetches are forbidden in that suite. Preserve failing evidence; do not substitute deterministic results for live/provider/wallet behavior.
+`check-snippets` compiles every TypeScript skill/reference fence with strict and noUncheckedIndexedAccess, syntax-checks JavaScript, and writes a source/line/hash manifest inside the SDK workspace. It does not execute writes. The deterministic importer suite evaluates the exact published JavaScript fence with real SDK 1.0.1 encoding, synthetic transport/receipts and in-memory ephemeral test keys. Network fetches are forbidden in that suite. Preserve failing evidence; do not substitute deterministic results for live/provider/wallet behavior.
 
 The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance requires `arkiv-encryption` 1.1.0 or newer; verify its named bytes exports before consuming it.
 
@@ -25,9 +25,11 @@ The gas-bound gate catches accidental regressions in published snippets, includi
 
 Provider facades and raw/formatted return values are deeply frozen. Execution uses boundary, oversized and varied deterministic vectors from seed `0x41524b49`; the neutral network refusal adds no test-only global flag. The seed and complete vector table are emitted with the execution evidence.
 
-If only the SDK needs upgrading, `node tests/prepare-sdk.mjs <viem-workspace> <typescript-workspace> <node-types-workspace>` verifies the official 1.0.0 tarball and prepares `.checks`, reusing existing peers without installing or executing package scripts. It creates symlinks to those existing peers; their lifecycle remains the contributor's responsibility.
+If only the SDK needs upgrading, `node tests/prepare-sdk.mjs <viem-workspace> <typescript-workspace> <node-types-workspace>` verifies the official 1.0.1 tarball and prepares `.checks`, reusing existing peers without installing or executing package scripts. It creates symlinks to those existing peers; their lifecycle remains the contributor's responsibility.
 
 ## Authorized Rabdi smoke and seed
+
+The existing seed/live scripts remain bound to their original SDK 1.0.0 workspace and durable journals; they are not the SDK 1.0.1 verification runner. Keep that workspace separate from the 1.0.1 contributor checks above. Do not replace a signed plan or run the historical negative probe as an SDK upgrade check.
 
 Supply `ARKIV_ACCESS_KEY_A`, `TEST_SKILLS_ADDRESS` and `TEST_SKILLS_PRIVATE_KEY` through the local secret store. Never put them in argv, source, public env or output. Supply an existing absolute private `ARKIV_SEED_STATE_DIR` and optional `ARKIV_EVIDENCE_DIR` outside Git. Keep durable state across restarts; signed transaction journals must remain private. Do not delete journals to repeat a test.
 
@@ -38,7 +40,7 @@ node --experimental-vm-modules --test tests/live/live.test.mjs
 
 The seed is idempotent under exclusive signer custody and a durable genesis-bound journal. Its repeat reconciles the same hash and performs no new send. After a network reset the script creates a separately identified state directory while retaining prior evidence; dependent apps must adopt new keys. Unresolved pre-reset attempts are not automatically replayed. The live suite checks successful writes/readback on Rabdi plus repeat zero-send behavior. Browser-wallet nonce behavior and separate library releases require their own evidence.
 
-The live runner also includes `tests/live/lifetime.test.mjs`: an explicitly authorized negative create using the dedicated SKILLS signer, maximum-u64 deadline and explicit 1,000,000 gas/current gasPrice/latest nonce. This deliberately pays for one reverted transaction. It persists signed intent before forwarding, confirms receipt.status is reverted with gas below the cap, decodes ExpiryBeyondMaxLifetime at latest and reconciles the same hash on reruns. It does not retry or automatically repeat after reset. Keep its private journal; clearing state does not authorize another negative create.
+Historical negative probe (SDK 1.0.0 only): the live runner also includes `tests/live/lifetime.test.mjs`: an explicitly authorized negative create using the dedicated SKILLS signer, maximum-u64 deadline and explicit 1,000,000 gas/current gasPrice/latest nonce. This deliberately pays for one reverted transaction on 1.0.0; it is not the 1.0.1 check, which rejects the excessive expiry before sending. Do not run or adapt that old probe to repeat a paid rejection. It persists signed intent before forwarding, confirms receipt.status is reverted with gas below the cap, decodes ExpiryBeyondMaxLifetime at latest and reconciles the same hash on reruns. It does not retry or automatically repeat after reset. Keep its private journal; clearing state does not authorize another negative create.
 
 Updated importer gas policy does not authorize recreating an old seed. A completed v1 seed may reconcile with the exact previously verified helper, whose source hash is checked, with signing/broadcast explicitly blocked. An unfinished or unrecognized prior revision stops for reconciliation. New seed plans use the current importer and measured per-batch gas floor. Source/line regression tests reject permanent-expiration recommendations and exercise copied first-write/lifecycle/extension transaction fields and receipt handling.
 

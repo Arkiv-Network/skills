@@ -10,7 +10,7 @@ metadata:
 
 # Large files and images on Rabdi
 
-Store searchable scalar columns with explicit indexes and binary data in named bytes columns, or keep bulk data in the application's existing blob store. All unencrypted values are public. SDK 1.0.0 caps a bytes value and aggregate bytes in a create/patch at 128 KiB; ABI/JSON-RPC overhead and provider limits are additional. Estimate the exact operation rather than treating a column limit as a transaction maximum.
+Store searchable scalar columns with explicit indexes and binary data in named bytes columns, or keep bulk data in the application's existing blob store. All unencrypted values are public. SDK 1.0.x caps a bytes value and aggregate bytes in a create/patch at 128 KiB; ABI/JSON-RPC overhead and provider limits are additional. Estimate the exact operation rather than treating a column limit as a transaction maximum.
 
 ## Package compatibility
 

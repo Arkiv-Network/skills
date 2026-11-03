@@ -1,4 +1,4 @@
-# SDK 1.0.0 wire protocol
+# SDK 1.0.x wire protocol
 
 Use the versioned source for non-TypeScript clients. Rabdi is chain 7794095 (`0x76edaf`); HTTP is `https://rpc.rabdi.db-chain.testnet.arkiv.network/<accessKey>` and WSS uses the same host/path. Put actual keys in a local secret store; redact URLs and never interpolate untrusted configuration into shell source.
 
@@ -8,7 +8,7 @@ Use the versioned source for non-TypeScript clients. Rabdi is chain 7794095 (`0x
 
 The response contains `data`, hex `blockNumber` and optional hex `count`. Options are `select`, hex `limit` (1–100) and hex `offset`. Selection wire names omit `$`: `key`, `owner`, `creator`, `createdAt`, `updatedAt`, `expiresAt`, `creationFlags`, `attributes`, `attributeSchema`. SDK flat-row names add `$` only for system fields. `attributes` can be true or a map of selected names. `attributeSchema` is a list of name/type/indexed entries without values.
 
-For count only, use `select: {count:true}`; SDK `count()` uses that projection. Counts include all filter matches, regardless of page size or schema mismatch. `arkiv_getEntity` takes `[entityKey]` and returns a live entity or null. There is no historical block/cursor option in the SDK 1.0.0 RPC schema. Do not invent an old-state fallback.
+For count only, use `select: {count:true}`; SDK `count()` uses that projection. Counts include all filter matches, regardless of page size or schema mismatch. `arkiv_getEntity` takes `[entityKey]` and returns a live entity or null. There is no historical block/cursor option in the SDK 1.0.x RPC schema. Do not invent an old-state fallback.
 
 Attributes return name/type/value. i32 is a JSON number, u64/u256 a hex quantity, dec a decimal string, bytes/key/address hex and str a string. Preserve the tag, exact integers and indexing metadata. Bytes values are never indexed. Raw names and literals must follow the source grammar; strings escape apostrophes by doubling them. Build expressions with the SDK where possible.
 

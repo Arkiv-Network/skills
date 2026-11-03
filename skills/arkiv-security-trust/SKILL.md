@@ -12,11 +12,11 @@ metadata:
 
 Treat all public entity attributes, bytes columns and transaction calldata as public, even when unindexed. Encryption protects selected contents; Entity Expiration and deletion cannot retract copies already read. Do not promise permanent archive availability or secure erasure.
 
-Rabdi has no expiration-free option: maximum-u64 deadlines are rejected. The maximum lifetime measured on 2026-10-30 UTC is 7,884,000 blocks from the current block, not an absolute chain height or a promise of 182.5 wall-clock days. Use a current published parameter getter when available, otherwise a dated measured network configuration; SDK 1.0.0 exposes no maxLifetime getter. Longer retention needs monitored, authorized Lifetime Extension before expiry, with gas funding and recovery planning. See entity-expiration for inclusion margins and bounds.
+Rabdi has no expiration-free option. SDK 1.0.1 exports `MAX_LIFETIME = 7_884_000n`; `ExpirationTime.max()` counts from create/extension inclusion, so it needs no manual inclusion margin. Excessive lifetime is rejected before send with `InvalidExpiryError`; older SDK/raw callers can still receive the native `ExpiryBeyondMaxLifetime` revert. The dated measured fallback and margin apply to SDK 1.0.0 only; see entity-expiration for versioned bounds and revalidation after resets/upgrades. Longer retention needs monitored, authorized Lifetime Extension before expiry, an available payer and recovery planning. Expiration does not limit copies already read or guarantee secure erasure.
 
 ## Before publishing
 
-Identify private fields, indexed labels, wallet metadata and diagnostic logs. Keep signing/encryption keys in local custody, never in chat, URLs, browser bundles or public environment variables. Operator RPC keys stay server-side; SDK 1.0.0 embeds them in URL paths, so redact the entire transport diagnostic. A browser-wallet user configures their own RPC key. Access keys neither fund writes nor authenticate users.
+Identify private fields, indexed labels, wallet metadata and diagnostic logs. Keep signing/encryption keys in local custody, never in chat, URLs, browser bundles or public environment variables. Operator RPC keys stay server-side; SDK 1.0.x embeds them in URL paths, so redact the entire transport diagnostic. A browser-wallet user configures their own RPC key. Access keys neither fund writes nor authenticate users.
 
 Choose signer, ownership, per-operation app authorization, encryption recipients/recovery and immutable creation flags before writing. Readonly protects column values, including ciphertext, but owner transfer/deletion/extension remain possible. Permissionless extension can postpone disappearance; it is not a privacy control.
 
