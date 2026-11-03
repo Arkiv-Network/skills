@@ -40,3 +40,19 @@ test('newly discovered reference and CLI reject a maximum-lifetime subtraction',
  await fs.writeFile(file,'Subtract 30 blocks from MAX_LIFETIME.');assert.equal(invoke().status,1);
  assert.equal((await checkLifetimeMargins(directory)).passed,false);
 });
+
+test('maximum-lifetime heading context reaches nested advice and scoped legacy headings',()=>{
+ assert.notDeepEqual(inspectLifetimeMargins('# Maximum lifetime\n\n## Renewal\n\nSubtract 30 blocks.'),[]);
+ assert.deepEqual(inspectLifetimeMargins('# Maximum lifetime\n\n## Renewal\n\nUse ExpirationTime.max() without manual subtraction.'),[]);
+ assert.deepEqual(inspectLifetimeMargins('# Maximum lifetime: SDK 1.0.0\n\n## Renewal\n\nSubtract 30 blocks.'),[]);
+});
+test('an unrelated or newer-version clause cannot borrow the legacy scope',()=>{
+ for(const text of [
+  'SDK 1.0.0 is installed elsewhere; subtract 30 blocks from MAX_LIFETIME.',
+  'For SDK 1.0.0, use a margin; but SDK 1.0.1 requires an inclusion margin.',
+  '# Maximum lifetime: SDK 1.0.0\n\n## SDK 1.0.1\n\nSubtract 30 blocks.',
+ ])assert.notDeepEqual(inspectLifetimeMargins(text),[],text);
+});
+test('a sibling fee section ends the maximum-lifetime context',()=>{
+ assert.deepEqual(inspectLifetimeMargins('# Maximum lifetime\n\nUse ExpirationTime.max() without manual subtraction.\n\n# Fees\n\nKeep a fee margin.'),[]);
+});
