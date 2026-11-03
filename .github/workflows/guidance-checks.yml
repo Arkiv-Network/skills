@@ -25,4 +25,5 @@ jobs:
           node scripts/check-skill-references.mjs
           node scripts/check-retry-policy.mjs
           node scripts/check-rabdi-log-window.mjs
-          node --test tests/snippets/vocabulary.test.mjs tests/snippets/skill-references.test.mjs tests/snippets/retry-policy.test.mjs tests/snippets/rabdi-log-window.test.mjs
+          node scripts/check-lifetime-margins.mjs
+          node --test tests/snippets/vocabulary.test.mjs tests/snippets/skill-references.test.mjs tests/snippets/retry-policy.test.mjs tests/snippets/rabdi-log-window.test.mjs tests/snippets/lifetime-margins.test.mjs

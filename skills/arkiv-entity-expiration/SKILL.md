@@ -35,6 +35,8 @@ For SDK 1.0.0 compatibility, `max()` and `MAX_LIFETIME` are unavailable; retain 
 
 ## Add time versus ensure remaining life
 
+These absolute-deadline examples retain a conservative SDK 1.0.0 compatibility margin. It is not required by `ExpirationTime.max()` on SDK 1.0.1+, which needs no manual subtraction.
+
 ```typescript
 import { createPublicClient, createWalletClient, ExpirationTime, type TxParams } from '@arkiv-network/sdk';
 import type { Hex } from 'viem';

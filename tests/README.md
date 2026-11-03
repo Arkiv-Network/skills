@@ -8,6 +8,7 @@ export ARKIV_IMPORT_TEST_SCRATCH=/absolute/owned-scratch
 node scripts/check-skill-references.mjs
 node scripts/check-vocabulary.mjs
 node scripts/check-rabdi-log-window.mjs
+node scripts/check-lifetime-margins.mjs
 node tests/check-snippets.mjs
 node --experimental-vm-modules --test tests/snippets/*.test.mjs
 node tests/snippets/published-imports.mjs
@@ -18,6 +19,8 @@ node tests/snippets/published-imports.mjs
 The vocabulary gate checks resource names and repository text, including code fences, seeds, generated data and snapshots. Its CLI mutation tests inject retired wording into each of those surfaces and require a failing exit code. Encryption guidance requires `arkiv-encryption` 1.1.0 or newer; verify its named bytes exports before consuming it.
 
 The Rabdi log-window guard discovers skill, reference and AGENTS resources, requires distinct troubleshooting rows for `segment_range_of(transactions): NotImplemented`, and rejects split/range-retry advice for that error. Omission and newly introduced guidance mutations run through the checker and CLI. GitHub's Guidance checks workflow runs these dependency-free checks plus vocabulary, references and retry-policy checks; the complete SDK-backed suite and half-block gas gate remain in `node tests/run-checks.mjs` using the existing workspace above.
+
+The lifetime-margin guard scans all Markdown guidance and requires explicit SDK 1.0.0 scope for maximum-lifetime margins or subtraction, including compatibility context for deadline-cap code examples. SDK 1.0.1+ uses `ExpirationTime.max()` without manual subtraction. Unrelated fee and parent/child remaining-life checks retain their own meaning. The guard and its mutation tests run in both CI and the full suite.
 
 The gas-bound repository gate requires both conservative AST validation and execution of each discovered helper's complete documentation fence. `verifyGasBounds` runs real helper bodies with synthetic above-bound and within-bound inputs in bounded workers; any missing adapter, execution error, timeout or missing result fails the gate. The importer's arithmetic-only formula is executed with its actual admission guard, while preparation, resume and the private guard also execute independently. `inspectGasBounds` remains the static unit-test layer. A passing structural result alone cannot certify a helper. No funded signer or provider is used.
 
